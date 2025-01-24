@@ -19,12 +19,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Set up Rust
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+      # Step 2: Set up Rust toolchain
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
+          profile: minimal
           toolchain: ${{ matrix.rust }}
-          override: true
+          components: rustfmt, clippy
 
       # Step 3: Verify code formatting
       - name: Check code formatting
