@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Rust CI
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        rust: [stable, beta, nightly]
+
+    steps:
+      # Step 1: Check out the repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Rust toolchain
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
+      # Step 3: Verify code formatting
+      - name: Check code formatting
+        run: cargo fmt -- --check
+
+      # Step 4: Run Clippy for linting
+      - name: Run Clippy
+        run: cargo clippy -- -D warnings
+
+      # Step 5: Run tests
+      - name: Run tests
+        run: cargo test
