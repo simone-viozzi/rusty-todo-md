@@ -42,14 +42,14 @@ in pkgs.mkShell rec {
 
     pip install --upgrade wheel setuptools  
 
-    # Export the PKG_CONFIG_PATH to ensure pkg-config works correctly with OpenSSL
+    echo "Environment setup complete."
+  '';
+
+  shellHook = ''
     export PKG_CONFIG_PATH="${pkgs.openssl.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"
 
-    # Rust environment
     export RUST_BACKTRACE=1
     export CARGO_HOME=$HOME/.cargo
     export PATH=$CARGO_HOME/bin:$PATH
-
-    echo "Environment setup complete."
   '';
 }

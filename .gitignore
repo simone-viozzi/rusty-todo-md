@@ -186,7 +186,9 @@ pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python
 
-tmp/# Created by https://www.toptal.com/developers/gitignore/api/rust
+tmp/
+
+# Created by https://www.toptal.com/developers/gitignore/api/rust
 # Edit at https://www.toptal.com/developers/gitignore?templates=rust
 
 ### Rust ###
