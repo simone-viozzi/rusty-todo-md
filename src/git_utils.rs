@@ -1,13 +1,11 @@
-use git2::{Repository, Error as GitError, DiffOptions};
+use git2::{DiffOptions, Error as GitError, Repository};
 use std::path::PathBuf;
-
 
 /// Opens the current Git repository.
 /// Returns an error if the current directory is not a Git repository.
 pub fn open_repository() -> Result<Repository, GitError> {
     Repository::open(".")
 }
-
 
 /// Retrieves the list of staged files that contain meaningful content changes.
 /// Uses DiffOptions to optimize for the intended use case, ignoring irrelevant files and changes.
@@ -46,5 +44,3 @@ pub fn get_staged_files(repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
 
     Ok(staged_files)
 }
-
-

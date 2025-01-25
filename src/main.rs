@@ -1,6 +1,6 @@
 mod git_utils;
 
-use git_utils::{open_repository, get_staged_files};
+use git_utils::{get_staged_files, open_repository};
 
 fn main() {
     // Attempt to open the Git repository

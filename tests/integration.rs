@@ -18,7 +18,8 @@ fn test_get_staged_files() {
     // Create an initial commit to set up HEAD
     let mut index = repo.index().expect("Failed to get Git index");
     let oid = index.write_tree().expect("Failed to write tree");
-    let signature = Signature::now("Test User", "test@example.com").expect("Failed to create signature");
+    let signature =
+        Signature::now("Test User", "test@example.com").expect("Failed to create signature");
     let tree = repo.find_tree(oid).expect("Failed to find tree");
     repo.commit(
         Some("HEAD"),
@@ -26,8 +27,9 @@ fn test_get_staged_files() {
         &signature,
         "Initial commit",
         &tree,
-        &[]
-    ).expect("Failed to create initial commit");
+        &[],
+    )
+    .expect("Failed to create initial commit");
 
     // Create and stage test files
     let file1_path = repo_path.join("file1.txt");
@@ -39,8 +41,12 @@ fn test_get_staged_files() {
     writeln!(file2, "This is a test file").expect("Failed to write to file2.txt");
 
     // Stage the files
-    index.add_path(Path::new("file1.txt")).expect("Failed to stage file1.txt");
-    index.add_path(Path::new("file2.txt")).expect("Failed to stage file2.txt");
+    index
+        .add_path(Path::new("file1.txt"))
+        .expect("Failed to stage file1.txt");
+    index
+        .add_path(Path::new("file2.txt"))
+        .expect("Failed to stage file2.txt");
     index.write().expect("Failed to write index");
 
     // Call `get_staged_files` to retrieve staged files
