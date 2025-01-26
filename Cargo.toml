@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 git2 = "0.20.0"
+regex = "1.11.1"
 tempfile = "3.15.0"
