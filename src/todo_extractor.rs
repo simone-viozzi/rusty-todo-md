@@ -2,7 +2,7 @@ use regex::Regex;
 use std::path::{Path, PathBuf};
 
 /// Represents a TODO comment extracted from a file.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TodoItem {
     pub file_path: PathBuf,
     pub line_number: usize,

@@ -1,28 +1,25 @@
-mod git_utils;
-
-use git_utils::{get_staged_files, open_repository};
+use rusty_todo_md::todo_md::read_todo_file;
 
 fn main() {
-    // Attempt to open the Git repository
-    match open_repository() {
-        Ok(repo) => {
-            println!("Successfully opened the repository!");
+    // Simulate the failing test content
+    let test_todo_md = r#"
+* [src/main.rs:12](src/main.rs#L12): Refactor this function
+* [src/lib.rs:5](src/lib.rs#L5): Add error handling
+"#;
 
-            // Attempt to retrieve staged files
-            match get_staged_files(&repo) {
-                Ok(files) => {
-                    if files.is_empty() {
-                        println!("No staged files found.");
-                    } else {
-                        println!("Staged files:");
-                        for file in files {
-                            println!("- {:?}", file);
-                        }
-                    }
-                }
-                Err(e) => eprintln!("Error retrieving staged files: {}", e),
-            }
-        }
-        Err(e) => eprintln!("Error opening repository: {}", e),
+    let temp_dir = tempfile::tempdir().unwrap();
+    let todo_path = temp_dir.path().join("TODO.md");
+
+    // Write the simulated content to a file
+    std::fs::write(&todo_path, test_todo_md).unwrap();
+
+    println!("Testing read_todo_file with simulated TODO.md...");
+    let todos = read_todo_file(&todo_path);
+
+    println!("Parsed TODO Items:");
+    for todo in &todos {
+        println!("{:?}", todo);
     }
+
+    println!("Done testing!");
 }
