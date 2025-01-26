@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Represents a TODO comment extracted from a file.
 #[derive(Debug, PartialEq, Eq)]
@@ -30,8 +30,7 @@ pub struct TodoItem {
 /// assert_eq!(todos.len(), 1);
 /// assert_eq!(todos[0].comment, "Refactor this function");
 /// ```
-
-pub fn extract_todos(file_path: &PathBuf, content: &str) -> Vec<TodoItem> {
+pub fn extract_todos(file_path: &Path, content: &str) -> Vec<TodoItem> {
     // Regex to match TODO comments (case-insensitive)
     let todo_regex = Regex::new(r"(?i)\bTODO\b[:\s]*(.*)").expect("Failed to compile regex");
 
@@ -47,7 +46,7 @@ pub fn extract_todos(file_path: &PathBuf, content: &str) -> Vec<TodoItem> {
                     .trim()
                     .to_string();
                 Some(TodoItem {
-                    file_path: file_path.clone(),
+                    file_path: file_path.to_path_buf().clone(),
                     line_number: index,
                     comment,
                 })
