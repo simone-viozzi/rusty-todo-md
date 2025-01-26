@@ -3,8 +3,6 @@ use comrak::{nodes::AstNode, parse_document, Arena, ComrakOptions};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-
-
 /// Reads the existing TODO.md file and returns a vector of `TodoItem`s.
 /// If the file does not exist, returns an empty vector.
 ///
@@ -68,7 +66,6 @@ fn extract_todos_from_ast<'a>(node: &'a AstNode<'a>, todos: &mut Vec<TodoItem>) 
     }
 }
 
-
 /// Parses a link from TODO.md in the format `src/main.rs#L12`
 /// and extracts the file path and line number.
 ///
@@ -86,28 +83,23 @@ fn parse_link(link: &str) -> Option<(&str, usize)> {
     None
 }
 
-pub fn sync_todo_file(todo_path: &Path, new_todos: Vec<TodoItem>) {
+pub fn sync_todo_file(todo_path: &Path, new_todos: Vec<TodoItem>) -> Result<(), std::io::Error> {
     let mut existing_todos = read_todo_file(todo_path);
-
-    // Remove outdated entries
     existing_todos.retain(|existing| new_todos.contains(existing));
 
-    // Add new entries
     for new_todo in new_todos {
         if !existing_todos.contains(&new_todo) {
             existing_todos.push(new_todo);
         }
     }
 
-    // Sort by file path and line number for consistency
     existing_todos.sort_by(|a, b| {
         a.file_path
             .cmp(&b.file_path)
             .then_with(|| a.line_number.cmp(&b.line_number))
     });
 
-    // Write the updated TODO.md file
-    write_todo_file(todo_path, &existing_todos).expect("Failed to write TODO.md");
+    write_todo_file(todo_path, &existing_todos)
 }
 
 /// Writes the given list of `TodoItem`s to the TODO.md file in markdown format.
@@ -156,7 +148,7 @@ mod tests {
             },
         ];
 
-        sync_todo_file(&todo_path, new_todos.clone());
+        let _ = sync_todo_file(&todo_path, new_todos.clone());
 
         let content = fs::read_to_string(&todo_path).unwrap();
         assert!(content.contains("src/main.rs:10"));
