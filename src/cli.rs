@@ -1,9 +1,8 @@
 use crate::git_utils;
 use crate::todo_extractor;
 use crate::todo_md;
-use std::path::Path;
 use clap::{Arg, ArgAction, Command};
-
+use std::path::Path;
 
 pub fn run_cli() {
     // Define CLI arguments using clap
@@ -36,11 +35,11 @@ pub fn run_cli() {
     }
 }
 
-
 /// Main workflow for scanning staged files and updating TODO.md.
 fn run_workflow(todo_path: &Path) -> Result<(), String> {
     // Open the Git repository
-    let repo = git_utils::open_repository().map_err(|e| format!("Failed to open Git repository: {}", e))?;
+    let repo = git_utils::open_repository()
+        .map_err(|e| format!("Failed to open Git repository: {}", e))?;
 
     // Get staged files
     let staged_files = git_utils::get_staged_files(&repo)
@@ -80,7 +79,6 @@ fn run_workflow(todo_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,7 +97,9 @@ mod tests {
         fs::write(&file_path, "// TODO: Refactor this function").unwrap();
 
         let mut index = repo.index().unwrap();
-        index.add_path(file_path.strip_prefix(repo_path).unwrap()).unwrap();
+        index
+            .add_path(file_path.strip_prefix(repo_path).unwrap())
+            .unwrap();
         index.write().unwrap();
 
         // Run the workflow
