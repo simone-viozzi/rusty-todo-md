@@ -1,10 +1,10 @@
 use git2::{DiffOptions, Error as GitError, Repository};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-/// Opens the current Git repository.
-/// Returns an error if the current directory is not a Git repository.
-pub fn open_repository() -> Result<Repository, GitError> {
-    Repository::open(".")
+/// Opens the Git repository at the specified path.
+/// Returns an error if the specified path is not a Git repository.
+pub fn open_repository(repo_path: &Path) -> Result<Repository, GitError> {
+    Repository::open(repo_path)
 }
 
 /// Retrieves the list of staged files that contain meaningful content changes.

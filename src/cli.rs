@@ -29,16 +29,16 @@ pub fn run_cli() {
     println!("Updating TODO file at: {}", todo_path);
 
     // Run the workflow
-    if let Err(e) = run_workflow(Path::new(todo_path)) {
+    if let Err(e) = run_workflow(Path::new(todo_path), Path::new(".")) {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }
 }
 
 /// Main workflow for scanning staged files and updating TODO.md.
-fn run_workflow(todo_path: &Path) -> Result<(), String> {
+pub fn run_workflow(todo_path: &Path, repo_path: &Path) -> Result<(), String> {
     // Open the Git repository
-    let repo = git_utils::open_repository()
+    let repo = git_utils::open_repository(repo_path)
         .map_err(|e| format!("Failed to open Git repository: {}", e))?;
 
     // Get staged files
@@ -58,7 +58,8 @@ fn run_workflow(todo_path: &Path) -> Result<(), String> {
     // Extract TODO comments from staged files
     let mut new_todos = Vec::new();
     for file in staged_files {
-        if let Ok(content) = std::fs::read_to_string(&file) {
+        let absolute_path = repo_path.join(&file);
+        if let Ok(content) = std::fs::read_to_string(&absolute_path) {
             let todos = todo_extractor::extract_todos(&file, &content);
             new_todos.extend(todos);
         } else {
@@ -77,39 +78,4 @@ fn run_workflow(todo_path: &Path) -> Result<(), String> {
 
     println!("TODO.md successfully updated.");
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-    use tempfile::tempdir;
-
-    #[test]
-    fn test_run_workflow() {
-        let temp_dir = tempdir().unwrap();
-        let repo_path = temp_dir.path();
-        let todo_path = repo_path.join("TODO.md");
-
-        // Set up a fake Git repository
-        let repo = git_utils::open_repository().expect("Failed to initialize repo");
-        let file_path = repo_path.join("file1.rs");
-        fs::write(&file_path, "// TODO: Refactor this function").unwrap();
-
-        let mut index = repo.index().unwrap();
-        index
-            .add_path(file_path.strip_prefix(repo_path).unwrap())
-            .unwrap();
-        index.write().unwrap();
-
-        // Run the workflow
-        let result = run_workflow(&todo_path);
-
-        assert!(result.is_ok());
-
-        // Verify TODO.md was updated
-        let content = fs::read_to_string(&todo_path).unwrap();
-        assert!(content.contains("file1.rs"));
-        assert!(content.contains("Refactor this function"));
-    }
 }
