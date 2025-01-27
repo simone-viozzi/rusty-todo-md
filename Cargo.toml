@@ -1,9 +1,10 @@
 [package]
 name = "rusty-todo-md"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 
 [dependencies]
+clap = { version = "4.5.27", features = ["derive"] }
 comrak = "0.35.0"
 git2 = "0.20.0"
 regex = "1.11.1"

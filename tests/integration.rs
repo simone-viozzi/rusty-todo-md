@@ -1,62 +1,65 @@
-use git2::{Repository, Signature};
-use std::fs::File;
-use std::io::Write;
-use std::path::Path;
-use tempfile::TempDir;
+use std::path::PathBuf;
 
+use rusty_todo_md::cli::run_workflow;
 use rusty_todo_md::git_utils::get_staged_files;
+use std::fs;
+mod utils;
+use rusty_todo_md::git_utils;
+use utils::TempGitRepo;
 
 #[test]
 fn test_get_staged_files() {
-    // Create a temporary directory for the Git repository
-    let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let repo_path = temp_dir.path();
-
-    // Initialize a new Git repository
-    let repo = Repository::init(repo_path).expect("Failed to initialize Git repo");
-
-    // Create an initial commit to set up HEAD
-    let mut index = repo.index().expect("Failed to get Git index");
-    let oid = index.write_tree().expect("Failed to write tree");
-    let signature =
-        Signature::now("Test User", "test@example.com").expect("Failed to create signature");
-    let tree = repo.find_tree(oid).expect("Failed to find tree");
-    repo.commit(
-        Some("HEAD"),
-        &signature,
-        &signature,
-        "Initial commit",
-        &tree,
-        &[],
-    )
-    .expect("Failed to create initial commit");
+    // Set up a temporary Git repository
+    let temp_repo = TempGitRepo::new();
 
     // Create and stage test files
-    let file1_path = repo_path.join("file1.txt");
-    let mut file1 = File::create(&file1_path).expect("Failed to create file1.txt");
-    writeln!(file1, "TODO: Implement feature A").expect("Failed to write to file1.txt");
+    temp_repo.create_file("file1.txt", "TODO: Implement feature A");
+    temp_repo.stage_file("file1.txt");
 
-    let file2_path = repo_path.join("file2.txt");
-    let mut file2 = File::create(&file2_path).expect("Failed to create file2.txt");
-    writeln!(file2, "This is a test file").expect("Failed to write to file2.txt");
-
-    // Stage the files
-    index
-        .add_path(Path::new("file1.txt"))
-        .expect("Failed to stage file1.txt");
-    index
-        .add_path(Path::new("file2.txt"))
-        .expect("Failed to stage file2.txt");
-    index.write().expect("Failed to write index");
+    temp_repo.create_file("file2.txt", "This is a test file");
+    temp_repo.stage_file("file2.txt");
 
     // Call `get_staged_files` to retrieve staged files
-    let staged_files = get_staged_files(&repo).expect("Failed to retrieve staged files");
+    let staged_files = get_staged_files(&temp_repo.repo).expect("Failed to retrieve staged files");
 
     // Verify that the staged files match the expected files
-    let expected_files: Vec<_> = vec![file1_path, file2_path]
+    let expected_files: Vec<_> = vec!["file1.txt", "file2.txt"]
         .into_iter()
-        .map(|p| p.strip_prefix(repo_path).unwrap().to_path_buf())
+        .map(PathBuf::from)
         .collect();
 
     assert_eq!(staged_files, expected_files);
+}
+
+#[test]
+fn test_run_workflow() {
+    // Set up a temporary Git repository
+    let temp_repo = TempGitRepo::new();
+    let todo_path = temp_repo.repo_path.join("TODO.md");
+
+    // Create and stage a file with a TODO comment
+    temp_repo.create_file("file1.rs", "// TODO: Refactor this function");
+    temp_repo.stage_file("file1.rs");
+
+    // Debug: Verify the index state
+    let staged_files =
+        git_utils::get_staged_files(&temp_repo.repo).expect("Failed to retrieve staged files");
+    println!("Debug: Staged files from index: {:?}", staged_files);
+
+    // Run the workflow
+    let result = run_workflow(&todo_path, &temp_repo.repo_path);
+
+    assert!(result.is_ok(), "Workflow failed with error: {:?}", result);
+
+    // Verify TODO.md exists
+    assert!(todo_path.exists(), "TODO.md should have been created");
+
+    // Verify TODO.md was updated
+    let content = fs::read_to_string(&todo_path).expect("Failed to read TODO.md");
+    println!("Debug: TODO.md content:\n{}", content);
+    assert!(content.contains("file1.rs"), "Expected file1.rs in TODO.md");
+    assert!(
+        content.contains("Refactor this function"),
+        "Expected TODO comment in TODO.md"
+    );
 }
