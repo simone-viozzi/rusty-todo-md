@@ -5,34 +5,28 @@ use tempfile::TempDir;
 
 /// Struct to manage a temporary Git repository for testing.
 pub struct TempGitRepo {
-    pub temp_dir: TempDir,
+    /// Keep the temp directory alive, preventing it from being deleted until this struct is dropped.
+    _temp_dir: TempDir,   // renamed from temp_dir to _temp_dir
     pub repo: Repository,
     pub repo_path: PathBuf,
 }
 
 impl TempGitRepo {
-    // todo comment
     /// Creates a new temporary Git repository.
     pub fn new() -> Self {
         let temp_dir = tempfile::tempdir().unwrap();
         let repo_path = temp_dir.path().to_path_buf();
         let repo = Repository::init(&repo_path).expect("Failed to initialize Git repository");
 
-        // Create an initial commit
-        let mut index = repo.index().unwrap();
-        let tree_id = index.write_tree().unwrap();
-        let tree = repo.find_tree(tree_id).unwrap();
-        let sig = Signature::now("Test User", "test@example.com").unwrap();
-        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
-            .unwrap();
-
-        drop(tree);
-
-        TempGitRepo {
-            temp_dir,
+        let temp_repo = TempGitRepo {
+            _temp_dir: temp_dir,
             repo,
             repo_path,
-        }
+        };
+
+        temp_repo.commit("Initial commit");
+
+        temp_repo
     }
 
     /// Creates and writes content to a file in the repo.
