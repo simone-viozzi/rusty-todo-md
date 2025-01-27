@@ -31,7 +31,6 @@ fn test_get_staged_files() {
     assert_eq!(staged_files, expected_files);
 }
 
-
 #[test]
 fn test_run_workflow() {
     // Set up a temporary Git repository

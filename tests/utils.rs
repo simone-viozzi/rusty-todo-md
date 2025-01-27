@@ -6,7 +6,7 @@ use tempfile::TempDir;
 /// Struct to manage a temporary Git repository for testing.
 pub struct TempGitRepo {
     /// Keep the temp directory alive, preventing it from being deleted until this struct is dropped.
-    _temp_dir: TempDir,   // renamed from temp_dir to _temp_dir
+    _temp_dir: TempDir, // renamed from temp_dir to _temp_dir
     pub repo: Repository,
     pub repo_path: PathBuf,
 }
