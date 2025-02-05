@@ -1,6 +1,7 @@
 use pest::Parser;
-use pest::iterators::{Pairs, Pair};
+use pest::iterators::Pair;
 use crate::aggregator::CommentLine;
+use pest_derive::Parser;
 
 #[derive(Parser)]
 #[grammar = "languages/rust.pest"]
@@ -39,7 +40,6 @@ fn handle_rust_comment(pair: Pair<Rule>, out: &mut Vec<CommentLine>) {
         Rule::block_comment => {
             let span = pair.as_span();
             let start_line = span.start_pos().line_col().0;
-            let end_line = span.end_pos().line_col().0;
             let block_text = span.as_str();
             // remove `/*` and `*/`
             let trimmed = block_text

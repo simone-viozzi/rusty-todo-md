@@ -1,8 +1,8 @@
-mod ts;
-mod rust;
-mod python;
-mod js;
-mod go;
+pub mod ts;
+pub mod rust;
+pub mod python;
+pub mod js;
+pub mod go;
 
 pub use ts::parse_ts_comments;
 pub use rust::parse_rust_comments;
