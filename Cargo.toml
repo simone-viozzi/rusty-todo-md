@@ -1,5 +1,5 @@
 [package]
-name = "comment-parser"
+name = "todo_extractor"
 version = "0.1.0"
 edition = "2021"
 

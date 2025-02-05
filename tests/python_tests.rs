@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod python_tests {
-    use todo_extractor::{extract_todos, aggregator::TodoItem};
+    use todo_extractor::aggregator::extract_todos;
     use std::path::Path;
 
     #[test]
