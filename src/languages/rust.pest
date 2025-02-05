@@ -1,0 +1,27 @@
+// Minimal Rust grammar focusing on comment tokens & ignoring string literals.
+
+comment_rust = { line_comment | block_comment | doc_comment_line }
+
+// Single-line: `//` until newline
+line_comment = @{ "//" ~ (!NEWLINE ~ ANY)* }
+
+// Block comment: `/* ... */` (this can be multi-line)
+block_comment = @{
+    "/*" ~ (!"*/" ~ ANY)* ~ "*/"
+}
+
+// Doc comment lines start with `///` or `//!` (we unify them)
+doc_comment_line = @{
+    "///" ~ (!NEWLINE ~ ANY)* |
+    "//!" ~ (!NEWLINE ~ ANY)*
+}
+
+// For ignoring string literals roughly:
+str_literal = _{
+    "\"" ~ (!"\"" ~ ANY)* ~ "\"" |
+    "'" ~ (!"'" ~ ANY)* ~ "'"
+}
+
+rust_file = {
+    (comment_rust | str_literal | ANY)*
+}

@@ -1,0 +1,22 @@
+comment_js = { line_comment | block_comment }
+
+// single-line
+line_comment = @{
+    "//" ~ (!NEWLINE ~ ANY)*
+}
+
+// multi-line
+block_comment = @{
+    "/*" ~ (!"*/" ~ ANY)* ~ "*/"
+}
+
+// skip strings
+str_literal = _{
+    "\"" ~ (!"\"" ~ ANY)* ~ "\"" |
+    "'" ~ (!"'" ~ ANY)* ~ "'" |
+    "`" ~ (!"`" ~ ANY)* ~ "`" // backticks in JS
+}
+
+js_file = {
+    (comment_js | str_literal | ANY)*
+}

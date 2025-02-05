@@ -1,0 +1,19 @@
+comment_ts = { line_comment | block_comment }
+
+line_comment = @{
+    "//" ~ (!NEWLINE ~ ANY)*
+}
+
+block_comment = @{
+    "/*" ~ (!"*/" ~ ANY)* ~ "*/"
+}
+
+str_literal = _{
+    "\"" ~ (!"\"" ~ ANY)* ~ "\"" |
+    "'" ~ (!"'" ~ ANY)* ~ "'" |
+    "`" ~ (!"`" ~ ANY)* ~ "`"
+}
+
+ts_file = {
+    (comment_ts | str_literal | ANY)*
+}

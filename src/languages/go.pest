@@ -1,0 +1,21 @@
+comment_go = { line_comment | block_comment }
+
+// single-line
+line_comment = @{
+    "//" ~ (!NEWLINE ~ ANY)*
+}
+
+// multi-line
+block_comment = @{
+    "/*" ~ (!"*/" ~ ANY)* ~ "*/"
+}
+
+// skip string literals
+str_literal = _{
+    "\"" ~ (!"\"" ~ ANY)* ~ "\"" |
+    "'" ~ (!"'" ~ ANY)* ~ "'"
+}
+
+go_file = {
+    (comment_go | str_literal | ANY)*
+}
