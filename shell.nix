@@ -25,6 +25,7 @@ in pkgs.mkShell rec {
     pythonPackages.venvShellHook
     pythonPackages.pip
     pythonPackages.ruff
+    pythonPackages.click
     pre-commit
   ];
 
