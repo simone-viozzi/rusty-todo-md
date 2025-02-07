@@ -6,23 +6,33 @@ from pathspec import PathSpec
 from pathspec.patterns.gitwildmatch import GitWildMatchPattern
 
 
-def get_gitignore_spec(root_path):
+def collect_gitignore_patterns(root_path):
     """
-    Parse the .gitignore file and return a PathSpec object for filtering.
+    Recursively walk through the directory tree starting at root_path,
+    collect all .gitignore files, and merge their patterns into a single PathSpec.
     """
-    gitignore_path = os.path.join(root_path, ".gitignore")
-    if not os.path.exists(gitignore_path):
+    all_patterns = [".git/"]
+    for dirpath, dirnames, filenames in os.walk(root_path):
+        if ".gitignore" in filenames:
+            gitignore_path = os.path.join(dirpath, ".gitignore")
+            try:
+                with open(gitignore_path, "r", encoding="utf-8") as f:
+                    patterns = f.read().splitlines()
+                # We use GitWildMatchPattern so that .gitignore style patterns are respected
+                all_patterns.extend(patterns)
+            except Exception as e:
+                print(f"Warning: Could not read {gitignore_path} due to error: {e}", file=sys.stderr)
+
+    if not all_patterns:
         return None
 
-    with open(gitignore_path, "r", encoding="utf-8") as f:
-        patterns = f.readlines()
-
-    return PathSpec.from_lines(GitWildMatchPattern, patterns)
+    return PathSpec.from_lines(GitWildMatchPattern, all_patterns)
 
 
 def get_language_for_extension(file_ext):
     """
     Return the code fence language for a given file extension.
+    If not recognized, return None (so we know to skip).
     """
     extension_map = {
         ".py": "python",
@@ -48,27 +58,46 @@ def get_language_for_extension(file_ext):
         ".css": "css",
         ".txt": "plaintext",
         ".rs": "rust",
+        ".toml": "toml",
+        ".xml": "xml",
+        ".kt": "kotlin",
+        ".swift": "swift",
+        ".tf": "hcl",
+        ".lua": "lua",
+        ".dockerfile": "dockerfile",
+        ".pest": "pest",
+        ".csv": "csv",
+        ".ini": "ini",
+        ".ijs": "jslang",
     }
-    return extension_map.get(file_ext.lower(), "plaintext")
+    # Special-case Dockerfile (if the file name is literally "Dockerfile")
+    if file_ext == "" and "Dockerfile" in extension_map:
+        return extension_map[".dockerfile"]
+
+    return extension_map.get(file_ext.lower(), None)
 
 
 def generate_tree(root_path, gitignore_spec):
     """
     Generate a textual tree representation of the folder structure,
-    excluding gitignored files.
+    excluding files/dirs matched by the merged .gitignore patterns.
     """
     tree_lines = []
 
     def _tree(dir_path, prefix=""):
-        entries = sorted(os.listdir(dir_path))
-        entries = [e for e in entries if not e.startswith(".") and e != ".git"]
+        try:
+            entries = sorted(os.listdir(dir_path))
+        except OSError as e:
+            # If we cannot list the directory, just return
+            print(f"Warning: cannot list {dir_path} due to error: {e}", file=sys.stderr)
+            return
 
         for i, entry in enumerate(entries):
             full_path = os.path.join(dir_path, entry)
+            rel_path = os.path.relpath(full_path, root_path)
 
-            if gitignore_spec and gitignore_spec.match_file(
-                os.path.relpath(full_path, root_path)
-            ):
+            # If matched by .gitignore, skip
+            if gitignore_spec and gitignore_spec.match_file(rel_path):
                 continue
 
             connector = "└── " if i == len(entries) - 1 else "├── "
@@ -84,6 +113,60 @@ def generate_tree(root_path, gitignore_spec):
     return "\n".join(tree_lines)
 
 
+def collect_files_content(root_path, gitignore_spec, output_file):
+    """
+    Walk the directory structure, respecting gitignore, and collect
+    file contents or note them as unrecognized.
+    """
+    file_sections = []
+    unrecognized_files = []
+
+    for dirpath, dirnames, filenames in os.walk(root_path):
+        # Filter out directories ignored by .gitignore
+        new_dirnames = []
+        for d in dirnames:
+            rel_path = os.path.relpath(os.path.join(dirpath, d), root_path)
+            if not (gitignore_spec and gitignore_spec.match_file(rel_path)):
+                new_dirnames.append(d)
+        dirnames[:] = new_dirnames
+
+        # Process files
+        for filename in filenames:
+            full_file_path = os.path.join(dirpath, filename)
+            rel_path = os.path.relpath(full_file_path, root_path)
+
+            # Skip if matched by gitignore
+            if gitignore_spec and gitignore_spec.match_file(rel_path):
+                continue
+
+            # Skip the output file itself if it appears in the tree
+            if filename == os.path.basename(output_file):
+                continue
+
+            # Check extension for recognized language
+            _, ext = os.path.splitext(filename)
+            language = get_language_for_extension(ext)
+
+            if language:
+                # Attempt to read the file content
+                try:
+                    with open(full_file_path, "r", encoding="utf-8", errors="replace") as f:
+                        content = f.read()
+                except Exception as e:
+                    print(f"Skipping file {rel_path} due to read error: {e}", file=sys.stderr)
+                    continue
+
+                file_header = f"## File: `{rel_path}`\n*(Relative Path: `{rel_path}`)*"
+                fenced_content = f"```{language}\n{content}\n```"
+                section = f"{file_header}\n\n{fenced_content}\n\n---\n"
+                file_sections.append(section)
+            else:
+                # Unrecognized extension — we won't read content
+                unrecognized_files.append(rel_path)
+
+    return file_sections, unrecognized_files
+
+
 @click.command()
 @click.argument(
     "root_path", type=click.Path(exists=True, file_okay=False, dir_okay=True)
@@ -96,63 +179,40 @@ def main(root_path, output_file):
         print(f"Error: {root_path} is not a valid directory.")
         sys.exit(1)
 
-    gitignore_spec = get_gitignore_spec(root_path)
+    # Collect all gitignore patterns from the entire repository tree
+    gitignore_spec = collect_gitignore_patterns(root_path)
+
+    # Generate a tree representation
     tree_output = generate_tree(root_path, gitignore_spec)
-    file_sections = []
 
-    for dirpath, dirnames, filenames in os.walk(root_path):
-        dirnames[:] = [
-            d
-            for d in dirnames
-            if not (
-                gitignore_spec
-                and gitignore_spec.match_file(
-                    os.path.relpath(os.path.join(dirpath, d), root_path)
-                )
-            )
-        ]
-        filenames[:] = [
-            f
-            for f in filenames
-            if not (
-                gitignore_spec
-                and gitignore_spec.match_file(
-                    os.path.relpath(os.path.join(dirpath, f), root_path)
-                )
-            )
-        ]
+    # Collect file contents and unrecognized files
+    file_sections, unrecognized_files = collect_files_content(root_path, gitignore_spec, output_file)
 
-        for filename in filenames:
-            full_file_path = os.path.join(dirpath, filename)
-            rel_path = os.path.relpath(full_file_path, root_path)
-
-            if filename == os.path.basename(output_file):
-                continue
-
-            _, ext = os.path.splitext(filename)
-            language = get_language_for_extension(ext)
-
-            try:
-                with open(full_file_path, "r", encoding="utf-8", errors="replace") as f:
-                    content = f.read()
-            except Exception as e:
-                print(f"Skipping file {rel_path} due to read error: {e}")
-                continue
-
-            file_header = f"## File: `{rel_path}`\n*(Relative Path: `{rel_path}`)*"
-            fenced_content = f"```{language}\n{content}\n```"
-            section = f"{file_header}\n\n{fenced_content}\n\n---\n"
-            file_sections.append(section)
-
+    # Write everything to the output file
     with open(output_file, "w", encoding="utf-8") as out:
+        # Print the folder structure
         out.write("# Folder Structure\n\n")
-        out.write("```")
+        out.write("```\n")
         out.write(tree_output)
         out.write("\n```\n\n")
+
+        # Print recognized file contents
         for section in file_sections:
             out.write(section)
 
-    print(f"All files have been merged into {output_file}")
+        # Print unrecognized files
+        if unrecognized_files:
+            out.write("# Unrecognized Files\n\n")
+            out.write(
+                "The following files have extensions not recognized by the script, "
+                "so their contents were *not* included:\n\n"
+            )
+            for rel_path in unrecognized_files:
+                out.write(f"- `{rel_path}`\n")
+
+    print(f"All files have been merged (where recognized) into {output_file}")
+    if unrecognized_files:
+        print("Some files were not recognized by extension and were skipped. See 'Unrecognized Files' section.")
 
 
 if __name__ == "__main__":
