@@ -26,6 +26,7 @@ in pkgs.mkShell rec {
     pythonPackages.pip
     pythonPackages.ruff
     pythonPackages.click
+    pythonPackages.pathspec
     pre-commit
   ];
 
