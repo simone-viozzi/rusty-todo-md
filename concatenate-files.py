@@ -1,14 +1,29 @@
 #!/usr/bin/env python3
 import os
+import sys
 import click
+from pathspec import PathSpec
+from pathspec.patterns.gitwildmatch import GitWildMatchPattern
+
+
+def get_gitignore_spec(root_path):
+    """
+    Parse the .gitignore file and return a PathSpec object for filtering.
+    """
+    gitignore_path = os.path.join(root_path, ".gitignore")
+    if not os.path.exists(gitignore_path):
+        return None
+
+    with open(gitignore_path, "r", encoding="utf-8") as f:
+        patterns = f.readlines()
+
+    return PathSpec.from_lines(GitWildMatchPattern, patterns)
 
 
 def get_language_for_extension(file_ext):
     """
     Return the code fence language for a given file extension.
-    Fall back to 'plaintext' if unknown.
     """
-    # Common extensions mapped to GitHub-flavored Markdown languages
     extension_map = {
         ".py": "python",
         ".cpp": "cpp",
@@ -33,113 +48,107 @@ def get_language_for_extension(file_ext):
         ".css": "css",
         ".txt": "plaintext",
         ".rs": "rust",
-        # Add more as needed
     }
-
     return extension_map.get(file_ext.lower(), "plaintext")
 
 
-def generate_tree(root_path):
+def generate_tree(root_path, gitignore_spec):
     """
-    Generate a textual tree representation of the folder structure
-    starting at root_path.
+    Generate a textual tree representation of the folder structure,
+    excluding gitignored files.
     """
-    # We want to return a list of lines that make up the tree.
     tree_lines = []
 
     def _tree(dir_path, prefix=""):
-        # Get a sorted list of entries in the current directory
         entries = sorted(os.listdir(dir_path))
-        # Remove hidden files/folders and .git directory if needed
-        entries = [e for e in entries if not e.startswith('.') and e != '.git']
+        entries = [e for e in entries if not e.startswith(".") and e != ".git"]
 
-        # Iterate through each item and recurse if it's a directory
         for i, entry in enumerate(entries):
             full_path = os.path.join(dir_path, entry)
-            # Check if this is the last item to adjust the prefix
-            connector = "└── " if i == len(entries) - 1 else "├── "
 
+            if gitignore_spec and gitignore_spec.match_file(
+                os.path.relpath(full_path, root_path)
+            ):
+                continue
+
+            connector = "└── " if i == len(entries) - 1 else "├── "
             tree_lines.append(prefix + connector + entry)
 
             if os.path.isdir(full_path):
-                # If it is not the last entry, we continue with "│   ", else "    "
                 extension = "    " if i == len(entries) - 1 else "│   "
                 _tree(full_path, prefix + extension)
 
-    # Add the top-level directory itself to the tree
-    root_basename = os.path.basename(os.path.abspath(root_path))
-    if not root_basename:
-        # If the root_path ends with a slash or is something like '/', fallback
-        root_basename = root_path
-
+    root_basename = os.path.basename(os.path.abspath(root_path)) or root_path
     tree_lines.append(root_basename)
     _tree(root_path)
     return "\n".join(tree_lines)
 
 
 @click.command()
-@click.argument('root_path', type=click.Path(exists=True, file_okay=False, dir_okay=True))
-@click.option('-o', '--output', 'output_file', default='merged_output.md', help='Output file path')
+@click.argument(
+    "root_path", type=click.Path(exists=True, file_okay=False, dir_okay=True)
+)
+@click.option(
+    "-o", "--output", "output_file", default="merged_output.md", help="Output file path"
+)
 def main(root_path, output_file):
     if not os.path.isdir(root_path):
         print(f"Error: {root_path} is not a valid directory.")
         sys.exit(1)
 
-    # 1. Generate the folder tree
-    tree_output = generate_tree(root_path)
-
-    # 2. Walk through all files in the directory (recursively)
-    #    and collect their contents in the desired format.
+    gitignore_spec = get_gitignore_spec(root_path)
+    tree_output = generate_tree(root_path, gitignore_spec)
     file_sections = []
+
     for dirpath, dirnames, filenames in os.walk(root_path):
-        # Sort files and directories to have a consistent order
-        dirnames.sort()
-        filenames.sort()
+        dirnames[:] = [
+            d
+            for d in dirnames
+            if not (
+                gitignore_spec
+                and gitignore_spec.match_file(
+                    os.path.relpath(os.path.join(dirpath, d), root_path)
+                )
+            )
+        ]
+        filenames[:] = [
+            f
+            for f in filenames
+            if not (
+                gitignore_spec
+                and gitignore_spec.match_file(
+                    os.path.relpath(os.path.join(dirpath, f), root_path)
+                )
+            )
+        ]
 
         for filename in filenames:
-            # Skip .git directory
-            if '.git' in dirpath.split(os.sep):
-                continue
-
-            # Build relative path
             full_file_path = os.path.join(dirpath, filename)
             rel_path = os.path.relpath(full_file_path, root_path)
 
-            # Skip the output file itself if it's in the same directory
             if filename == os.path.basename(output_file):
                 continue
 
-            # Determine file extension
             _, ext = os.path.splitext(filename)
             language = get_language_for_extension(ext)
 
-            # Read file content
             try:
                 with open(full_file_path, "r", encoding="utf-8", errors="replace") as f:
                     content = f.read()
             except Exception as e:
-                # If there's an error reading the file, skip or handle as needed
                 print(f"Skipping file {rel_path} due to read error: {e}")
                 continue
 
-            # Prepare the file section
             file_header = f"## File: `{rel_path}`\n*(Relative Path: `{rel_path}`)*"
-
-            # Wrap content in code fences
             fenced_content = f"```{language}\n{content}\n```"
-
             section = f"{file_header}\n\n{fenced_content}\n\n---\n"
             file_sections.append(section)
 
-    # 3. Write everything to `merged_output.md`
     with open(output_file, "w", encoding="utf-8") as out:
-        # Write the folder structure at the top
         out.write("# Folder Structure\n\n")
-        out.write("```\n")
+        out.write("```")
         out.write(tree_output)
         out.write("\n```\n\n")
-
-        # Write each file's content
         for section in file_sections:
             out.write(section)
 
