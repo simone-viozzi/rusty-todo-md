@@ -1,10 +1,25 @@
 #[cfg(test)]
 mod rust_tests {
-    use todo_extractor::aggregator::extract_todos;
+    use env_logger;
+    use log::LevelFilter;
     use std::path::Path;
+    use std::sync::Once;
+    use todo_extractor::aggregator::extract_todos;
+
+    static INIT: Once = Once::new();
+
+    fn init_logger() {
+        INIT.call_once(|| {
+            env_logger::Builder::from_default_env()
+                .filter_level(LevelFilter::Debug)
+                .is_test(true)
+                .init();
+        });
+    }
 
     #[test]
     fn test_rust_single_line() {
+        init_logger();
         let src = r#"
 // normal comment
 // TODO: single line
@@ -20,6 +35,7 @@ fn main() {
 
     #[test]
     fn test_rust_block_doc() {
+        init_logger();
         let src = r#"
 /// TODO: fix this doc
 /// second line
