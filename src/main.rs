@@ -1,6 +1,6 @@
 use std::env;
 use std::path::Path;
-use log::LevelFilter;
+use log::{info, warn, error, LevelFilter};
 
 fn main() {
     // Initialize the logger based on RUST_LOG or default to Debug.
@@ -10,7 +10,7 @@ fn main() {
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        println!("Usage: {} <path/to/file>", args[0]);
+        warn!("Usage: {} <path/to/file>", args[0]);
         return;
     }
 
@@ -21,11 +21,11 @@ fn main() {
     let todos = todo_extractor::extract_todos(path, &content);
 
     if todos.is_empty() {
-        println!("No TODOs found.");
+        info!("No TODOs found.");
     } else {
-        println!("Found {} TODOs:", todos.len());
+        info!("Found {} TODOs:", todos.len());
         for todo in todos {
-            println!("{} - {}", todo.line_number, todo.message);
+            info!("{} - {}", todo.line_number, todo.message);
         }
     }
 }

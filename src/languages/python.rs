@@ -2,7 +2,7 @@ use pest::Parser;
 use pest::iterators::Pair;
 use crate::aggregator::CommentLine;
 use pest_derive::Parser;
-use log::debug;
+use log::{debug, info, error};
 
 // Load grammar at compile time
 #[derive(Parser)]
@@ -11,18 +11,17 @@ pub struct PythonParser;
 
 /// Parse the entire Python file content, returning lines of comment text (and line numbers).
 pub fn parse_python_comments(file_content: &str) -> Vec<CommentLine> {
-    debug!("parse_python_comments: start, input length = {}", file_content.len());
+    info!("Starting to parse Python comments. Input length: {}", file_content.len());
 
     let parse_result = PythonParser::parse(Rule::python_file, file_content);
     let mut comments = Vec::new();
 
     match parse_result {
         Ok(pairs) => {
-            debug!("parse_python_comments: parse OK, top-level pairs len = {}", pairs.clone().count());
+            debug!("Parsing successful. Top-level pairs count: {}", pairs.clone().count());
             for pair in pairs {
-                debug!(" - pair = {:?}", pair.as_rule());
+                debug!("Found pair: {:?}", pair.as_rule());
                 match pair.as_rule() {
-                    // line_comment or docstring_comment
                     Rule::comment_python => {
                         handle_comment_token(&pair, &mut comments);
                     }
@@ -33,13 +32,10 @@ pub fn parse_python_comments(file_content: &str) -> Vec<CommentLine> {
             }
         }
         Err(e) => {
-            debug!("parse_python_comments: parse ERR => {}", e);
+            error!("Parsing error: {}", e);
         }
     }
-    debug!(
-        "parse_python_comments: returning {} comment lines",
-        comments.len()
-    );
+    info!("Returning {} comment lines", comments.len());
 
     comments
 }
@@ -48,7 +44,7 @@ pub fn parse_python_comments(file_content: &str) -> Vec<CommentLine> {
 /// If it's a docstring_comment, store each line inside that triple-quoted block.
 fn handle_comment_token(pair: &Pair<Rule>, out: &mut Vec<CommentLine>) {
     let rule = pair.as_rule();
-    debug!("handle_comment_token: rule = {:?}", rule);
+    debug!("Handling comment token: rule = {:?}", rule);
 
     match rule {
         Rule::line_comment => {
@@ -56,10 +52,7 @@ fn handle_comment_token(pair: &Pair<Rule>, out: &mut Vec<CommentLine>) {
             let start_pos = span.start_pos().line_col().0; // line number (1-based)
             let text = span.as_str();
 
-            debug!(
-                " -> line_comment line={} raw='{}'",
-                start_pos, text
-            );
+            debug!("Line comment found at line {}: '{}'", start_pos, text);
 
             // remove leading '#'
             let stripped = text.trim_start_matches('#').trim_end().to_string();
@@ -74,11 +67,7 @@ fn handle_comment_token(pair: &Pair<Rule>, out: &mut Vec<CommentLine>) {
             let start_line = span.start_pos().line_col().0;
             let block_text = span.as_str();
 
-            debug!(
-                " -> docstring_comment lines start={} raw_len={}",
-                start_line,
-                block_text.len()
-            );
+            debug!("Docstring comment found starting at line {}: length {}", start_line, block_text.len());
 
             // remove the surrounding """..."""
             let trimmed = block_text
@@ -88,10 +77,7 @@ fn handle_comment_token(pair: &Pair<Rule>, out: &mut Vec<CommentLine>) {
             let lines: Vec<&str> = trimmed.split('\n').collect();
             let mut current_line = start_line;
             for line_text in lines {
-                debug!(
-                    "    docstring line={} => '{}'",
-                    current_line, line_text
-                );
+                debug!("Docstring line {}: '{}'", current_line, line_text);
                 out.push(CommentLine {
                     line_number: current_line,
                     text: line_text.trim_end().to_string(),
