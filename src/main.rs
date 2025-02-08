@@ -1,6 +1,6 @@
 use std::env;
 use std::path::Path;
-use log::{info, warn, error, LevelFilter};
+use log::{info, warn, LevelFilter};
 
 fn main() {
     // Initialize the logger based on RUST_LOG or default to Debug.

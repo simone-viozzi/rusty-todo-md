@@ -9,32 +9,33 @@ use log::{debug, info, error};
 pub struct RustParser;
 
 pub fn parse_rust_comments(file_content: &str) -> Vec<CommentLine> {
-    info!("Starting to parse Rust comments. File content length: {}", file_content.len());
+    info!("Starting Rust comment parsing. File length: {}", file_content.len());
 
     let parse_result = RustParser::parse(Rule::rust_file, file_content);
     let mut comments = Vec::new();
 
     match parse_result {
         Ok(pairs) => {
-            debug!("Parsing successful. Number of top-level pairs: {}", pairs.clone().count());
-
+            debug!("Parsing successful! Found {} top-level pairs.", pairs.clone().count());
+            
             for pair in pairs {
-                debug!("Found pair: {:?}", pair.as_rule());
+                debug!("Pair: {:?} => '{}'", pair.as_rule(), pair.as_str());
 
                 if pair.as_rule() == Rule::comment_rust {
-                    debug!("Extracting Rust comment: {:?}", pair.as_str());
+                    debug!("Extracting Rust comment: '{}'", pair.as_str());
                     handle_rust_comment(pair, &mut comments);
                 }
             }
         }
         Err(e) => {
-            error!("Parsing error: {:?}", e);
+            error!("Rust parsing error: {:?}", e);
         }
     }
 
-    info!("Total extracted Rust comments: {}", comments.len());
+    info!("Extracted {} Rust comments", comments.len());
     comments
 }
+
 
 fn handle_rust_comment(pair: Pair<Rule>, out: &mut Vec<CommentLine>) {
     match pair.as_rule() {

@@ -22,6 +22,6 @@ str_literal = _{
     "'" ~ (!"'" ~ ANY)* ~ "'"
 }
 
-rust_file = {
-    (comment_rust | str_literal | ANY)*
-}
+rust_file = { SOI ~ (comment_rust | str_literal | any_non_comment)* ~ EOI }
+any_non_comment = { !(comment_rust | str_literal) ~ ANY }
+

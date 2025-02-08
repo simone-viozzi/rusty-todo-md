@@ -7,6 +7,7 @@
 ├── .gitmodules
 ├── .ruff_cache
 ├── Cargo.toml
+├── README.md
 ├── book
 ├── code.md
 ├── pest_book.md
@@ -28,6 +29,7 @@
 │   ├── lib.rs
 │   └── main.rs
 └── tests
+    ├── mod.rs
     ├── python_tests.rs
     └── rust_tests.rs
 ```
@@ -4907,6 +4909,127 @@ The following files have extensions not recognized by the script, so their conte
 ```
 
 ---
+## File: `README.md`
+*(Relative Path: `README.md`)*
+
+```markdown
+# TODO Extractor
+
+A **multi-language TODO comment extractor** for source code files. This tool parses Python, Rust, JavaScript, TypeScript, and Go files to extract TODO comments, including single-line and multi-line TODOs.
+
+## Features
+- 📌 **Supports multiple programming languages**: Python, Rust, JavaScript, TypeScript, and Go.
+- 📝 **Extracts TODO comments** from both single-line (`// TODO:`) and block (`/* TODO: */`) comments.
+- 🔄 **Handles multi-line TODOs** by merging indented or docstring-style comments.
+- 🚀 **Fast and efficient** using the [Pest](https://pest.rs/) parser.
+- 📍 **Provides line numbers** for each TODO found.
+
+---
+
+## 📦 Installation
+
+Clone the repository and build the project using Cargo:
+
+```sh
+# Clone the repository
+git clone https://github.com/your-repo/todo-extractor.git
+cd todo-extractor
+
+# Build the project
+cargo build --release
+
+# Run the executable
+./target/release/todo-extractor path/to/your/file.rs
+```
+
+---
+
+## 🚀 Usage
+
+### Command Line
+Run the extractor by providing a path to a source file:
+
+```sh
+./todo-extractor path/to/source_file.rs
+```
+
+### Example Output
+```sh
+Found 2 TODOs:
+3 - Refactor this function
+10 - Handle edge cases properly
+```
+
+### **Example: Python File (`test.py`)**
+```python
+# TODO: Implement feature X
+def function():
+    """
+    TODO: Improve performance
+    by reducing loops
+    """
+    pass
+```
+#### **Extracted TODOs:**
+```sh
+Found 2 TODOs:
+1 - Implement feature X
+3 - Improve performance by reducing loops
+```
+
+---
+
+## 🔍 How It Works
+### **1. Detects File Type**
+The parser checks the file extension (`.py`, `.rs`, `.js`, `.ts`, `.go`) and selects the appropriate parser.
+
+### **2. Extracts Comment Lines**
+Using **Pest grammars**, the extractor retrieves comment lines while ignoring code and string literals.
+
+### **3. Identifies TODO Markers**
+The extractor searches for `TODO:` inside comment lines and captures the message.
+
+### **4. Handles Multi-line TODOs**
+If a TODO is followed by indented lines, they are merged into a single entry.
+
+---
+
+## 🛠️ Supported Languages
+| Language | Single-line Syntax | Block Syntax |
+|----------|-------------------|--------------|
+| Python   | `# TODO: ...` | `""" TODO: ... """` |
+| Rust     | `// TODO: ...` | `/* TODO: ... */` |
+| JavaScript | `// TODO: ...` | `/* TODO: ... */` |
+| TypeScript | `// TODO: ...` | `/* TODO: ... */` |
+| Go       | `// TODO: ...` | `/* TODO: ... */` |
+
+---
+
+## 🧪 Running Tests
+Run tests to validate the TODO extraction:
+```sh
+cargo test
+```
+
+Example test case for Rust files:
+```rust
+#[test]
+fn test_rust_single_line() {
+    let src = "// TODO: Refactor this code";
+    let todos = extract_todos(Path::new("example.rs"), src);
+    assert_eq!(todos.len(), 1);
+    assert_eq!(todos[0].message, "Refactor this code");
+}
+```
+
+---
+
+## 🤝 Contributing
+Want to add support for another language? Contributions are welcome! Feel free to open an issue or submit a pull request.
+
+```
+
+---
 ## File: `tests/rust_tests.rs`
 *(Relative Path: `tests/rust_tests.rs`)*
 
@@ -4926,7 +5049,8 @@ mod rust_tests {
             env_logger::Builder::from_default_env()
                 .filter_level(LevelFilter::Debug)
                 .is_test(true)
-                .init();
+                .try_init()
+                .ok(); 
         });
     }
 
@@ -4996,7 +5120,8 @@ mod python_tests {
             env_logger::Builder::from_default_env()
                 .filter_level(LevelFilter::Debug)
                 .is_test(true)
-                .init();
+                .try_init()
+                .ok(); 
         });
     }
 
@@ -5041,6 +5166,15 @@ def f():
 ```
 
 ---
+## File: `tests/mod.rs`
+*(Relative Path: `tests/mod.rs`)*
+
+```rust
+mod rust_tests;
+mod python_tests;
+```
+
+---
 ## File: `src/lib.rs`
 *(Relative Path: `src/lib.rs`)*
 
@@ -5059,7 +5193,7 @@ pub use aggregator::extract_todos;
 ```rust
 use std::env;
 use std::path::Path;
-use log::LevelFilter;
+use log::{info, warn, error, LevelFilter};
 
 fn main() {
     // Initialize the logger based on RUST_LOG or default to Debug.
@@ -5069,7 +5203,7 @@ fn main() {
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        println!("Usage: {} <path/to/file>", args[0]);
+        warn!("Usage: {} <path/to/file>", args[0]);
         return;
     }
 
@@ -5080,11 +5214,11 @@ fn main() {
     let todos = todo_extractor::extract_todos(path, &content);
 
     if todos.is_empty() {
-        println!("No TODOs found.");
+        info!("No TODOs found.");
     } else {
-        println!("Found {} TODOs:", todos.len());
+        info!("Found {} TODOs:", todos.len());
         for todo in todos {
-            println!("{} - {}", todo.line_number, todo.message);
+            info!("{} - {}", todo.line_number, todo.message);
         }
     }
 }
@@ -5308,25 +5442,37 @@ use pest::Parser;
 use pest::iterators::Pair;
 use crate::aggregator::CommentLine;
 use pest_derive::Parser;
+use log::{debug, info, error};
 
 #[derive(Parser)]
 #[grammar = "languages/rust.pest"]
 pub struct RustParser;
 
 pub fn parse_rust_comments(file_content: &str) -> Vec<CommentLine> {
+    info!("Starting to parse Rust comments. File content length: {}", file_content.len());
+
     let parse_result = RustParser::parse(Rule::rust_file, file_content);
     let mut comments = Vec::new();
 
-    if let Ok(pairs) = parse_result {
-        for pair in pairs {
-            match pair.as_rule() {
-                Rule::comment_rust => {
+    match parse_result {
+        Ok(pairs) => {
+            debug!("Parsing successful. Number of top-level pairs: {}", pairs.clone().count());
+
+            for pair in pairs {
+                debug!("Found pair: {:?}", pair.as_rule());
+
+                if pair.as_rule() == Rule::comment_rust {
+                    debug!("Extracting Rust comment: {:?}", pair.as_str());
                     handle_rust_comment(pair, &mut comments);
                 }
-                _ => {}
             }
         }
+        Err(e) => {
+            error!("Parsing error: {:?}", e);
+        }
     }
+
+    info!("Total extracted Rust comments: {}", comments.len());
     comments
 }
 
@@ -5336,6 +5482,7 @@ fn handle_rust_comment(pair: Pair<Rule>, out: &mut Vec<CommentLine>) {
             let span = pair.as_span();
             let line = span.start_pos().line_col().0;
             let text = span.as_str();
+            debug!("Line comment found at line {}: '{}'", line, text);
             // Remove leading `//`
             let stripped = text.trim_start_matches('/').trim_start_matches('/').trim_start();
             out.push(CommentLine {
@@ -5347,6 +5494,7 @@ fn handle_rust_comment(pair: Pair<Rule>, out: &mut Vec<CommentLine>) {
             let span = pair.as_span();
             let start_line = span.start_pos().line_col().0;
             let block_text = span.as_str();
+            debug!("Block comment found starting at line {}: length {}", start_line, block_text.len());
             // remove `/*` and `*/`
             let trimmed = block_text
                 .trim_start_matches("/*")
@@ -5356,6 +5504,7 @@ fn handle_rust_comment(pair: Pair<Rule>, out: &mut Vec<CommentLine>) {
             let lines: Vec<&str> = trimmed.split('\n').collect();
             let mut current_line = start_line;
             for line_text in lines {
+                debug!("Block comment line {}: '{}'", current_line, line_text);
                 out.push(CommentLine {
                     line_number: current_line,
                     text: line_text.trim_end().to_string(),
@@ -5367,6 +5516,7 @@ fn handle_rust_comment(pair: Pair<Rule>, out: &mut Vec<CommentLine>) {
             let span = pair.as_span();
             let line = span.start_pos().line_col().0;
             let text = span.as_str();
+            debug!("Doc comment line found at line {}: '{}'", line, text);
             // remove leading `///` or `//!`
             let stripped = if text.starts_with("///") {
                 &text[3..]
@@ -5550,7 +5700,7 @@ use pest::Parser;
 use pest::iterators::Pair;
 use crate::aggregator::CommentLine;
 use pest_derive::Parser;
-use log::debug;
+use log::{debug, info, error};
 
 // Load grammar at compile time
 #[derive(Parser)]
@@ -5559,18 +5709,17 @@ pub struct PythonParser;
 
 /// Parse the entire Python file content, returning lines of comment text (and line numbers).
 pub fn parse_python_comments(file_content: &str) -> Vec<CommentLine> {
-    debug!("parse_python_comments: start, input length = {}", file_content.len());
+    info!("Starting to parse Python comments. Input length: {}", file_content.len());
 
     let parse_result = PythonParser::parse(Rule::python_file, file_content);
     let mut comments = Vec::new();
 
     match parse_result {
         Ok(pairs) => {
-            debug!("parse_python_comments: parse OK, top-level pairs len = {}", pairs.clone().count());
+            debug!("Parsing successful. Top-level pairs count: {}", pairs.clone().count());
             for pair in pairs {
-                debug!(" - pair = {:?}", pair.as_rule());
+                debug!("Found pair: {:?}", pair.as_rule());
                 match pair.as_rule() {
-                    // line_comment or docstring_comment
                     Rule::comment_python => {
                         handle_comment_token(&pair, &mut comments);
                     }
@@ -5581,13 +5730,10 @@ pub fn parse_python_comments(file_content: &str) -> Vec<CommentLine> {
             }
         }
         Err(e) => {
-            debug!("parse_python_comments: parse ERR => {}", e);
+            error!("Parsing error: {}", e);
         }
     }
-    debug!(
-        "parse_python_comments: returning {} comment lines",
-        comments.len()
-    );
+    info!("Returning {} comment lines", comments.len());
 
     comments
 }
@@ -5596,7 +5742,7 @@ pub fn parse_python_comments(file_content: &str) -> Vec<CommentLine> {
 /// If it's a docstring_comment, store each line inside that triple-quoted block.
 fn handle_comment_token(pair: &Pair<Rule>, out: &mut Vec<CommentLine>) {
     let rule = pair.as_rule();
-    debug!("handle_comment_token: rule = {:?}", rule);
+    debug!("Handling comment token: rule = {:?}", rule);
 
     match rule {
         Rule::line_comment => {
@@ -5604,10 +5750,7 @@ fn handle_comment_token(pair: &Pair<Rule>, out: &mut Vec<CommentLine>) {
             let start_pos = span.start_pos().line_col().0; // line number (1-based)
             let text = span.as_str();
 
-            debug!(
-                " -> line_comment line={} raw='{}'",
-                start_pos, text
-            );
+            debug!("Line comment found at line {}: '{}'", start_pos, text);
 
             // remove leading '#'
             let stripped = text.trim_start_matches('#').trim_end().to_string();
@@ -5622,11 +5765,7 @@ fn handle_comment_token(pair: &Pair<Rule>, out: &mut Vec<CommentLine>) {
             let start_line = span.start_pos().line_col().0;
             let block_text = span.as_str();
 
-            debug!(
-                " -> docstring_comment lines start={} raw_len={}",
-                start_line,
-                block_text.len()
-            );
+            debug!("Docstring comment found starting at line {}: length {}", start_line, block_text.len());
 
             // remove the surrounding """..."""
             let trimmed = block_text
@@ -5636,10 +5775,7 @@ fn handle_comment_token(pair: &Pair<Rule>, out: &mut Vec<CommentLine>) {
             let lines: Vec<&str> = trimmed.split('\n').collect();
             let mut current_line = start_line;
             for line_text in lines {
-                debug!(
-                    "    docstring line={} => '{}'",
-                    current_line, line_text
-                );
+                debug!("Docstring line {}: '{}'", current_line, line_text);
                 out.push(CommentLine {
                     line_number: current_line,
                     text: line_text.trim_end().to_string(),
