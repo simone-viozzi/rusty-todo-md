@@ -13,7 +13,8 @@ mod rust_tests {
             env_logger::Builder::from_default_env()
                 .filter_level(LevelFilter::Debug)
                 .is_test(true)
-                .init();
+                .try_init()
+                .ok(); 
         });
     }
 
