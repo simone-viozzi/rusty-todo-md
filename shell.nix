@@ -2,11 +2,8 @@
   pkgs ? import <nixpkgs> { },
 }:
 
-let
-  pythonPackages = pkgs.python311Packages; # Change to Python 3.10
-in pkgs.mkShell rec {
+pkgs.mkShell rec {
   name = "pre-commit-todo";
-  venvDir = "./.venv";
 
   buildInputs = with pkgs; [
     rustc # Rust compiler
@@ -20,32 +17,12 @@ in pkgs.mkShell rec {
     git-crypt
     stdenv.cc.cc.lib
     stdenv.cc.cc # jupyter lab needs
-    pythonPackages.python
-    pythonPackages.pyzmq # Adding pyzmq explicitly
-    pythonPackages.venvShellHook
-    pythonPackages.pip
-    pythonPackages.ruff
-    pythonPackages.click
-    pythonPackages.pathspec
     pre-commit
   ];
-
-  postVenvCreation = ''
-    unset SOURCE_DATE_EPOCH
-  '';
 
   # Set the source path for Rust tooling (e.g., rust-analyzer)
   RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
   pre-commit = pkgs.pre-commit;
-
-  postShellHook = ''
-    # allow pip to install wheels
-    unset SOURCE_DATE_EPOCH
-
-    pip install --upgrade wheel setuptools  
-
-    echo "Environment setup complete."
-  '';
 
   shellHook = ''
     export PKG_CONFIG_PATH="${pkgs.openssl.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"

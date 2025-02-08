@@ -52,7 +52,7 @@ fn handle_rust_comment(pair: Pair<Rule>, out: &mut Vec<CommentLine>) {
             for line_text in lines {
                 out.push(CommentLine {
                     line_number: current_line,
-                    text: line_text.trim().to_string(),
+                    text: line_text.trim_end().to_string(),
                 });
                 current_line += 1;
             }
@@ -69,7 +69,7 @@ fn handle_rust_comment(pair: Pair<Rule>, out: &mut Vec<CommentLine>) {
             };
             out.push(CommentLine {
                 line_number: line,
-                text: stripped.trim().to_string(),
+                text: stripped.trim_end().to_string(),
             });
         }
         _ => {}
