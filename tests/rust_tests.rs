@@ -14,7 +14,7 @@ mod rust_tests {
                 .filter_level(LevelFilter::Debug)
                 .is_test(true)
                 .try_init()
-                .ok(); 
+                .ok();
         });
     }
 
