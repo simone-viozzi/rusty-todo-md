@@ -1,27 +1,42 @@
 // We assume the "grammar-extras" feature is on, so we can define COMMENT or WHITESPACE if we want.
 //
-// For Python, we'll capture top-level "comment" tokens as well as "docstring_comment".
+// For Python, we capture:
+// 1. Single-line `#` comments
+// 2. Triple-quoted docstrings (multi-line comments)
+// 3. Explicit `TODO:` comments separately to make extraction easier
 
+python_file = { SOI ~ (todo_comment | comment_python | str_literal | ANY)* ~ EOI }
+
+// ===============================
+// COMMENT EXTRACTION RULES
+// ===============================
+
+// General comments: Includes single-line and docstring comments
 comment_python = { line_comment | docstring_comment }
 
-// Single-line # comment
-line_comment = @{
-    "#" ~ (!NEWLINE ~ ANY)*
+// Single-line comments: Captures `#` comments and ignores regular code
+line_comment = @{ "#" ~ (!NEWLINE ~ ANY)* }
+
+// Triple-quoted docstrings (multi-line comments)
+docstring_comment = @{ "\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"" }
+
+// ===============================
+// TODO COMMENT EXTRACTION
+// ===============================
+
+// Captures `TODO:` comments (single-line or inside docstrings)
+todo_comment = @{
+    "#" ~ "TODO:" ~ (!NEWLINE ~ ANY)* |
+    "\"\"\"" ~ "TODO:" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\""
 }
 
-// We'll consider triple quotes as docstring_comment for simplicity.
-docstring_comment = @{
-    "\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\""
-}
+// ===============================
+// STRING LITERALS (For Skipping Code Strings)
+// ===============================
 
-// For normal string literals (to skip them), we define a rough rule to ensure we don't treat them as comments:
+// Ignore normal string literals to avoid false positives
 str_literal = _{
     "\"" ~ (!"\"" ~ ANY)* ~ "\"" |
     "'" ~ (!"'" ~ ANY)* ~ "'"
 }
 
-// The main rule: a Python file can have any mixture of comments, string literals, or code (ANY).
-// We only want to capture "comment_python" tokens as recognized comment pairs in the parse tree.
-python_file = {
-    (comment_python | str_literal | ANY)*
-}

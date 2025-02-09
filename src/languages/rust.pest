@@ -1,11 +1,28 @@
-// Minimal Rust grammar focusing on comment tokens & ignoring string literals.
+// Minimal Rust grammar focusing on extracting TODO comments while ignoring string literals.
 
+rust_file = { SOI ~ (todo_comment | comment_rust | str_literal | any_non_comment)* ~ EOI }
+
+// =======================
+// 🎯 TODO Comments
+// =======================
+// Explicitly capture `TODO:` in single-line, block, and doc comments.
+todo_comment = @{
+    "//" ~ "TODO:" ~ (!NEWLINE ~ ANY)* |
+    "/*" ~ "TODO:" ~ (!"*/" ~ ANY)* ~ "*/" |
+    "///" ~ "TODO:" ~ (!NEWLINE ~ ANY)*
+}
+
+// =======================
+// 📌 Regular Comments
+// =======================
 comment_rust = { line_comment | block_comment | doc_comment_line }
 
 // Single-line: `//` until newline
-line_comment = @{ "//" ~ (!NEWLINE ~ ANY)* }
+line_comment = @{
+    "//" ~ (!NEWLINE ~ ANY)*
+}
 
-// Block comment: `/* ... */` (this can be multi-line)
+// Block comment: `/* ... */` (multi-line allowed)
 block_comment = @{
     "/*" ~ (!"*/" ~ ANY)* ~ "*/"
 }
@@ -16,12 +33,17 @@ doc_comment_line = @{
     "//!" ~ (!NEWLINE ~ ANY)*
 }
 
-// For ignoring string literals roughly:
+// =======================
+// 🚫 Ignoring String Literals
+// =======================
+// Avoid capturing TODOs inside strings like: let s = "TODO: fix this";
 str_literal = _{
     "\"" ~ (!"\"" ~ ANY)* ~ "\"" |
     "'" ~ (!"'" ~ ANY)* ~ "'"
 }
 
-rust_file = { SOI ~ (comment_rust | str_literal | any_non_comment)* ~ EOI }
+// =======================
+// ❌ Any Other Non-Comment Code
+// =======================
+// Any code that is not a comment or string
 any_non_comment = { !(comment_rust | str_literal) ~ ANY }
-

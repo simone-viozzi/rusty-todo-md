@@ -43,7 +43,7 @@ fn main() {
 fn foo() {}
 
 /*
-   TODO: block
+    TODO: block
         more lines
 */
 "#;

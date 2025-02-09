@@ -151,50 +151,46 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
     let mut result = Vec::new();
     let mut idx = 0;
 
+    debug!("Starting to collect TODOs from comment lines. Total lines: {}", lines.len());
+
     while idx < lines.len() {
-        let text = &lines[idx].text;
+        let text = &lines[idx].text.trim();
         let line_num = lines[idx].line_number;
 
-        debug!("collect_todos: checking line {} => '{}'", line_num, text);
+        debug!("Processing line {}: '{}'", line_num, text);
 
-        if let Some(pos) = text.find("TODO:") {
-            debug!(" -> Found TODO at line {} pos {}", line_num, pos);
-            let after_todo = &text[pos + 5..].trim_start();
-            let mut collected = after_todo.to_string();
+        if text.starts_with("TODO:") {
+            let mut collected = text[5..].trim().to_string();
+            debug!("Found TODO at line {}: '{}'", line_num, collected);
 
             idx += 1;
             while idx < lines.len() {
-                let cont_text = &lines[idx].text;
+                let next_text = &lines[idx].text.trim();
+                debug!("Checking next line {}: '{}'", lines[idx].line_number, next_text);
 
-                // Only merge if the next line is **indented**
-                if cont_text.starts_with(' ') || cont_text.starts_with('\t') {
-                    debug!(
-                        "   continuing multiline TODO at line {} => '{}'",
-                        lines[idx].line_number, cont_text
-                    );
-
+                // Ensure we only merge if the next line is indented
+                if next_text.starts_with(" ") || next_text.starts_with("\t") {
                     collected.push(' ');
-                    collected.push_str(cont_text.trim());
+                    collected.push_str(next_text.trim());
+                    debug!("Merged line {} into TODO: '{}'", lines[idx].line_number, collected);
                     idx += 1;
                 } else {
+                    debug!("Line {} is not indented. Stopping merge.", lines[idx].line_number);
                     break;
                 }
             }
 
-            let final_msg = collected.trim_end().to_string();
-            debug!(
-                " -> Final merged TODO from line {} => '{}'",
-                line_num, final_msg
-            );
-
+            debug!("Added TODO item: line {}, message '{}'", line_num, collected);
             result.push(TodoItem {
                 line_number: line_num,
-                message: final_msg,
+                message: collected,
             });
         } else {
+            debug!("Line {} does not start with TODO:, skipping.", line_num);
             idx += 1;
         }
     }
 
+    debug!("Finished collecting TODOs. Total TODO items: {}", result.len());
     result
 }
