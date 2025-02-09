@@ -1,4 +1,5 @@
 use log::debug;
+use std::marker::PhantomData;
 use std::path::Path;
 
 use crate::languages::{
@@ -25,6 +26,7 @@ pub struct TodoItem {
 /// - `file_content`: The source code text.
 /// - Returns: A `Vec<CommentLine>` containing extracted comments.
 pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
+    _parser_type: PhantomData<P>, // Explicitly indicate parser type
     rule: R,
     file_content: &str,
 ) -> Vec<CommentLine> {
