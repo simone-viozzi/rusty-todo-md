@@ -1,34 +1,37 @@
-{
-  pkgs ? import <nixpkgs> { },
-}:
+{ pkgs ? import <nixpkgs> {}, overlays ? [] }:
 
-pkgs.mkShell rec {
-  name = "pre-commit-todo";
+let
+  rust-overlay = import (builtins.fetchTarball "https://github.com/oxalica/rust-overlay/archive/master.tar.gz");
+  pkgs = import <nixpkgs> { overlays = [ rust-overlay ]; };
+
+  rust = pkgs.rust-bin.stable.latest.default.override {
+    extensions = [ "rust-src" "cargo" "rustc" "clippy" "rustfmt" ];
+  };
+in
+
+pkgs.mkShell {
+  name = "comment-parser";
 
   buildInputs = with pkgs; [
-    rustc # Rust compiler
-    cargo # Rust package manager
-    rustfmt # Rust code formatter
-    clippy # Rust linter
-    gcc # Required for crates needing C compilers
-    pkg-config # Helps locate libraries like OpenSSL
-    openssl # OpenSSL library for crates like openssl-sys
+    rust
+    rust-analyzer
+    pkg-config
+    openssl
     git
-    git-crypt
-    stdenv.cc.cc.lib
-    stdenv.cc.cc # jupyter lab needs
     pre-commit
+    lldb
+    llvmPackages.libllvm
+    gcc
+    zlib
+    zlib.out
   ];
 
-  # Set the source path for Rust tooling (e.g., rust-analyzer)
-  RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
-  pre-commit = pkgs.pre-commit;
-
   shellHook = ''
-    export PKG_CONFIG_PATH="${pkgs.openssl.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"
-
     export RUST_BACKTRACE=1
     export CARGO_HOME=$HOME/.cargo
     export PATH=$CARGO_HOME/bin:$PATH
+    export RUST_SRC_PATH="${rust}/lib/rustlib/src/rust/library"
+
+    export LD_LIBRARY_PATH=${pkgs.zlib}/lib:$LD_LIBRARY_PATH
   '';
 }
