@@ -43,21 +43,20 @@ fn main() {
 fn foo() {}
 
 /*
-   stuff
    TODO: block
         more lines
 */
 "#;
         let todos = extract_todos(Path::new("lib.rs"), src);
+
+        // Now we should expect only the correctly merged lines
         assert_eq!(todos.len(), 2);
 
-        // doc comment
+        // Doc comment
         assert_eq!(todos[0].line_number, 2);
-        assert!(todos[0].message.contains("fix this doc"));
-        assert!(todos[0].message.contains("second line"));
+        assert_eq!(todos[0].message, "fix this doc second line");
 
-        // block
-        assert!(todos[1].message.contains("block"));
-        assert!(todos[1].message.contains("more lines"));
+        // Block comment
+        assert_eq!(todos[1].message, "block more lines");
     }
 }

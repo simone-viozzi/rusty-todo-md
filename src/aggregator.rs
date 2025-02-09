@@ -73,27 +73,35 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
 /// Handles a `Pair` from Pest and extracts a `CommentLine` if applicable.
 fn handle_comment_pair(pair: Pair<impl pest::RuleType>) -> Option<CommentLine> {
     let span = pair.as_span();
-    let line = span.start_pos().line_col().0;
+    let base_line = span.start_pos().line_col().0;
     let text = span.as_str().trim();
 
     debug!(
         "Extracted comment at line {}: '{}'",
-        line,
+        base_line,
         text.replace('\n', "\\n")
     );
 
-    // Instead of returning the entire block, split into individual lines
     let mut comment_lines = Vec::new();
     for (i, line_text) in text.lines().enumerate() {
-        let actual_line = line + i;
-        comment_lines.push(CommentLine {
-            line_number: actual_line,
-            text: line_text.trim().to_string(),
-        });
+        let actual_line = base_line + i;
+        let trimmed_text = line_text.trim();
+
+        if trimmed_text.starts_with("TODO:") {
+            comment_lines.push(CommentLine {
+                line_number: actual_line,
+                text: trimmed_text.to_string(),
+            });
+        }
     }
 
-    Some(comment_lines[0].clone()) // Return only the first line for now
+    if comment_lines.is_empty() {
+        None
+    } else {
+        Some(comment_lines[0].clone()) // Return only the first TODO line
+    }
 }
+
 
 /// Detects file extension and chooses the parser to gather raw comment lines,
 /// then extracts multi-line TODOs from those comments.
@@ -153,28 +161,27 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
 
         if let Some(pos) = text.find("TODO:") {
             debug!(" -> Found TODO at line {} pos {}", line_num, pos);
-            let after_todo = &text[pos + 5..]; // skip "TODO:"
-            let mut collected = after_todo.trim_start().to_string();
+            let after_todo = &text[pos + 5..].trim_start();
+            let mut collected = after_todo.to_string();
 
             idx += 1;
             while idx < lines.len() {
                 let cont_text = &lines[idx].text;
                 
-                // Stop merging if next line is code, empty, or unrelated
-                if cont_text.trim().is_empty()
-                    || !cont_text.starts_with(' ') && !cont_text.starts_with('\t') {
+                // Only merge if the next line is **indented**
+                if cont_text.starts_with(' ') || cont_text.starts_with('\t') {
+                    debug!(
+                        "   continuing multiline TODO at line {} => '{}'",
+                        lines[idx].line_number,
+                        cont_text
+                    );
+
+                    collected.push(' ');
+                    collected.push_str(cont_text.trim());
+                    idx += 1;
+                } else {
                     break;
                 }
-
-                debug!(
-                    "   continuing multiline TODO at line {} => '{}'",
-                    lines[idx].line_number,
-                    cont_text
-                );
-
-                collected.push(' ');
-                collected.push_str(cont_text.trim());
-                idx += 1;
             }
 
             let final_msg = collected.trim_end().to_string();
