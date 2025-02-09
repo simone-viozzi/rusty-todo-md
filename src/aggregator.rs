@@ -11,6 +11,7 @@ use crate::languages::{
 };
 use log::{error, info};
 use pest::{iterators::Pair, Parser};
+use regex::Regex;
 
 /// Represents a single found TODO item.
 #[derive(Debug, PartialEq)]
@@ -72,7 +73,6 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
     comments
 }
 
-
 fn extract_comment_from_pair(pair: Pair<impl pest::RuleType>) -> Option<CommentLine> {
     let span = pair.as_span();
     let base_line = span.start_pos().line_col().0; // Get line number
@@ -85,7 +85,8 @@ fn extract_comment_from_pair(pair: Pair<impl pest::RuleType>) -> Option<CommentL
     );
 
     // ✅ If the comment starts with "TODO:", store it
-    if text.starts_with("TODO:") || text.starts_with("// TODO:") || text.starts_with("/* TODO:") {
+    let re = Regex::new(r"^\s*[^a-zA-Z]?\s*TODO:").unwrap();
+    if re.is_match(text) {
         return Some(CommentLine {
             line_number: base_line,
             text: text.to_string(),
