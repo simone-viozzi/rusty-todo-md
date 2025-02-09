@@ -46,17 +46,20 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
             );
 
             for pair in pairs {
-                debug!(
-                    "Processing pair: {:?} => '{}'",
-                    pair.as_rule(),
-                    pair.as_str().replace('\n', "\\n") // Replace newlines for better readability
-                );
+                // 🔥 NEW: Iterate over children of the rust_file or python_file
+                for inner_pair in pair.into_inner() {
+                    debug!(
+                        "Processing child pair: {:?} => '{}'",
+                        inner_pair.as_rule(),
+                        inner_pair.as_str().replace('\n', "\\n")
+                    );
 
-                if let Some(comment) = handle_comment_pair(pair) {
-                    debug!("Extracted comment: {:?}", comment);
-                    comments.push(comment);
-                } else {
-                    debug!("Skipped non-comment pair.");
+                    if let Some(comment) = extract_comment_from_pair(inner_pair) {
+                        debug!("Extracted comment: {:?}", comment);
+                        comments.push(comment);
+                    } else {
+                        debug!("Skipped non-comment pair.");
+                    }
                 }
             }
         }
@@ -69,11 +72,11 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
     comments
 }
 
-/// Handles a `Pair` from Pest and extracts a `CommentLine` if applicable.
-fn handle_comment_pair(pair: Pair<impl pest::RuleType>) -> Option<CommentLine> {
+
+fn extract_comment_from_pair(pair: Pair<impl pest::RuleType>) -> Option<CommentLine> {
     let span = pair.as_span();
-    let base_line = span.start_pos().line_col().0;
-    let text = span.as_str().trim();
+    let base_line = span.start_pos().line_col().0; // Get line number
+    let text = span.as_str().trim(); // Extract actual comment text
 
     debug!(
         "Extracted comment at line {}: '{}'",
@@ -81,24 +84,15 @@ fn handle_comment_pair(pair: Pair<impl pest::RuleType>) -> Option<CommentLine> {
         text.replace('\n', "\\n")
     );
 
-    let mut comment_lines = Vec::new();
-    for (i, line_text) in text.lines().enumerate() {
-        let actual_line = base_line + i;
-        let trimmed_text = line_text.trim();
-
-        if trimmed_text.starts_with("TODO:") {
-            comment_lines.push(CommentLine {
-                line_number: actual_line,
-                text: trimmed_text.to_string(),
-            });
-        }
+    // ✅ If the comment starts with "TODO:", store it
+    if text.starts_with("TODO:") || text.starts_with("// TODO:") || text.starts_with("/* TODO:") {
+        return Some(CommentLine {
+            line_number: base_line,
+            text: text.to_string(),
+        });
     }
 
-    if comment_lines.is_empty() {
-        None
-    } else {
-        Some(comment_lines[0].clone()) // Return only the first TODO line
-    }
+    None
 }
 
 /// Detects file extension and chooses the parser to gather raw comment lines,

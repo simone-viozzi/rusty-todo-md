@@ -1,42 +1,57 @@
-// Minimal Rust grammar focusing on extracting TODO comments while ignoring string literals.
+// =======================
+// 🦀 Rust Comment Parser
+// =======================
 
-rust_file = { SOI ~ (todo_comment | comment_rust | str_literal | any_non_comment)* ~ EOI }
+// The entire Rust file consists of sequences of comments, code, and string literals.
+rust_file = { SOI ~ (comment | str_literal | any_non_comment)* ~ EOI }
 
 // =======================
-// 🎯 TODO Comments
+// 🎯 TODO Comments Extraction
 // =======================
-// Explicitly capture `TODO:` in single-line, block, and doc comments.
+
+// Single-line `TODO:` (// TODO: ...)
 todo_comment = @{
-    "//" ~ "TODO:" ~ (!NEWLINE ~ ANY)* |
-    "/*" ~ "TODO:" ~ (!"*/" ~ ANY)* ~ "*/" |
+    "//" ~ "TODO:" ~ (!NEWLINE ~ ANY)*
+}
+
+// Block-style `TODO:` (/* TODO: ... */)
+todo_block_comment = @{
+    "/*" ~ "TODO:" ~ (!"*/" ~ ANY)* ~ "*/"
+}
+
+// Doc-style `TODO:` (/// TODO: ...)
+todo_doc_comment = @{
     "///" ~ "TODO:" ~ (!NEWLINE ~ ANY)*
 }
 
 // =======================
 // 📌 Regular Comments
 // =======================
-comment_rust = { line_comment | block_comment | doc_comment_line }
 
-// Single-line: `//` until newline
+// Single-line comments: `// ...`
 line_comment = @{
     "//" ~ (!NEWLINE ~ ANY)*
 }
 
-// Block comment: `/* ... */` (multi-line allowed)
+// Block comments: `/* ... */`
 block_comment = @{
     "/*" ~ (!"*/" ~ ANY)* ~ "*/"
 }
 
-// Doc comment lines start with `///` or `//!` (we unify them)
-doc_comment_line = @{
+// Rust doc comments: `/// ...` or `//! ...`
+doc_comment = @{
     "///" ~ (!NEWLINE ~ ANY)* |
     "//!" ~ (!NEWLINE ~ ANY)*
 }
 
+// General comments (captures any kind of comment)
+comment = { todo_comment | todo_block_comment | todo_doc_comment | line_comment | block_comment | doc_comment }
+
 // =======================
 // 🚫 Ignoring String Literals
 // =======================
-// Avoid capturing TODOs inside strings like: let s = "TODO: fix this";
+
+// Avoids capturing `TODO:` inside strings like `let s = "TODO: fix this";`
 str_literal = _{
     "\"" ~ (!"\"" ~ ANY)* ~ "\"" |
     "'" ~ (!"'" ~ ANY)* ~ "'"
@@ -45,5 +60,6 @@ str_literal = _{
 // =======================
 // ❌ Any Other Non-Comment Code
 // =======================
-// Any code that is not a comment or string
-any_non_comment = { !(comment_rust | str_literal) ~ ANY }
+
+// Matches everything that is NOT a comment or string
+any_non_comment = { !(comment | str_literal) ~ ANY }

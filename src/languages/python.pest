@@ -1,42 +1,58 @@
-// We assume the "grammar-extras" feature is on, so we can define COMMENT or WHITESPACE if we want.
-//
-// For Python, we capture:
-// 1. Single-line `#` comments
-// 2. Triple-quoted docstrings (multi-line comments)
-// 3. Explicit `TODO:` comments separately to make extraction easier
-
-python_file = { SOI ~ (todo_comment | comment_python | str_literal | ANY)* ~ EOI }
-
 // ===============================
-// COMMENT EXTRACTION RULES
+// 🐍 Python Comment Parser
 // ===============================
 
-// General comments: Includes single-line and docstring comments
-comment_python = { line_comment | docstring_comment }
-
-// Single-line comments: Captures `#` comments and ignores regular code
-line_comment = @{ "#" ~ (!NEWLINE ~ ANY)* }
-
-// Triple-quoted docstrings (multi-line comments)
-docstring_comment = @{ "\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"" }
+// A Python file consists of comments, code, and string literals.
+python_file = { SOI ~ (comment | docstring | str_literal | any_non_comment)* ~ EOI }
 
 // ===============================
-// TODO COMMENT EXTRACTION
+// 🎯 TODO Comments Extraction
 // ===============================
 
-// Captures `TODO:` comments (single-line or inside docstrings)
+// Single-line `TODO:` comments (# TODO: ...)
 todo_comment = @{
-    "#" ~ "TODO:" ~ (!NEWLINE ~ ANY)* |
-    "\"\"\"" ~ "TODO:" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\""
+    "#" ~ "TODO:" ~ (!NEWLINE ~ ANY)*
+}
+
+// Multi-line docstring with `TODO:`
+todo_docstring = @{
+    ("\"\"\"" | "'''") ~ "TODO:" ~ (!("\"\"\"" | "'''") ~ ANY)* ~ ("\"\"\"" | "'''")
 }
 
 // ===============================
-// STRING LITERALS (For Skipping Code Strings)
+// 📌 Regular Comments
 // ===============================
 
-// Ignore normal string literals to avoid false positives
+// Regular single-line comments (`# ...`)
+line_comment = @{
+    "#" ~ (!NEWLINE ~ ANY)*
+}
+
+// General comment rule (captures all comments)
+comment = { todo_comment | line_comment }
+
+// ===============================
+// 📜 Docstrings
+// ===============================
+
+// Triple-quoted string (`""" ... """` or `''' ... '''` used as docstrings)
+docstring = @{
+    ("\"\"\"" | "'''") ~ (!("\"\"\"" | "'''") ~ ANY)* ~ ("\"\"\"" | "'''")
+}
+
+// ===============================
+// 🚫 Ignoring String Literals
+// ===============================
+
+// Avoid capturing TODOs inside regular string literals
 str_literal = _{
     "\"" ~ (!"\"" ~ ANY)* ~ "\"" |
     "'" ~ (!"'" ~ ANY)* ~ "'"
 }
 
+// ===============================
+// ❌ Any Other Non-Comment Code
+// ===============================
+
+// Anything that is NOT a comment, docstring, or string
+any_non_comment = { !(comment | docstring | str_literal) ~ ANY }
