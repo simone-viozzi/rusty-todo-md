@@ -54,4 +54,24 @@ def f():
         assert!(item.message.contains("fix f"));
         assert!(item.message.contains("some more text"));
     }
+
+    #[test]
+    fn test_extract_python_todo() {
+        let src = r#"
+# TODO: Fix performance issues
+# Regular comment
+"#;
+        let todos = extract_todos(Path::new("file.py"), src);
+        assert_eq!(todos.len(), 1);
+        assert_eq!(todos[0].message, "Fix performance issues");
+    }
+
+    #[test]
+    fn test_ignore_non_todo_python() {
+        let src = r#"
+# This is just a comment
+"#;
+        let todos = extract_todos(Path::new("file.py"), src);
+        assert_eq!(todos.len(), 0);
+    }
 }

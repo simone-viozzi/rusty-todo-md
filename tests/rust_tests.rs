@@ -5,6 +5,7 @@ mod rust_tests {
     use std::path::Path;
     use std::sync::Once;
     use todo_extractor::aggregator::extract_todos;
+    use todo_extractor::languages::parse_rust_comments;
 
     static INIT: Once = Once::new();
 
@@ -58,5 +59,24 @@ fn foo() {}
 
         // Block comment
         assert_eq!(todos[1].message, "block more lines");
+    }
+
+    #[test]
+    fn test_extract_rust_comments() {
+        let src = r#"
+// This is a normal comment
+// TODO: Implement feature Y
+"#;
+        let comments = parse_rust_comments(src);
+        assert_eq!(comments.len(), 2); // Should extract both lines
+    }
+
+    #[test]
+    fn test_ignore_non_comment_rust() {
+        let src = r#"
+let x = 10; // TODO: Not a comment
+"#;
+        let comments = parse_rust_comments(src);
+        assert_eq!(comments.len(), 1); // Only extracts the inline comment
     }
 }
