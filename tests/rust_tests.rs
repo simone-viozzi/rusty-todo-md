@@ -39,13 +39,13 @@ fn main() {
         init_logger();
         let src = r#"
 /// TODO: fix this doc
-/// second line
+///     second line
 fn foo() {}
 
 /*
    stuff
    TODO: block
-   more lines
+        more lines
 */
 "#;
         let todos = extract_todos(Path::new("lib.rs"), src);

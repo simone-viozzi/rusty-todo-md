@@ -26,7 +26,7 @@ pub struct TodoItem {
 /// - `file_content`: The source code text.
 /// - Returns: A `Vec<CommentLine>` containing extracted comments.
 pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
-    _parser_type: PhantomData<P>, // Explicitly indicate parser type
+    _parser_type: PhantomData<P>,
     rule: R,
     file_content: &str,
 ) -> Vec<CommentLine> {
@@ -35,7 +35,7 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
         file_content.len()
     );
 
-    let parse_result = P::parse(rule, file_content); // FIXED: Correct syntax for trait method
+    let parse_result = P::parse(rule, file_content);
     let mut comments = Vec::new();
 
     match parse_result {
@@ -46,10 +46,17 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
             );
 
             for pair in pairs {
-                debug!("Pair: {:?} => '{}'", pair.as_rule(), pair.as_str());
+                debug!(
+                    "Processing pair: {:?} => '{}'",
+                    pair.as_rule(),
+                    pair.as_str().replace('\n', "\\n") // Replace newlines for better readability
+                );
 
                 if let Some(comment) = handle_comment_pair(pair) {
+                    debug!("Extracted comment: {:?}", comment);
                     comments.push(comment);
+                } else {
+                    debug!("Skipped non-comment pair.");
                 }
             }
         }
@@ -62,18 +69,30 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
     comments
 }
 
+
 /// Handles a `Pair` from Pest and extracts a `CommentLine` if applicable.
 fn handle_comment_pair(pair: Pair<impl pest::RuleType>) -> Option<CommentLine> {
-    let span = pair.as_span(); // FIXED: Now `pair` is a single `Pair`, not `Pairs`
+    let span = pair.as_span();
     let line = span.start_pos().line_col().0;
     let text = span.as_str().trim();
 
-    debug!("Extracted comment at line {}: '{}'", line, text);
+    debug!(
+        "Extracted comment at line {}: '{}'",
+        line,
+        text.replace('\n', "\\n")
+    );
 
-    Some(CommentLine {
-        line_number: line,
-        text: text.to_string(),
-    })
+    // Instead of returning the entire block, split into individual lines
+    let mut comment_lines = Vec::new();
+    for (i, line_text) in text.lines().enumerate() {
+        let actual_line = line + i;
+        comment_lines.push(CommentLine {
+            line_number: actual_line,
+            text: line_text.trim().to_string(),
+        });
+    }
+
+    Some(comment_lines[0].clone()) // Return only the first line for now
 }
 
 /// Detects file extension and chooses the parser to gather raw comment lines,
@@ -115,7 +134,7 @@ pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
 }
 
 /// A single comment line with (line_number, entire_comment_text).
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CommentLine {
     pub line_number: usize,
     pub text: String,
@@ -140,17 +159,22 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
             idx += 1;
             while idx < lines.len() {
                 let cont_text = &lines[idx].text;
-                if cont_text.starts_with(' ') || cont_text.starts_with('\t') {
-                    debug!(
-                        "   continuing multiline TODO at line {} => '{}'",
-                        lines[idx].line_number, cont_text
-                    );
-                    collected.push(' ');
-                    collected.push_str(cont_text.trim());
-                    idx += 1;
-                } else {
+                
+                // Stop merging if next line is code, empty, or unrelated
+                if cont_text.trim().is_empty()
+                    || !cont_text.starts_with(' ') && !cont_text.starts_with('\t') {
                     break;
                 }
+
+                debug!(
+                    "   continuing multiline TODO at line {} => '{}'",
+                    lines[idx].line_number,
+                    cont_text
+                );
+
+                collected.push(' ');
+                collected.push_str(cont_text.trim());
+                idx += 1;
             }
 
             let final_msg = collected.trim_end().to_string();
