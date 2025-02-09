@@ -151,7 +151,10 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
     let mut result = Vec::new();
     let mut idx = 0;
 
-    debug!("Starting to collect TODOs from comment lines. Total lines: {}", lines.len());
+    debug!(
+        "Starting to collect TODOs from comment lines. Total lines: {}",
+        lines.len()
+    );
 
     while idx < lines.len() {
         let text = &lines[idx].text.trim();
@@ -166,21 +169,33 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
             idx += 1;
             while idx < lines.len() {
                 let next_text = &lines[idx].text.trim();
-                debug!("Checking next line {}: '{}'", lines[idx].line_number, next_text);
+                debug!(
+                    "Checking next line {}: '{}'",
+                    lines[idx].line_number, next_text
+                );
 
                 // Ensure we only merge if the next line is indented
                 if next_text.starts_with(" ") || next_text.starts_with("\t") {
                     collected.push(' ');
                     collected.push_str(next_text.trim());
-                    debug!("Merged line {} into TODO: '{}'", lines[idx].line_number, collected);
+                    debug!(
+                        "Merged line {} into TODO: '{}'",
+                        lines[idx].line_number, collected
+                    );
                     idx += 1;
                 } else {
-                    debug!("Line {} is not indented. Stopping merge.", lines[idx].line_number);
+                    debug!(
+                        "Line {} is not indented. Stopping merge.",
+                        lines[idx].line_number
+                    );
                     break;
                 }
             }
 
-            debug!("Added TODO item: line {}, message '{}'", line_num, collected);
+            debug!(
+                "Added TODO item: line {}, message '{}'",
+                line_num, collected
+            );
             result.push(TodoItem {
                 line_number: line_num,
                 message: collected,
@@ -191,6 +206,9 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
         }
     }
 
-    debug!("Finished collecting TODOs. Total TODO items: {}", result.len());
+    debug!(
+        "Finished collecting TODOs. Total TODO items: {}",
+        result.len()
+    );
     result
 }

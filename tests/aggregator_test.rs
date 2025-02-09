@@ -44,7 +44,10 @@ mod aggregator_tests {
 "#;
         let todos = extract_todos(Path::new("file.rs"), src);
         assert_eq!(todos.len(), 1);
-        assert_eq!(todos[0].message, "Fix bug Improve error handling Add logging");
+        assert_eq!(
+            todos[0].message,
+            "Fix bug Improve error handling Add logging"
+        );
     }
 
     #[test]
@@ -85,7 +88,7 @@ mod aggregator_tests {
         init_logger();
         let src = "// TODO: Improve logging";
         let todos = extract_todos(Path::new("file.rs"), src);
-        
+
         let output = format!("{} - {}", todos[0].line_number, todos[0].message);
         assert_eq!(output, "1 - Improve logging");
     }
