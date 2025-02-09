@@ -69,7 +69,6 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
     comments
 }
 
-
 /// Handles a `Pair` from Pest and extracts a `CommentLine` if applicable.
 fn handle_comment_pair(pair: Pair<impl pest::RuleType>) -> Option<CommentLine> {
     let span = pair.as_span();
@@ -101,7 +100,6 @@ fn handle_comment_pair(pair: Pair<impl pest::RuleType>) -> Option<CommentLine> {
         Some(comment_lines[0].clone()) // Return only the first TODO line
     }
 }
-
 
 /// Detects file extension and chooses the parser to gather raw comment lines,
 /// then extracts multi-line TODOs from those comments.
@@ -167,13 +165,12 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
             idx += 1;
             while idx < lines.len() {
                 let cont_text = &lines[idx].text;
-                
+
                 // Only merge if the next line is **indented**
                 if cont_text.starts_with(' ') || cont_text.starts_with('\t') {
                     debug!(
                         "   continuing multiline TODO at line {} => '{}'",
-                        lines[idx].line_number,
-                        cont_text
+                        lines[idx].line_number, cont_text
                     );
 
                     collected.push(' ');
