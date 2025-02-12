@@ -1,16 +1,17 @@
 #[cfg(test)]
 mod aggregator_tests {
-    use env_logger;
     use log::LevelFilter;
     use std::path::Path;
     use std::sync::Once;
     use todo_extractor::extract_todos;
+    use todo_extractor::logger;
 
     static INIT: Once = Once::new();
 
     fn init_logger() {
         INIT.call_once(|| {
             env_logger::Builder::from_default_env()
+                .format(logger::format_logger)
                 .filter_level(LevelFilter::Debug)
                 .is_test(true)
                 .try_init()

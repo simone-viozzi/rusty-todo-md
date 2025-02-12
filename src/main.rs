@@ -1,11 +1,12 @@
-use log::{info, warn, LevelFilter};
+use log::{info, warn};
 use std::env;
 use std::path::Path;
+mod logger;
 
 fn main() {
-    // Initialize the logger based on RUST_LOG or default to Debug.
+    // Initialize the logger
     env_logger::Builder::from_default_env()
-        .filter_level(LevelFilter::Debug)
+        .format(logger::format_logger)
         .init();
 
     let args: Vec<String> = env::args().collect();
