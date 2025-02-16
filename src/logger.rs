@@ -1,37 +1,44 @@
 use env_logger::fmt::Formatter;
+use env_logger::fmt::style::{AnsiColor, Style, Effects};
 use log::Record;
 use std::io::Write;
 
-/// Returns the log level as a fixed-width string, optionally wrapped in ANSI color codes.
-fn colored_level(level: log::Level, color_enabled: bool) -> String {
-    // Use a fixed-width string so that levels align.
+use log::Level;
+
+fn colored_level(level: Level, color_enabled: bool) -> String {
+    // Use fixed-width strings for alignment.
     let level_str = match level {
-        log::Level::Error => "ERROR",
-        log::Level::Warn  => "WARN ",
-        log::Level::Info  => "INFO ",
-        log::Level::Debug => "DEBUG",
-        log::Level::Trace => "TRACE",
+        Level::Error => "ERROR",
+        Level::Warn  => "WARN ",
+        Level::Info  => "INFO ",
+        Level::Debug => "DEBUG",
+        Level::Trace => "TRACE",
     };
 
     if color_enabled {
-        match level {
-            log::Level::Error => format!("\x1b[31m{}\x1b[0m", level_str), // red
-            log::Level::Warn  => format!("\x1b[33m{}\x1b[0m", level_str), // yellow
-            log::Level::Info  => format!("\x1b[32m{}\x1b[0m", level_str), // green
-            log::Level::Debug => format!("\x1b[34m{}\x1b[0m", level_str), // blue
-            log::Level::Trace => format!("\x1b[35m{}\x1b[0m", level_str), // magenta
-        }
+        // Build the style using the re‑exported anstyle types.
+        let style: Style = match level {
+            Level::Error => AnsiColor::Red.on_default().effects(Effects::BOLD),
+            Level::Warn  => AnsiColor::Yellow.on_default().effects(Effects::BOLD),
+            Level::Info  => AnsiColor::Green.on_default(),
+            Level::Debug => AnsiColor::Blue.on_default(),
+            Level::Trace => AnsiColor::Magenta.on_default(),
+        };
+
+        // Format using the style's Display impl:
+        // - `{}` outputs the escape code to set the style,
+        // - `{:#}` outputs the reset code.
+        format!("{}{}{:#}", style, level_str, style)
     } else {
         level_str.to_string()
     }
 }
 
+
 /// Custom formatter that produces output similar to the default env_logger format,
-/// but appends a clickable file:line (plain text) and colors the level.
+/// but appends a clickable file:line (plain text) and styles the level.
 pub fn format_logger(buf: &mut Formatter, record: &Record) -> std::io::Result<()> {
     // Determine if color is enabled.
-    // Here we check the MY_LOG_STYLE environment variable: if it is "never", disable color.
-    // (A more robust solution might also check if stdout is a TTY.)
     let color_enabled = std::env::var("MY_LOG_STYLE")
         .map(|s| s != "never")
         .unwrap_or(true);
@@ -52,7 +59,7 @@ pub fn format_logger(buf: &mut Formatter, record: &Record) -> std::io::Result<()
     };
 
     // Example output:
-    // 2025-02-16T17:52:07Z DEBUG [my_crate::module] This is a log message (src/file.rs:42)
+    // 2025-02-16T17:52:07Z DEBUG [my_crate::module - src/file.rs:42] This is a log message
     writeln!(
         buf,
         "{} {} [{} - {}] {}",
