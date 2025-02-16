@@ -97,6 +97,89 @@ fn extract_comment_from_pair(
     }
 }
 
+/// Parses a comment line to extract the TODO marker, the base whitespace, and the initial message.
+/// Returns a tuple (marker, base_ws, initial_message) if the line contains a valid TODO.
+fn parse_todo_line(line: &CommentLine) -> Option<(String, String, String)> {
+    // Regex: captures non-alphabetic prefix as marker, the following whitespace, then "TODO:" and the text.
+    let re = Regex::new(r"(?s)^(?P<marker>[^a-zA-Z]*)(?P<ws>\s*)TODO:\s*(?P<text>.*)").unwrap();
+    if let Some(caps) = re.captures(&line.text) {
+        let marker = caps
+            .name("marker")
+            .map(|m| m.as_str())
+            .unwrap_or("")
+            .to_string();
+        let base_ws = caps
+            .name("ws")
+            .map(|m| m.as_str())
+            .unwrap_or("")
+            .to_string();
+        let text = caps
+            .name("text")
+            .map(|m| m.as_str().trim())
+            .unwrap_or("")
+            .to_string();
+        Some((marker, base_ws, text))
+    } else {
+        None
+    }
+}
+
+/// Determines whether the provided line should be merged into the TODO message.
+///
+/// The line is merged if:
+/// - It starts with the same marker as the initial TODO line, and
+/// - Its leading whitespace (after the marker) is longer than the baseline whitespace,
+/// - And there is non-empty text following the marker.
+fn should_merge_line(line: &CommentLine, marker: &str, base_ws: &str) -> bool {
+    let trimmed = line.text.trim_start();
+    if trimmed.starts_with(marker) {
+        let after_marker = trimmed.trim_start_matches(marker);
+        let continuation_ws: String = after_marker
+            .chars()
+            .take_while(|c| c.is_whitespace())
+            .collect();
+        return continuation_ws.len() > base_ws.len() && !after_marker.trim().is_empty();
+    }
+    false
+}
+
+/// Given a block of contiguous comment lines, extract the TODO item (if any) by merging
+/// the initial TODO line with subsequent indented lines.
+fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
+    // Find the first line in the block that contains "TODO:" and parse it.
+    let (todo_index, (marker, base_ws, mut message)) = block
+        .iter()
+        .enumerate()
+        .find_map(|(i, line)| parse_todo_line(line).map(|parsed| (i, parsed)))?;
+
+    // Process subsequent lines to see if they should be merged.
+    for line in block.iter().skip(todo_index + 1) {
+        if should_merge_line(line, &marker, &base_ws) {
+            let trimmed = line.text.trim_start();
+            let after_marker = trimmed.trim_start_matches(&marker);
+            let without_marker = after_marker.trim_start();
+            if !without_marker.is_empty() {
+                if !message.is_empty() {
+                    message.push(' ');
+                }
+                message.push_str(without_marker);
+            }
+        } else {
+            break;
+        }
+    }
+
+    // If the marker indicates a block comment (e.g. starts with "/*"), remove a trailing "*/"
+    if marker.trim_start().starts_with("/*") {
+        message = message.trim_end_matches("*/").trim().to_string();
+    }
+
+    Some(TodoItem {
+        line_number: block[todo_index].line_number,
+        message,
+    })
+}
+
 /// Detects file extension and chooses the parser to gather raw comment lines,
 /// then extracts multi-line TODOs from those comments.
 pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
@@ -173,96 +256,4 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
         }
     }
     result
-}
-
-fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
-    debug!(
-        "Starting to extract TODO from block with {} lines",
-        block.len()
-    );
-
-    // Use DOTALL mode so that . matches newlines.
-    let re = Regex::new(r"(?s)^(?P<marker>[^a-zA-Z]*)(?P<ws>\s*)TODO:\s*(?P<text>.*)").unwrap();
-
-    // Find the first line in the block that contains "TODO:".
-    let mut todo_index = None;
-    for (i, line) in block.iter().enumerate() {
-        if line.text.contains("TODO:") {
-            todo_index = Some(i);
-            debug!("Found TODO at line {}: '{}'", line.line_number, line.text);
-            break;
-        }
-    }
-
-    if let Some(i) = todo_index {
-        let mut message = String::new();
-        let mut marker = "";
-        let mut base_ws = "";
-        if let Some(caps) = re.captures(&block[i].text) {
-            marker = caps.name("marker").map(|m| m.as_str()).unwrap_or("");
-            base_ws = caps.name("ws").map(|m| m.as_str()).unwrap_or("");
-            // Normalize whitespace by splitting and rejoining with a single space.
-            message = caps
-                .name("text")
-                .map(|m| {
-                    m.as_str()
-                        .trim()
-                        .split_whitespace()
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                })
-                .unwrap_or_default();
-            debug!("Captured TODO message: '{}'", message);
-            debug!("Captured marker: '{}', base_ws: '{}'", marker, base_ws);
-        }
-
-        // Append subsequent lines if they are indented beyond the baseline.
-        for line in block.iter().skip(i + 1) {
-            let trimmed = line.text.trim_start();
-            if marker.len() > 0 && trimmed.starts_with(marker) {
-                let after_marker = trimmed.trim_start_matches(marker);
-                // Get the leading whitespace of the remainder.
-                let continuation_ws: String = after_marker
-                    .chars()
-                    .take_while(|c| c.is_whitespace())
-                    .collect();
-                if continuation_ws.len() > base_ws.len() {
-                    let without_marker = after_marker.trim_start();
-                    if !without_marker.is_empty() {
-                        if !message.is_empty() {
-                            message.push(' ');
-                        }
-                        message.push_str(without_marker);
-                        debug!("Appended line (marker removed): '{}'", without_marker);
-                    }
-                } else {
-                    break;
-                }
-            } else if trimmed.starts_with(" ") || trimmed.starts_with("\t") {
-                // Only merge if the line is indented beyond the baseline.
-                // (Here we choose not to merge lines without the comment marker.)
-                break;
-            } else {
-                break;
-            }
-        }
-
-        // If it's a block comment (marker starts with '/*'), remove the trailing "*/"
-        if marker.trim_start().starts_with("/*") {
-            message = message.trim_end_matches("*/").trim().to_string();
-        }
-
-        debug!(
-            "Final TODO item: line_number = {}, message = '{}'",
-            block[i].line_number, message
-        );
-
-        return Some(TodoItem {
-            line_number: block[i].line_number,
-            message,
-        });
-    }
-
-    debug!("No TODO found in the block");
-    None
 }
