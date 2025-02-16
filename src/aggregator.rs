@@ -84,8 +84,8 @@ fn extract_comment_from_pair(pair: Pair<impl pest::RuleType>) -> Option<CommentL
         text.replace('\n', "\\n")
     );
 
-    // ✅ If the comment starts with "TODO:", store it
-    let re = Regex::new(r"^\s*[^a-zA-Z]?\s*TODO:").unwrap();
+    // Updated regex: allow zero or more non-letter characters before "TODO:"
+    let re = Regex::new(r"^\s*[^a-zA-Z]*\s*TODO:").unwrap();
     if re.is_match(text) {
         return Some(CommentLine {
             line_number: base_line,
@@ -124,8 +124,8 @@ pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
     };
 
     debug!(
-        "extract_todos: found {} comment lines from parser",
-        comment_lines.len()
+        "extract_todos: found {} comment lines from parser: {:?}",
+        comment_lines.len(), comment_lines
     );
 
     // Next, find any TODOs among these comment lines
@@ -157,8 +157,11 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
 
         debug!("Processing line {}: '{}'", line_num, text);
 
-        if text.starts_with("TODO:") {
-            let mut collected = text[5..].trim().to_string();
+        if text.contains("TODO:") {
+            let re = Regex::new(r"^\s*[^a-zA-Z]*\s*TODO:\s*(.*)").unwrap();
+            let mut collected = re
+                .captures(text)
+                .map_or(String::new(), |caps| caps[1].trim().to_string());
             debug!("Found TODO at line {}: '{}'", line_num, collected);
 
             idx += 1;
