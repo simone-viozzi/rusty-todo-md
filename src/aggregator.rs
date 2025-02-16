@@ -48,7 +48,7 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
             );
 
             for pair in pairs {
-                // 🔥 NEW: Iterate over children of the rust_file or python_file
+                // Iterate over children of the rust_file or python_file.
                 for inner_pair in pair.into_inner() {
                     debug!(
                         "Processing child pair: {:?} => '{}'",
@@ -97,52 +97,6 @@ fn extract_comment_from_pair(
     }
 }
 
-/// Parses a comment line to extract the TODO marker, the base whitespace, and the initial message.
-/// Returns a tuple (marker, base_ws, initial_message) if the line contains a valid TODO.
-fn parse_todo_line(line: &CommentLine) -> Option<(String, String, String)> {
-    // Regex: captures non-alphabetic prefix as marker, the following whitespace, then "TODO:" and the text.
-    let re = Regex::new(r"(?s)^(?P<marker>[^a-zA-Z]*)(?P<ws>\s*)TODO:\s*(?P<text>.*)").unwrap();
-    if let Some(caps) = re.captures(&line.text) {
-        let marker = caps
-            .name("marker")
-            .map(|m| m.as_str())
-            .unwrap_or("")
-            .to_string();
-        let base_ws = caps
-            .name("ws")
-            .map(|m| m.as_str())
-            .unwrap_or("")
-            .to_string();
-        let text = caps
-            .name("text")
-            .map(|m| m.as_str().trim())
-            .unwrap_or("")
-            .to_string();
-        Some((marker, base_ws, text))
-    } else {
-        None
-    }
-}
-
-/// Determines whether the provided line should be merged into the TODO message.
-///
-/// The line is merged if:
-/// - It starts with the same marker as the initial TODO line, and
-/// - Its leading whitespace (after the marker) is longer than the baseline whitespace,
-/// - And there is non-empty text following the marker.
-fn should_merge_line(line: &CommentLine, marker: &str, base_ws: &str) -> bool {
-    let trimmed = line.text.trim_start();
-    if trimmed.starts_with(marker) {
-        let after_marker = trimmed.trim_start_matches(marker);
-        let continuation_ws: String = after_marker
-            .chars()
-            .take_while(|c| c.is_whitespace())
-            .collect();
-        return continuation_ws.len() > base_ws.len() && !after_marker.trim().is_empty();
-    }
-    false
-}
-
 /// Given a block of contiguous comment lines, extract the TODO item (if any) by merging
 /// the initial TODO line with subsequent indented lines.
 fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
@@ -150,9 +104,10 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
     let re = Regex::new(r"(?s)^(?P<marker>[^a-zA-Z]*)(?P<ws>\s*)TODO:\s*(?P<text>.*)").unwrap();
 
     // Find the first line in the block that contains "TODO:".
-    let (todo_index, caps) = block.iter().enumerate().find_map(|(i, line)| {
-        re.captures(&line.text).map(|caps| (i, caps))
-    })?;
+    let (todo_index, caps) = block
+        .iter()
+        .enumerate()
+        .find_map(|(i, line)| re.captures(&line.text).map(|caps| (i, caps)))?;
 
     let marker = caps.name("marker").map(|m| m.as_str()).unwrap_or("");
     let base_ws = caps.name("ws").map(|m| m.as_str()).unwrap_or("");
@@ -167,7 +122,10 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
         if trimmed.starts_with(marker) {
             let after_marker = trimmed.trim_start_matches(marker);
             // Check if the continuation has more indentation than the baseline.
-            let continuation_ws: String = after_marker.chars().take_while(|c| c.is_whitespace()).collect();
+            let continuation_ws: String = after_marker
+                .chars()
+                .take_while(|c| c.is_whitespace())
+                .collect();
             if continuation_ws.len() > base_ws.len() {
                 let without_marker = after_marker.trim_start();
                 if !without_marker.is_empty() {
@@ -200,22 +158,17 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
     })
 }
 
-
 /// Normalizes a text fragment by:
 /// - Splitting by whitespace and rejoining with a single space,
 /// - If the marker indicates a block comment (i.e. contains "/*"),
 ///   removes a trailing "*/" from the text.
 fn normalize_text(text: &str, marker: &str) -> String {
-    let mut normalized = text
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+    let mut normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if marker.contains("/*") && normalized.ends_with("*/") {
         normalized = normalized.trim_end_matches("*/").trim().to_string();
     }
     normalized
 }
-
 
 fn split_multiline_comment_line(line: &CommentLine) -> Vec<CommentLine> {
     let mut result = Vec::new();
@@ -231,7 +184,6 @@ fn split_multiline_comment_line(line: &CommentLine) -> Vec<CommentLine> {
     result
 }
 
-
 fn flatten_comment_lines(lines: &[CommentLine]) -> Vec<CommentLine> {
     let mut flattened = Vec::new();
     for line in lines {
@@ -244,8 +196,6 @@ fn flatten_comment_lines(lines: &[CommentLine]) -> Vec<CommentLine> {
     flattened
 }
 
-
-
 /// Detects file extension and chooses the parser to gather raw comment lines,
 /// then extracts multi-line TODOs from those comments.
 pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
@@ -257,7 +207,7 @@ pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
 
     debug!("extract_todos: extension = '{}'", extension);
 
-    // Call the relevant language parser to extract comment lines
+    // Call the relevant language parser to extract comment lines.
     let comment_lines = match extension.as_str() {
         "py" => PythonParser::parse_comments(file_content),
         "rs" => RustParser::parse_comments(file_content),
@@ -279,7 +229,7 @@ pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
         comment_lines
     );
 
-    // Next, find any TODOs among these comment lines
+    // Next, find any TODOs among these comment lines.
     let todos = collect_todos_from_comment_lines(&comment_lines);
     debug!("extract_todos: found {} TODO items total", todos.len());
     todos
@@ -298,7 +248,7 @@ pub struct CommentLine {
 pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> {
     // Flatten the comments so that multi-line entries become separate lines.
     let flattened_lines = flatten_comment_lines(lines);
-    
+
     let mut result = Vec::new();
     let mut block: Vec<CommentLine> = Vec::new();
 
