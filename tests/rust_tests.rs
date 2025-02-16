@@ -1,10 +1,11 @@
 #[cfg(test)]
 mod rust_tests {
     use log::LevelFilter;
+    use todo_extractor::languages::common::CommentParser;
     use std::path::Path;
     use std::sync::Once;
     use todo_extractor::aggregator::extract_todos;
-    use todo_extractor::languages::parse_rust_comments;
+    use todo_extractor::languages::rust::RustParser;
     use todo_extractor::logger;
 
     static INIT: Once = Once::new();
@@ -68,7 +69,7 @@ fn foo() {}
 // This is a normal comment
 // TODO: Implement feature Y
 "#;
-        let comments = parse_rust_comments(src);
+        let comments = RustParser::parse_comments(src);
         assert_eq!(comments.len(), 2); // Should extract both lines
     }
 
@@ -77,7 +78,7 @@ fn foo() {}
         let src = r#"
 let x = 10; // TODO: Not a comment
 "#;
-        let comments = parse_rust_comments(src);
+        let comments = RustParser::parse_comments(src);
         assert_eq!(comments.len(), 1); // Only extracts the inline comment
     }
 }

@@ -3,14 +3,15 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use crate::languages::{
-    python::parse_python_comments,
-    rust::parse_rust_comments,
-    //go::parse_go_comments,
-    //js::parse_js_comments,
-    //ts::parse_ts_comments,
+    common::CommentParser,
+    python::PythonParser,
+    // go::GoParser,
+    // js::JsParser,
+    // ts::TsParser,
+    rust::RustParser,
 };
 use log::{error, info};
-use pest::{iterators::Pair, Parser};
+use pest::Parser;
 use regex::Regex;
 
 /// Represents a single found TODO item.
@@ -73,7 +74,9 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
     comments
 }
 
-fn extract_comment_from_pair(pair: pest::iterators::Pair<impl pest::RuleType>) -> Option<CommentLine> {
+fn extract_comment_from_pair(
+    pair: pest::iterators::Pair<impl pest::RuleType>,
+) -> Option<CommentLine> {
     let span = pair.as_span();
     let base_line = span.start_pos().line_col().0; // Get line number
     let text = span.as_str().trim(); // Extract the comment text
@@ -94,9 +97,6 @@ fn extract_comment_from_pair(pair: pest::iterators::Pair<impl pest::RuleType>) -
     }
 }
 
-
-
-
 /// Detects file extension and chooses the parser to gather raw comment lines,
 /// then extracts multi-line TODOs from those comments.
 pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
@@ -110,11 +110,11 @@ pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
 
     // Call the relevant language parser to extract comment lines
     let comment_lines = match extension.as_str() {
-        "py" => parse_python_comments(file_content),
-        "rs" => parse_rust_comments(file_content),
-        //"go" => parse_go_comments(file_content),
-        //"js" => parse_js_comments(file_content),
-        //"ts" => parse_ts_comments(file_content),
+        "py" => PythonParser::parse_comments(file_content),
+        "rs" => RustParser::parse_comments(file_content),
+        // "go" => GoParser::parse_comments(file_content),
+        // "js" => JsParser::parse_comments(file_content),
+        // "ts" => TsParser::parse_comments(file_content),
         _ => {
             debug!(
                 "No recognized extension for file {:?}; returning empty list.",
@@ -126,7 +126,8 @@ pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
 
     debug!(
         "extract_todos: found {} comment lines from parser: {:?}",
-        comment_lines.len(), comment_lines
+        comment_lines.len(),
+        comment_lines
     );
 
     // Next, find any TODOs among these comment lines
@@ -175,7 +176,10 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
 }
 
 fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
-    debug!("Starting to extract TODO from block with {} lines", block.len());
+    debug!(
+        "Starting to extract TODO from block with {} lines",
+        block.len()
+    );
 
     // Use DOTALL mode so that . matches newlines.
     let re = Regex::new(r"(?s)^(?P<marker>[^a-zA-Z]*)(?P<ws>\s*)TODO:\s*(?P<text>.*)").unwrap();
@@ -198,8 +202,15 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
             marker = caps.name("marker").map(|m| m.as_str()).unwrap_or("");
             base_ws = caps.name("ws").map(|m| m.as_str()).unwrap_or("");
             // Normalize whitespace by splitting and rejoining with a single space.
-            message = caps.name("text")
-                .map(|m| m.as_str().trim().split_whitespace().collect::<Vec<_>>().join(" "))
+            message = caps
+                .name("text")
+                .map(|m| {
+                    m.as_str()
+                        .trim()
+                        .split_whitespace()
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
                 .unwrap_or_default();
             debug!("Captured TODO message: '{}'", message);
             debug!("Captured marker: '{}', base_ws: '{}'", marker, base_ws);
@@ -211,7 +222,10 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
             if marker.len() > 0 && trimmed.starts_with(marker) {
                 let after_marker = trimmed.trim_start_matches(marker);
                 // Get the leading whitespace of the remainder.
-                let continuation_ws: String = after_marker.chars().take_while(|c| c.is_whitespace()).collect();
+                let continuation_ws: String = after_marker
+                    .chars()
+                    .take_while(|c| c.is_whitespace())
+                    .collect();
                 if continuation_ws.len() > base_ws.len() {
                     let without_marker = after_marker.trim_start();
                     if !without_marker.is_empty() {
