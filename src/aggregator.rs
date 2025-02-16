@@ -76,25 +76,20 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
 fn extract_comment_from_pair(pair: Pair<impl pest::RuleType>) -> Option<CommentLine> {
     let span = pair.as_span();
     let base_line = span.start_pos().line_col().0; // Get line number
-    let text = span.as_str().trim(); // Extract actual comment text
+    let text = span.as_str().trim(); // Extract the comment text
 
-    debug!(
-        "Extracted comment at line {}: '{}'",
-        base_line,
-        text.replace('\n', "\\n")
-    );
-
-    // Updated regex: allow zero or more non-letter characters before "TODO:"
-    let re = Regex::new(r"^\s*[^a-zA-Z]*\s*TODO:").unwrap();
-    if re.is_match(text) {
-        return Some(CommentLine {
+    // Instead of filtering on "TODO:" now, return a CommentLine if the rule name contains "comment".
+    let rule_str = format!("{:?}", pair.as_rule());
+    if rule_str.to_lowercase().contains("comment") && !text.is_empty() {
+        Some(CommentLine {
             line_number: base_line,
             text: text.to_string(),
-        });
+        })
+    } else {
+        None
     }
-
-    None
 }
+
 
 /// Detects file extension and chooses the parser to gather raw comment lines,
 /// then extracts multi-line TODOs from those comments.
@@ -174,42 +169,74 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
 }
 
 fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
-    // Find the index of the first line in the block that contains "TODO:".
+    debug!("Starting to extract TODO from block with {} lines", block.len());
+
+    // Use a regex that captures both the comment marker and the text after "TODO:"
+    // The first capture group ([^a-zA-Z]*) will capture the comment marker(s)
+    // before the "TODO:".
+    let re = Regex::new(r"^\s*([^a-zA-Z]*)\s*TODO:\s*(.*)").unwrap();
+
+    // Find the first line in the block that contains "TODO:".
     let mut todo_index = None;
     for (i, line) in block.iter().enumerate() {
         if line.text.contains("TODO:") {
             todo_index = Some(i);
+            debug!("Found TODO at line {}: '{}'", line.line_number, line.text);
             break;
         }
     }
+
     if let Some(i) = todo_index {
-        // Use a regex to capture the text after "TODO:" on that line.
-        let re = Regex::new(r"^\s*[^a-zA-Z]*\s*TODO:\s*(.*)").unwrap();
         let mut message = String::new();
+        let mut marker = "";
         if let Some(caps) = re.captures(&block[i].text) {
+            // Capture the comment marker (could be "//", "#", "/*", etc.)
+            marker = caps.get(1).map(|m| m.as_str()).unwrap_or("");
             message = caps
-                .get(1)
+                .get(2)
                 .map(|m| m.as_str().trim().to_string())
                 .unwrap_or_default();
+            debug!("Captured TODO message: '{}'", message);
+            debug!("Captured marker: '{}'", marker);
         }
+
         // Append subsequent lines if they are indented.
         for line in block.iter().skip(i + 1) {
-            let trimmed = line.text.trim();
-            if trimmed.starts_with(" ") || trimmed.starts_with("\t") {
+            let trimmed = line.text.trim_start();
+            // If the line begins with the same marker, remove it.
+            if marker.len() > 0 && trimmed.starts_with(marker) {
+                let without_marker = trimmed.trim_start_matches(marker).trim_start();
+                if !without_marker.is_empty() {
+                    if !message.is_empty() {
+                        message.push(' ');
+                    }
+                    message.push_str(without_marker);
+                    debug!("Appended line (marker removed): '{}'", without_marker);
+                }
+            } else if trimmed.starts_with(" ") || trimmed.starts_with("\t") {
+                // Or if the line is simply indented.
                 if !message.is_empty() {
                     message.push(' ');
                 }
                 message.push_str(trimmed);
+                debug!("Appended indented line: '{}'", trimmed);
             } else {
                 break;
             }
         }
+
+        debug!(
+            "Final TODO item: line_number = {}, message = '{}'",
+            block[i].line_number, message
+        );
+
         return Some(TodoItem {
             line_number: block[i].line_number,
             message,
         });
     }
+
+    debug!("No TODO found in the block");
     None
 }
-
 
