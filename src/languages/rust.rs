@@ -1,4 +1,7 @@
+// src/languages/rust.rs
+
 use crate::aggregator::{parse_comments, CommentLine};
+use crate::languages::common::CommentParser; // Import the trait
 use pest_derive::Parser;
 use std::marker::PhantomData;
 
@@ -6,6 +9,8 @@ use std::marker::PhantomData;
 #[grammar = "languages/rust.pest"]
 pub struct RustParser;
 
-pub fn parse_rust_comments(file_content: &str) -> Vec<CommentLine> {
-    parse_comments::<RustParser, Rule>(PhantomData, Rule::rust_file, file_content)
+impl CommentParser for RustParser {
+    fn parse_comments(file_content: &str) -> Vec<CommentLine> {
+        parse_comments::<Self, Rule>(PhantomData, Rule::rust_file, file_content)
+    }
 }
