@@ -146,32 +146,52 @@ fn should_merge_line(line: &CommentLine, marker: &str, base_ws: &str) -> bool {
 /// Given a block of contiguous comment lines, extract the TODO item (if any) by merging
 /// the initial TODO line with subsequent indented lines.
 fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
-    // Find the first line in the block that contains "TODO:" and parse it.
-    let (todo_index, (marker, base_ws, mut message)) = block
-        .iter()
-        .enumerate()
-        .find_map(|(i, line)| parse_todo_line(line).map(|parsed| (i, parsed)))?;
+    // Use a regex to match a TODO line.
+    let re = Regex::new(r"(?s)^(?P<marker>[^a-zA-Z]*)(?P<ws>\s*)TODO:\s*(?P<text>.*)").unwrap();
 
-    // Process subsequent lines to see if they should be merged.
+    // Find the first line in the block that contains "TODO:".
+    let (todo_index, caps) = block.iter().enumerate().find_map(|(i, line)| {
+        re.captures(&line.text).map(|caps| (i, caps))
+    })?;
+
+    let marker = caps.name("marker").map(|m| m.as_str()).unwrap_or("");
+    let base_ws = caps.name("ws").map(|m| m.as_str()).unwrap_or("");
+    let initial_text = caps.name("text").map(|m| m.as_str()).unwrap_or("");
+
+    // Normalize the initial TODO text.
+    let mut message = normalize_text(initial_text, marker);
+
+    // Append subsequent lines if they should be merged.
     for line in block.iter().skip(todo_index + 1) {
-        if should_merge_line(line, &marker, &base_ws) {
-            let trimmed = line.text.trim_start();
-            let after_marker = trimmed.trim_start_matches(&marker);
-            let without_marker = after_marker.trim_start();
-            if !without_marker.is_empty() {
+        let trimmed = line.text.trim_start();
+        if trimmed.starts_with(marker) {
+            let after_marker = trimmed.trim_start_matches(marker);
+            // Check if the continuation has more indentation than the baseline.
+            let continuation_ws: String = after_marker.chars().take_while(|c| c.is_whitespace()).collect();
+            if continuation_ws.len() > base_ws.len() {
+                let without_marker = after_marker.trim_start();
+                if !without_marker.is_empty() {
+                    let part = normalize_text(without_marker, marker);
+                    if !message.is_empty() {
+                        message.push(' ');
+                    }
+                    message.push_str(&part);
+                }
+            } else {
+                break;
+            }
+        } else if trimmed.starts_with(' ') || trimmed.starts_with('\t') {
+            // Merge only if the line is indented.
+            let part = normalize_text(trimmed, marker);
+            if !part.is_empty() {
                 if !message.is_empty() {
                     message.push(' ');
                 }
-                message.push_str(without_marker);
+                message.push_str(&part);
             }
         } else {
             break;
         }
-    }
-
-    // If the marker indicates a block comment (e.g. starts with "/*"), remove a trailing "*/"
-    if marker.trim_start().starts_with("/*") {
-        message = message.trim_end_matches("*/").trim().to_string();
     }
 
     Some(TodoItem {
@@ -179,6 +199,52 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
         message,
     })
 }
+
+
+/// Normalizes a text fragment by:
+/// - Splitting by whitespace and rejoining with a single space,
+/// - If the marker indicates a block comment (i.e. contains "/*"),
+///   removes a trailing "*/" from the text.
+fn normalize_text(text: &str, marker: &str) -> String {
+    let mut normalized = text
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if marker.contains("/*") && normalized.ends_with("*/") {
+        normalized = normalized.trim_end_matches("*/").trim().to_string();
+    }
+    normalized
+}
+
+
+fn split_multiline_comment_line(line: &CommentLine) -> Vec<CommentLine> {
+    let mut result = Vec::new();
+    // Split the text by newline.
+    for (i, part) in line.text.split('\n').enumerate() {
+        // Assume that the first part retains the original line number,
+        // and subsequent parts increment the line number.
+        result.push(CommentLine {
+            line_number: line.line_number + i,
+            text: part.to_string(),
+        });
+    }
+    result
+}
+
+
+fn flatten_comment_lines(lines: &[CommentLine]) -> Vec<CommentLine> {
+    let mut flattened = Vec::new();
+    for line in lines {
+        if line.text.contains('\n') {
+            flattened.extend(split_multiline_comment_line(line));
+        } else {
+            flattened.push(line.clone());
+        }
+    }
+    flattened
+}
+
+
 
 /// Detects file extension and chooses the parser to gather raw comment lines,
 /// then extracts multi-line TODOs from those comments.
@@ -230,18 +296,20 @@ pub struct CommentLine {
 /// that contains a TODO marker. In a block, the TODO’s line number is taken from
 /// the first comment line, and only the TODO text from the first occurrence is used.
 pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> {
+    // Flatten the comments so that multi-line entries become separate lines.
+    let flattened_lines = flatten_comment_lines(lines);
+    
     let mut result = Vec::new();
     let mut block: Vec<CommentLine> = Vec::new();
 
-    for line in lines {
+    for line in &flattened_lines {
         if block.is_empty() {
             block.push(line.clone());
         } else {
-            // Check if the current line is contiguous with the last one (no blank line in between)
+            // Check if the current line is contiguous with the last one.
             if line.line_number == block.last().unwrap().line_number + 1 {
                 block.push(line.clone());
             } else {
-                // Process the block
                 if let Some(todo) = extract_todo_from_block(&block) {
                     result.push(todo);
                 }
