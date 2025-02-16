@@ -174,23 +174,42 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
 }
 
 fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
-    // Find the first comment line in the block that contains "TODO:".
-    for line in block {
+    // Find the index of the first line in the block that contains "TODO:".
+    let mut todo_index = None;
+    for (i, line) in block.iter().enumerate() {
         if line.text.contains("TODO:") {
-            // Use a regex to capture the text after "TODO:".
-            let re = Regex::new(r"^\s*[^a-zA-Z]*\s*TODO:\s*(.*)").unwrap();
-            if let Some(caps) = re.captures(&line.text) {
-                let message = caps.get(1)
-                    .map(|m| m.as_str().trim().to_string())
-                    .unwrap_or_default();
-                // Use the block's first line number.
-                return Some(TodoItem {
-                    line_number: block.first().unwrap().line_number,
-                    message,
-                });
+            todo_index = Some(i);
+            break;
+        }
+    }
+    if let Some(i) = todo_index {
+        // Use a regex to capture the text after "TODO:" on that line.
+        let re = Regex::new(r"^\s*[^a-zA-Z]*\s*TODO:\s*(.*)").unwrap();
+        let mut message = String::new();
+        if let Some(caps) = re.captures(&block[i].text) {
+            message = caps
+                .get(1)
+                .map(|m| m.as_str().trim().to_string())
+                .unwrap_or_default();
+        }
+        // Append subsequent lines if they are indented.
+        for line in block.iter().skip(i + 1) {
+            let trimmed = line.text.trim();
+            if trimmed.starts_with(" ") || trimmed.starts_with("\t") {
+                if !message.is_empty() {
+                    message.push(' ');
+                }
+                message.push_str(trimmed);
+            } else {
+                break;
             }
         }
+        return Some(TodoItem {
+            line_number: block[i].line_number,
+            message,
+        });
     }
     None
 }
+
 
