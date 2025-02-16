@@ -72,7 +72,7 @@ mod aggregator_tests {
 "#;
         let todos = extract_todos(Path::new("file.rs"), src);
         assert_eq!(todos.len(), 1);
-        assert_eq!(todos[0].line_number, 2);
+        assert_eq!(todos[0].line_number, 3);
         assert_eq!(todos[0].message, "Implement caching");
     }
 

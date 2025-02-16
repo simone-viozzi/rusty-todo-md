@@ -141,72 +141,56 @@ pub struct CommentLine {
     pub text: String,
 }
 
-/// Merge multi-line TODO lines and produce `TodoItem` for each distinct `TODO:`.
+/// Merge contiguous comment lines into blocks and produce a `TodoItem` for each block
+/// that contains a TODO marker. In a block, the TODO’s line number is taken from
+/// the first comment line, and only the TODO text from the first occurrence is used.
 pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> {
     let mut result = Vec::new();
-    let mut idx = 0;
+    let mut block: Vec<CommentLine> = Vec::new();
 
-    debug!(
-        "Starting to collect TODOs from comment lines. Total lines: {}",
-        lines.len()
-    );
-
-    while idx < lines.len() {
-        let text = &lines[idx].text.trim();
-        let line_num = lines[idx].line_number;
-
-        debug!("Processing line {}: '{}'", line_num, text);
-
-        if text.contains("TODO:") {
-            let re = Regex::new(r"^\s*[^a-zA-Z]*\s*TODO:\s*(.*)").unwrap();
-            let mut collected = re
-                .captures(text)
-                .map_or(String::new(), |caps| caps[1].trim().to_string());
-            debug!("Found TODO at line {}: '{}'", line_num, collected);
-
-            idx += 1;
-            while idx < lines.len() {
-                let next_text = &lines[idx].text.trim();
-                debug!(
-                    "Checking next line {}: '{}'",
-                    lines[idx].line_number, next_text
-                );
-
-                // Ensure we only merge if the next line is indented
-                if next_text.starts_with(" ") || next_text.starts_with("\t") {
-                    collected.push(' ');
-                    collected.push_str(next_text.trim());
-                    debug!(
-                        "Merged line {} into TODO: '{}'",
-                        lines[idx].line_number, collected
-                    );
-                    idx += 1;
-                } else {
-                    debug!(
-                        "Line {} is not indented. Stopping merge.",
-                        lines[idx].line_number
-                    );
-                    break;
-                }
-            }
-
-            debug!(
-                "Added TODO item: line {}, message '{}'",
-                line_num, collected
-            );
-            result.push(TodoItem {
-                line_number: line_num,
-                message: collected,
-            });
+    for line in lines {
+        if block.is_empty() {
+            block.push(line.clone());
         } else {
-            debug!("Line {} does not start with TODO:, skipping.", line_num);
-            idx += 1;
+            // Check if the current line is contiguous with the last one (no blank line in between)
+            if line.line_number == block.last().unwrap().line_number + 1 {
+                block.push(line.clone());
+            } else {
+                // Process the block
+                if let Some(todo) = extract_todo_from_block(&block) {
+                    result.push(todo);
+                }
+                block.clear();
+                block.push(line.clone());
+            }
         }
     }
-
-    debug!(
-        "Finished collecting TODOs. Total TODO items: {}",
-        result.len()
-    );
+    if !block.is_empty() {
+        if let Some(todo) = extract_todo_from_block(&block) {
+            result.push(todo);
+        }
+    }
     result
 }
+
+fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
+    // Find the first comment line in the block that contains "TODO:".
+    for line in block {
+        if line.text.contains("TODO:") {
+            // Use a regex to capture the text after "TODO:".
+            let re = Regex::new(r"^\s*[^a-zA-Z]*\s*TODO:\s*(.*)").unwrap();
+            if let Some(caps) = re.captures(&line.text) {
+                let message = caps.get(1)
+                    .map(|m| m.as_str().trim().to_string())
+                    .unwrap_or_default();
+                // Use the block's first line number.
+                return Some(TodoItem {
+                    line_number: block.first().unwrap().line_number,
+                    message,
+                });
+            }
+        }
+    }
+    None
+}
+
