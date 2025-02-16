@@ -73,7 +73,7 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
     comments
 }
 
-fn extract_comment_from_pair(pair: Pair<impl pest::RuleType>) -> Option<CommentLine> {
+fn extract_comment_from_pair(pair: pest::iterators::Pair<impl pest::RuleType>) -> Option<CommentLine> {
     let span = pair.as_span();
     let base_line = span.start_pos().line_col().0; // Get line number
     let text = span.as_str().trim(); // Extract the comment text
@@ -83,7 +83,8 @@ fn extract_comment_from_pair(pair: Pair<impl pest::RuleType>) -> Option<CommentL
     if rule_name.contains("non_comment") {
         return None;
     }
-    if rule_name.contains("comment") && !text.is_empty() {
+    // Accept tokens if they are a comment or a docstring
+    if (rule_name.contains("comment") || rule_name.contains("docstring")) && !text.is_empty() {
         Some(CommentLine {
             line_number: base_line,
             text: text.to_string(),
@@ -92,6 +93,7 @@ fn extract_comment_from_pair(pair: Pair<impl pest::RuleType>) -> Option<CommentL
         None
     }
 }
+
 
 
 
@@ -229,6 +231,11 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
             } else {
                 break;
             }
+        }
+
+        // If it's a block comment (marker starts with '/*'), remove the trailing "*/"
+        if marker.trim_start().starts_with("/*") {
+            message = message.trim_end_matches("*/").trim().to_string();
         }
 
         debug!(
