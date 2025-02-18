@@ -12,7 +12,6 @@ use crate::languages::{
 };
 use log::{error, info};
 use pest::Parser;
-use regex::Regex;
 use crate::languages::common_syntax;
 
 
@@ -250,7 +249,6 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
             if line.line_number == block.last().unwrap().line_number + 1 {
                 block.push(line.clone());
             } else {
-                // **** New Step: Strip comment markers from the entire block ****
                 let stripped_block: Vec<CommentLine> = block
                     .iter()
                     .map(|cl| CommentLine {
