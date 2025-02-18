@@ -3,27 +3,48 @@
 //! dedenting multi-line comments, and merging contiguous comment lines.
 
 /// Removes common language-specific comment markers from the beginning and end of the text.
-/// For example, it should remove leading `//`, `#`, or `/*` and trailing `*/` if present.
+/// It only removes the marker characters (and an optional extra whitespace immediately following
+/// a leading marker or preceding a trailing marker) without trimming all other whitespace.
 pub fn strip_markers(text: &str) -> String {
-    // TODO this function need to preserve the whitespaces.
-    //    only remove the markers!
+    // Work on a mutable owned string.
+    let mut result = text.to_string();
 
-    // Trim whitespace first.
-    let trimmed = text.trim();
+    // Remove a leading marker if present.
+    // The markers are checked after any initial indentation so that we preserve it.
+    let leading_markers = ["<!--", "///", "/*", "//", "#"];
+    if let Some(non_ws_idx) = result.find(|c: char| !c.is_whitespace()) {
+        for marker in &leading_markers {
+            if result[non_ws_idx..].starts_with(marker) {
+                let marker_end = non_ws_idx + marker.len();
+                // Remove an extra space if it immediately follows the marker.
+                let remove_space = if result[marker_end..].starts_with(' ') {
+                    1
+                } else {
+                    0
+                };
+                result.replace_range(non_ws_idx..(marker_end + remove_space), "");
+                break;
+            }
+        }
+    }
 
-    // Remove common markers.
-    let without_leading = trimmed
-        .trim_start_matches("//")
-        .trim_start_matches("///")
-        .trim_start_matches("#")
-        .trim_start_matches("/*")
-        .trim_start_matches("<!--"); // In case of HTML or similar
+    // Remove a trailing marker if present.
+    let trailing_markers = ["*/", "-->"];
+    for marker in &trailing_markers {
+        // First, check for a pattern where there's an extra space before the marker.
+        let pattern = format!(" {}", marker);
+        if result.ends_with(&pattern) {
+            let new_len = result.len() - pattern.len();
+            result.truncate(new_len);
+            break;
+        } else if result.ends_with(marker) {
+            let new_len = result.len() - marker.len();
+            result.truncate(new_len);
+            break;
+        }
+    }
 
-    let without_trailing = without_leading
-        .trim_end_matches("*/")
-        .trim_end_matches("-->");
-
-    without_trailing.trim().to_string()
+    result
 }
 
 /// Dedents a multi-line comment by removing the minimum common indentation
@@ -63,12 +84,9 @@ pub fn merge_comment_lines(lines: &[&str]) -> String {
         .join(" ")
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // TODO: expand the tests with multiline comments and more complex scenarios
 
     #[test]
     fn test_strip_markers() {
@@ -82,10 +100,27 @@ mod tests {
     }
 
     #[test]
+    fn test_strip_markers_different_markers() {
+        let input_hash = "# Note: This is a test";
+        assert_eq!(strip_markers(input_hash), "Note: This is a test");
+
+        let input_html = "<!-- Important comment -->";
+        assert_eq!(strip_markers(input_html), "Important comment");
+    }
+
+    #[test]
+    fn test_strip_markers_with_indent() {
+        // The indentation before the marker is preserved.
+        let input = "    // Indented comment";
+        let output = strip_markers(input);
+        assert_eq!(output, "    Indented comment");
+    }
+
+    #[test]
     fn test_dedent_comment() {
-        let input = "    TODO: This is a test\n    with indentation\n    preserved.";
+        let input = "    TODO: This is a test\n      with indentation\n    preserved.";
         let output = dedent_comment(input);
-        let expected = "TODO: This is a test\nwith indentation\npreserved.";
+        let expected = "TODO: This is a test\n  with indentation\npreserved.";
         assert_eq!(output, expected);
     }
 
@@ -94,6 +129,14 @@ mod tests {
         let lines = vec!["Fix bug", "Improve error handling", "Add logging"];
         let output = merge_comment_lines(&lines);
         let expected = "Fix bug Improve error handling Add logging";
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn test_merge_comment_lines_with_empty_lines() {
+        let lines = vec![" First line ", "    ", "Second line", "", "Third line  "];
+        let output = merge_comment_lines(&lines);
+        let expected = "First line Second line Third line";
         assert_eq!(output, expected);
     }
 }
