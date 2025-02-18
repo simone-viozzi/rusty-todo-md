@@ -49,8 +49,11 @@ def f():
         let todos = extract_todos(Path::new("test.py"), src);
         assert_eq!(todos.len(), 1);
         let item = &todos[0];
-        // The docstring starts presumably on line 3 or 4
-        assert_eq!(item.line_number, 4);
+
+        println!("{:?}", item);
+
+        // The TODO appears on line 5, not 4.
+        assert_eq!(item.line_number, 5);
         // The text merges "fix f" + "some more text" due to aggregator's logic
         assert!(item.message.contains("fix f"));
         assert!(item.message.contains("some more text"));

@@ -1,4 +1,7 @@
+// src/languages/python.rs
+
 use crate::aggregator::{parse_comments, CommentLine};
+use crate::languages::common::CommentParser; // Import the trait
 use pest_derive::Parser;
 use std::marker::PhantomData;
 
@@ -6,6 +9,8 @@ use std::marker::PhantomData;
 #[grammar = "languages/python.pest"]
 pub struct PythonParser;
 
-pub fn parse_python_comments(file_content: &str) -> Vec<CommentLine> {
-    parse_comments::<PythonParser, Rule>(PhantomData, Rule::python_file, file_content)
+impl CommentParser for PythonParser {
+    fn parse_comments(file_content: &str) -> Vec<CommentLine> {
+        parse_comments::<Self, Rule>(PhantomData, Rule::python_file, file_content)
+    }
 }
