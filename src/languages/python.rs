@@ -9,7 +9,6 @@ use std::marker::PhantomData;
 #[grammar = "languages/python.pest"]
 pub struct PythonParser;
 
-
 impl CommentParser for PythonParser {
     fn parse_comments(file_content: &str) -> Vec<CommentLine> {
         parse_comments::<Self, Rule>(PhantomData, Rule::python_file, file_content)

@@ -1,5 +1,5 @@
+use env_logger::fmt::style::{AnsiColor, Effects, Style};
 use env_logger::fmt::Formatter;
-use env_logger::fmt::style::{AnsiColor, Style, Effects};
 use log::Record;
 use std::io::Write;
 
@@ -9,8 +9,8 @@ fn colored_level(level: Level, color_enabled: bool) -> String {
     // Use fixed-width strings for alignment.
     let level_str = match level {
         Level::Error => "ERROR",
-        Level::Warn  => "WARN ",
-        Level::Info  => "INFO ",
+        Level::Warn => "WARN ",
+        Level::Info => "INFO ",
         Level::Debug => "DEBUG",
         Level::Trace => "TRACE",
     };
@@ -19,8 +19,8 @@ fn colored_level(level: Level, color_enabled: bool) -> String {
         // Build the style using the re‑exported anstyle types.
         let style: Style = match level {
             Level::Error => AnsiColor::Red.on_default().effects(Effects::BOLD),
-            Level::Warn  => AnsiColor::Yellow.on_default().effects(Effects::BOLD),
-            Level::Info  => AnsiColor::Green.on_default(),
+            Level::Warn => AnsiColor::Yellow.on_default().effects(Effects::BOLD),
+            Level::Info => AnsiColor::Green.on_default(),
             Level::Debug => AnsiColor::Blue.on_default(),
             Level::Trace => AnsiColor::Magenta.on_default(),
         };
@@ -33,7 +33,6 @@ fn colored_level(level: Level, color_enabled: bool) -> String {
         level_str.to_string()
     }
 }
-
 
 /// Custom formatter that produces output similar to the default env_logger format,
 /// but appends a clickable file:line (plain text) and styles the level.

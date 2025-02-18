@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod rust_tests {
     use log::LevelFilter;
-    use todo_extractor::languages::common::CommentParser;
     use std::path::Path;
     use std::sync::Once;
     use todo_extractor::aggregator::extract_todos;
+    use todo_extractor::languages::common::CommentParser;
     use todo_extractor::languages::rust::RustParser;
     use todo_extractor::logger;
 

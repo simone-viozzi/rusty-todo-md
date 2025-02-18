@@ -2,6 +2,7 @@ use log::debug;
 use std::marker::PhantomData;
 use std::path::Path;
 
+use crate::languages::common_syntax;
 use crate::languages::{
     common::CommentParser,
     python::PythonParser,
@@ -12,8 +13,6 @@ use crate::languages::{
 };
 use log::{error, info};
 use pest::Parser;
-use crate::languages::common_syntax;
-
 
 /// Represents a single found TODO item.
 #[derive(Debug, PartialEq)]
@@ -98,8 +97,6 @@ fn extract_comment_from_pair(
     }
 }
 
-
-
 /// Given a block of contiguous comment lines, extract the TODO item (if any)
 /// by:
 /// 1. Removing all lines above the first TODO line.
@@ -109,22 +106,22 @@ fn extract_comment_from_pair(
 fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
     // Find the first line that contains the "TODO:" marker.
     let todo_index = block.iter().position(|line| line.text.contains("TODO:"))?;
-    
+
     // Create a candidate block starting from the TODO line to the end.
     let todo_block_lines: Vec<&str> = block[todo_index..]
         .iter()
         .map(|line| line.text.as_str())
         .collect();
-    
+
     // Join the candidate lines into one block (with newline separators).
     let joined_block = todo_block_lines.join("\n");
-    
+
     // Dedent the entire block so that the TODO line becomes column 0.
     let dedented_block = common_syntax::dedent_comment(&joined_block);
-    
+
     // Split the dedented block back into individual lines.
     let dedented_lines: Vec<&str> = dedented_block.lines().collect();
-    
+
     // The first line is the TODO line.
     // For a block TODO, subsequent lines must be indented.
     let mut collected_lines = Vec::new();
@@ -139,7 +136,7 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
             }
         }
     }
-    
+
     // Merge the collected lines into one normalized string.
     let mut merged = common_syntax::merge_comment_lines(&collected_lines);
 
@@ -147,15 +144,12 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
         // Optionally trim any leading whitespace after removal.
         merged = stripped.trim_start().to_string();
     }
-    
+
     Some(TodoItem {
         line_number: block[todo_index].line_number,
         message: merged,
     })
 }
-
-
-
 
 // TODO: what is this?
 fn split_multiline_comment_line(line: &CommentLine) -> Vec<CommentLine> {
@@ -230,7 +224,6 @@ pub struct CommentLine {
     pub line_number: usize,
     pub text: String,
 }
-
 
 /// Merge contiguous comment lines into blocks and produce a `TodoItem` for each block
 /// that contains a TODO marker. In a block, the TODO’s line number is taken from
