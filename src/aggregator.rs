@@ -100,65 +100,42 @@ fn extract_comment_from_pair(
 /// Given a block of contiguous comment lines, extract the TODO item (if any) by merging
 /// the initial TODO line with subsequent indented lines.
 fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
-    // Regex to match a TODO line with a marker, optional whitespace, "TODO:" and the text.
-    let re = Regex::new(r"(?s)^(?P<marker>[^a-zA-Z]*)(?P<ws>\s*)TODO:\s*(?P<text>.*)").unwrap();
+    // Regex to capture a TODO line with a marker, the whitespace after it, and the text.
+    let re = Regex::new(r"^(?P<marker>[^a-zA-Z]*)(?P<ws>\s*)TODO:\s*(?P<text>.*)").unwrap();
 
-    // Find the first line in the block that contains "TODO:".
+    // Find the first line that contains "TODO:".
     let (todo_index, caps) = block
         .iter()
         .enumerate()
         .find_map(|(i, line)| re.captures(&line.text).map(|caps| (i, caps)))?;
 
-    // Extract the marker and the initial TODO text.
+    // Use the captured whitespace as the baseline indentation.
     let marker = caps.name("marker").map(|m| m.as_str()).unwrap_or("");
+    let base_indent = caps.name("ws").map(|m| m.as_str().len()).unwrap_or(0);
     let initial_text = caps.name("text").map(|m| m.as_str()).unwrap_or("");
-
-    // Compute baseline indentation from the first TODO line *after* the marker.
-    let first_line_trimmed = block[todo_index].text.trim_start();
-    let base_indent = if first_line_trimmed.starts_with(marker) {
-        first_line_trimmed
-            .trim_start_matches(marker)
-            .chars()
-            .take_while(|c| c.is_whitespace())
-            .count()
-    } else {
-        0
-    };
 
     // Start with the normalized initial TODO text.
     let mut message = normalize_text(initial_text, marker);
 
-    // Process subsequent contiguous lines.
+    // Process subsequent lines.
     for line in block.iter().skip(todo_index + 1) {
-        let trimmed = line.text.trim_start();
-        if trimmed.starts_with(marker) {
-            // Remove the marker.
-            let after_marker = trimmed.trim_start_matches(marker);
-            let current_indent = after_marker
-                .chars()
-                .take_while(|c| c.is_whitespace())
-                .count();
-            if current_indent > base_indent {
-                let content = after_marker.trim_start();
+        let raw = &line.text;
+        // Compute the total leading whitespace count of the line.
+        let current_indent = raw.chars().take_while(|c| c.is_whitespace()).count();
+        // Only merge if the current line is more indented than the baseline.
+        if current_indent > base_indent {
+            // If the line begins with the marker, remove it.
+            let content = if raw.trim_start().starts_with(marker) {
+                raw.trim_start_matches(marker).trim_start()
+            } else {
+                raw.trim()
+            };
+            if !content.is_empty() {
                 let part = normalize_text(content, marker);
                 if !part.is_empty() {
                     message.push(' ');
                     message.push_str(&part);
                 }
-            } else {
-                break;
-            }
-        } else if trimmed.starts_with(' ') || trimmed.starts_with('\t') {
-            // Alternatively, if the line is indented without repeating the marker.
-            let current_indent = trimmed.chars().take_while(|c| c.is_whitespace()).count();
-            if current_indent > base_indent {
-                let part = normalize_text(trimmed, marker);
-                if !part.is_empty() {
-                    message.push(' ');
-                    message.push_str(&part);
-                }
-            } else {
-                break;
             }
         } else {
             break;
@@ -170,6 +147,7 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
         message,
     })
 }
+
 
 /// Normalizes a text fragment by:
 /// - Splitting by whitespace and rejoining with a single space,
