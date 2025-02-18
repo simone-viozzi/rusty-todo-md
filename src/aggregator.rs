@@ -229,19 +229,24 @@ pub struct CommentLine {
 /// that contains a TODO marker. In a block, the TODO’s line number is taken from
 /// the first comment line.
 pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> {
-    // Flatten the comments so that multi-line entries become separate lines.
+    debug!("Starting to collect TODOs from comment lines. Total lines: {}", lines.len());
+    
     let flattened_lines = flatten_comment_lines(lines);
+    debug!("Flattened lines count: {}", flattened_lines.len());
+    
     let mut result = Vec::new();
     let mut block: Vec<CommentLine> = Vec::new();
 
     for line in &flattened_lines {
         if block.is_empty() {
+            debug!("Starting new block with line: {:?}", line);
             block.push(line.clone());
         } else {
-            // If the current line is contiguous (i.e. the next line number), add it to the block.
             if line.line_number == block.last().unwrap().line_number + 1 {
+                debug!("Adding line to current block: {:?}", line);
                 block.push(line.clone());
             } else {
+                debug!("Non-contiguous line found. Processing current block.");
                 let stripped_block: Vec<CommentLine> = block
                     .iter()
                     .map(|cl| CommentLine {
@@ -250,16 +255,18 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
                     })
                     .collect();
 
-                // Attempt to extract a TODO from the stripped block.
                 if let Some(todo) = extract_todo_from_block(&stripped_block) {
+                    debug!("TODO found: {:?}", todo);
                     result.push(todo);
                 }
                 block.clear();
+                debug!("Starting new block with line: {:?}", line);
                 block.push(line.clone());
             }
         }
     }
     if !block.is_empty() {
+        debug!("Processing final block.");
         let stripped_block: Vec<CommentLine> = block
             .iter()
             .map(|cl| CommentLine {
@@ -268,8 +275,10 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
             })
             .collect();
         if let Some(todo) = extract_todo_from_block(&stripped_block) {
+            debug!("TODO found: {:?}", todo);
             result.push(todo);
         }
     }
+    debug!("Finished collecting TODOs. Total TODOs found: {}", result.len());
     result
 }
