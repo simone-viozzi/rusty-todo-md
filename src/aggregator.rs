@@ -100,7 +100,7 @@ fn extract_comment_from_pair(
 /// Given a block of contiguous comment lines, extract the TODO item (if any) by merging
 /// the initial TODO line with subsequent indented lines.
 fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
-    // Regex to capture a TODO line with a marker, the whitespace after it, and the text.
+    // Regex to capture a TODO line: the marker (non-letters), the whitespace after the marker, then "TODO:" and the text.
     let re = Regex::new(r"^(?P<marker>[^a-zA-Z]*)(?P<ws>\s*)TODO:\s*(?P<text>.*)").unwrap();
 
     // Find the first line that contains "TODO:".
@@ -109,36 +109,50 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
         .enumerate()
         .find_map(|(i, line)| re.captures(&line.text).map(|caps| (i, caps)))?;
 
-    // Use the captured whitespace as the baseline indentation.
+    // Extract the marker and initial text.
     let marker = caps.name("marker").map(|m| m.as_str()).unwrap_or("");
-    let base_indent = caps.name("ws").map(|m| m.as_str().len()).unwrap_or(0);
     let initial_text = caps.name("text").map(|m| m.as_str()).unwrap_or("");
+
+    // Use the captured whitespace after the marker as the baseline indentation.
+    let base_indent = caps.name("ws").map(|m| m.as_str().len()).unwrap_or(0);
 
     // Start with the normalized initial TODO text.
     let mut message = normalize_text(initial_text, marker);
 
-    // Process subsequent lines.
+    // Process subsequent lines in the block.
     for line in block.iter().skip(todo_index + 1) {
-        let raw = &line.text;
-        // Compute the total leading whitespace count of the line.
-        let current_indent = raw.chars().take_while(|c| c.is_whitespace()).count();
-        // Only merge if the current line is more indented than the baseline.
-        if current_indent > base_indent {
-            // If the line begins with the marker, remove it.
-            let content = if raw.trim_start().starts_with(marker) {
-                raw.trim_start_matches(marker).trim_start()
+        // Compute the raw indentation (number of leading whitespace characters) from the original line.
+        let raw_indent = line.text.chars().take_while(|c| c.is_whitespace()).count();
+
+        // We'll decide how to process based on whether the line starts with the same marker.
+        if line.text.trim_start().starts_with(marker) {
+            // Remove the marker and then measure the indentation of what remains.
+            let after_marker = line.text.trim_start_matches(marker);
+            let current_indent = after_marker.chars().take_while(|c| c.is_whitespace()).count();
+            if current_indent > base_indent {
+                let content = after_marker.trim_start();
+                if !content.is_empty() {
+                    let part = normalize_text(content, marker);
+                    if !part.is_empty() {
+                        message.push(' ');
+                        message.push_str(&part);
+                    }
+                }
             } else {
-                raw.trim()
-            };
-            if !content.is_empty() {
-                let part = normalize_text(content, marker);
+                break;
+            }
+        } else {
+            // For lines that don't repeat the marker (e.g. Python docstring continuations),
+            // use the raw indentation.
+            if raw_indent > base_indent {
+                let part = normalize_text(line.text.trim(), marker);
                 if !part.is_empty() {
                     message.push(' ');
                     message.push_str(&part);
                 }
+            } else {
+                break;
             }
-        } else {
-            break;
         }
     }
 
@@ -147,6 +161,7 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
         message,
     })
 }
+
 
 
 /// Normalizes a text fragment by:
