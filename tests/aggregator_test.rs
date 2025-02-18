@@ -117,4 +117,27 @@ let message = "TODO: This should not be detected";
         let todos = extract_todos(Path::new("file.rs"), src);
         assert_eq!(todos.len(), 0);
     }
+
+    #[test]
+    fn test_multiple_consecutive_todos() {
+        init_logger();
+        let src = r#"
+// TODO: todo1
+// TODO: todo2
+"#;
+
+        // We simulate a .rs file so it picks the Rust parser:
+        let todos = extract_todos(Path::new("file.rs"), src);
+
+        // We expect 2 separate TODOs because there's no indentation to merge them
+        assert_eq!(todos.len(), 2);
+
+        // Check their line numbers and messages
+        // The first TODO should be on line 2, the second on line 3 (1-based from Pest)
+        assert_eq!(todos[0].line_number, 2);
+        assert_eq!(todos[0].message, "todo1");
+
+        assert_eq!(todos[1].line_number, 3);
+        assert_eq!(todos[1].message, "todo2");
+    }
 }
