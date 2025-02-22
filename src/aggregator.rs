@@ -231,54 +231,82 @@ pub struct CommentLine {
 pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> {
     debug!("Starting to collect TODOs from comment lines. Total lines: {}", lines.len());
     
+    // Flatten any multi-line comment entries first.
     let flattened_lines = flatten_comment_lines(lines);
     debug!("Flattened lines count: {}", flattened_lines.len());
     
-    let mut result = Vec::new();
-    let mut block: Vec<CommentLine> = Vec::new();
+    let mut todos = Vec::new();
+    let mut current_block = Vec::new();
 
+    // Iterate over each comment line to group contiguous ones into blocks.
     for line in &flattened_lines {
-        if block.is_empty() {
+        if current_block.is_empty() {
             debug!("Starting new block with line: {:?}", line);
-            block.push(line.clone());
+            current_block.push(line.clone());
+        } else if is_contiguous(&current_block, line) {
+            debug!("Adding line to current block: {:?}", line);
+            current_block.push(line.clone());
         } else {
-            if line.line_number == block.last().unwrap().line_number + 1 {
-                debug!("Adding line to current block: {:?}", line);
-                block.push(line.clone());
-            } else {
-                debug!("Non-contiguous line found. Processing current block.");
-                let stripped_block: Vec<CommentLine> = block
-                    .iter()
-                    .map(|cl| CommentLine {
-                        line_number: cl.line_number,
-                        text: common_syntax::strip_markers(&cl.text),
-                    })
-                    .collect();
+            debug!("Non-contiguous line encountered. Finalizing current block.");
+            process_block(&mut current_block, &mut todos);
+            debug!("Starting new block with line: {:?}", line);
+            current_block.push(line.clone());
+        }
+    }
 
-                if let Some(todo) = extract_todo_from_block(&stripped_block) {
-                    debug!("TODO found: {:?}", todo);
-                    result.push(todo);
-                }
-                block.clear();
-                debug!("Starting new block with line: {:?}", line);
-                block.push(line.clone());
-            }
-        }
-    }
-    if !block.is_empty() {
+    // Process any remaining block after the loop.
+    if !current_block.is_empty() {
         debug!("Processing final block.");
-        let stripped_block: Vec<CommentLine> = block
-            .iter()
-            .map(|cl| CommentLine {
-                line_number: cl.line_number,
-                text: common_syntax::strip_markers(&cl.text),
-            })
-            .collect();
-        if let Some(todo) = extract_todo_from_block(&stripped_block) {
-            debug!("TODO found: {:?}", todo);
-            result.push(todo);
-        }
+        process_block(&mut current_block, &mut todos);
     }
-    debug!("Finished collecting TODOs. Total TODOs found: {}", result.len());
-    result
+    
+    debug!("Finished collecting TODOs. Total TODOs found: {}", todos.len());
+    todos
+}
+
+/// Checks whether the given `line` is contiguous to the last line in `current_block`.
+fn is_contiguous(current_block: &[CommentLine], line: &CommentLine) -> bool {
+    if let Some(last) = current_block.last() {
+        let contiguous = last.line_number + 1 == line.line_number;
+        debug!(
+            "Checking contiguity: last line {} and current line {} => {}",
+            last.line_number, line.line_number, contiguous
+        );
+        contiguous
+    } else {
+        false
+    }
+}
+
+/// Processes a block of contiguous comment lines by stripping markers and
+/// extracting a TODO item if one exists. The block is cleared after processing.
+fn process_block(block: &mut Vec<CommentLine>, todos: &mut Vec<TodoItem>) {
+    debug!("Processing block with {} lines: {:?}", block.len(), block);
+    let stripped_block = strip_comment_lines(block);
+    debug!("Stripped block: {:?}", stripped_block);
+    
+    if let Some(todo) = extract_todo_from_block(&stripped_block) {
+        debug!("TODO found in block: {:?}", todo);
+        todos.push(todo);
+    } else {
+        debug!("No TODO found in current block.");
+    }
+    block.clear();
+}
+
+/// Strips language-specific markers from each comment line in the block.
+fn strip_comment_lines(block: &[CommentLine]) -> Vec<CommentLine> {
+    block.iter()
+        .map(|cl| {
+            let stripped_text = common_syntax::strip_markers(&cl.text);
+            debug!(
+                "Stripping markers from line {}: '{}' -> '{}'",
+                cl.line_number, cl.text, stripped_text
+            );
+            CommentLine {
+                line_number: cl.line_number,
+                text: stripped_text,
+            }
+        })
+        .collect()
 }
