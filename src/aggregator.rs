@@ -97,59 +97,79 @@ fn extract_comment_from_pair(
     }
 }
 
-/// Given a block of contiguous comment lines, extract the TODO item (if any)
-/// by:
-/// 1. Removing all lines above the first TODO line.
-/// 2. Dedenting the resulting block.
-/// 3. Checking if the line after the TODO is indented.
-/// 4. Merging the TODO line with all its indented continuation lines.
+/// Given a block of contiguous comment lines (with markers already stripped),
+/// extract the TODO item (if any) by:
+/// 1. Finding the first line containing "TODO:".
+/// 2. Joining that line and any immediately indented following lines.
+/// 3. Dedenting and merging them into a single normalized message.
+/// 4. Removing the "TODO:" prefix and trimming the result.
 fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
-    // Find the first line that contains the "TODO:" marker.
+    debug!("Extracting TODO from block: {:?}", block);
+    
+    // Find the index of the first line with a TODO marker.
     let todo_index = block.iter().position(|line| line.text.contains("TODO:"))?;
-
-    // Create a candidate block starting from the TODO line to the end.
-    let todo_block_lines: Vec<&str> = block[todo_index..]
+    debug!("Found TODO marker at index: {}", todo_index);
+    
+    // Get the candidate lines from the TODO line until the end of the block.
+    let candidate_lines: Vec<&str> = block[todo_index..]
         .iter()
         .map(|line| line.text.as_str())
         .collect();
-
-    // Join the candidate lines into one block (with newline separators).
-    let joined_block = todo_block_lines.join("\n");
-
-    // Dedent the entire block so that the TODO line becomes column 0.
+    debug!("Candidate lines: {:?}", candidate_lines);
+    
+    // Join the candidate lines into a single string.
+    let joined_block = candidate_lines.join("\n");
+    debug!("Joined block:\n{}", joined_block);
+    
+    // Dedent the block so that the TODO line starts at column 0.
     let dedented_block = common_syntax::dedent_comment(&joined_block);
-
-    // Split the dedented block back into individual lines.
+    debug!("Dedented block:\n{}", dedented_block);
+    
+    // Split the dedented block into individual lines.
     let dedented_lines: Vec<&str> = dedented_block.lines().collect();
+    debug!("Dedented lines: {:?}", dedented_lines);
+    
+    // Use a helper to extract only the candidate TODO lines: the first line and
+    // any following lines that are indented.
+    let candidate_todo_lines = extract_candidate_todo_lines(&dedented_lines);
+    debug!("Candidate TODO lines: {:?}", candidate_todo_lines);
+    
+    // Merge the candidate lines into a normalized single-line string.
+    let merged = common_syntax::merge_comment_lines(&candidate_todo_lines);
+    debug!("Merged TODO message: {}", merged);
+    
+    // Remove the "TODO:" prefix if present and trim any extra whitespace.
+    let final_message = if let Some(stripped) = merged.strip_prefix("TODO:") {
+        stripped.trim_start().to_string()
+    } else {
+        merged
+    };
+    debug!("Final TODO message: {}", final_message);
+    
+    Some(TodoItem {
+        line_number: block[todo_index].line_number,
+        message: final_message,
+    })
+}
 
-    // The first line is the TODO line.
-    // For a block TODO, subsequent lines must be indented.
-    let mut collected_lines = Vec::new();
-    if let Some(first_line) = dedented_lines.first() {
-        collected_lines.push(*first_line);
-        // Collect all following lines that are indented.
-        for line in dedented_lines.iter().skip(1) {
+/// Extracts the candidate TODO lines from a list of dedented lines.
+/// It always takes the first line (which contains "TODO:") and then collects
+/// all subsequent lines that are indented (starting with a space or tab).
+fn extract_candidate_todo_lines<'a>(lines: &'a [&'a str]) -> Vec<&'a str> {
+    let mut candidate = Vec::new();
+    if let Some(first_line) = lines.first() {
+        candidate.push(*first_line);
+        for line in lines.iter().skip(1) {
             if line.starts_with(' ') || line.starts_with('\t') {
-                collected_lines.push(*line);
+                candidate.push(*line);
             } else {
                 break;
             }
         }
     }
-
-    // Merge the collected lines into one normalized string.
-    let mut merged = common_syntax::merge_comment_lines(&collected_lines);
-
-    if let Some(stripped) = merged.strip_prefix("TODO:") {
-        // Optionally trim any leading whitespace after removal.
-        merged = stripped.trim_start().to_string();
-    }
-
-    Some(TodoItem {
-        line_number: block[todo_index].line_number,
-        message: merged,
-    })
+    candidate
 }
+
 
 // TODO: what is this?
 fn split_multiline_comment_line(line: &CommentLine) -> Vec<CommentLine> {
