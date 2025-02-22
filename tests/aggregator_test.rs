@@ -140,7 +140,19 @@ let message = "TODO: This should not be detected";
         assert_eq!(todos[1].line_number, 3);
         assert_eq!(todos[1].message, "todo2");
     }
-}
 
-// TODO: add tests where the TODO is not at the beginning of the line,
-//      this should not be detected
+    #[test]
+    fn test_ignore_todo_not_at_beginning() {
+        // This comment has "TODO:" in the middle and should NOT be detected.
+        let src = r#"
+// This is a comment with a TODO: not at the beginning
+fn main() {}
+"#;
+        let todos = extract_todos(Path::new("file.rs"), src);
+        assert_eq!(
+            todos.len(),
+            0,
+            "A TODO not at the beginning should not be detected"
+        );
+    }
+}
