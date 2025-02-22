@@ -94,16 +94,15 @@ def big_function():
     some unrelated text
     """
     x = 42
-"#; 
+"#;
 
-        // TODO: review the logic in this test        
+        // TODO: review the logic in this test
 
         let todos = extract_todos(Path::new("multi_todos.py"), src);
 
         // Print to see the aggregator's actual behavior
         println!("Todos = {:#?}", todos);
 
-    
         assert_eq!(todos.len(), 2, "");
 
         // If you want it to detect both TODOs separately, you'd confirm how you intend to handle multiple “TODO:” lines in the same docstring block.

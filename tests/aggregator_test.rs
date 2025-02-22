@@ -142,5 +142,5 @@ let message = "TODO: This should not be detected";
     }
 }
 
-// TODO: add tests where the TODO is not at the beginning of the line, 
+// TODO: add tests where the TODO is not at the beginning of the line,
 //      this should not be detected
