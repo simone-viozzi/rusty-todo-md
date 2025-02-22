@@ -141,3 +141,6 @@ let message = "TODO: This should not be detected";
         assert_eq!(todos[1].message, "todo2");
     }
 }
+
+// TODO: add tests where the TODO is not at the beginning of the line, 
+//      this should not be detected
