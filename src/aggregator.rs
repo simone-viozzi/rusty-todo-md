@@ -3,14 +3,7 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use crate::languages::common_syntax;
-use crate::languages::{
-    common::CommentParser,
-    python::PythonParser,
-    // go::GoParser,
-    // js::JsParser,
-    // ts::TsParser,
-    rust::RustParser,
-};
+use crate::languages::common::CommentParser;
 use log::{error, info};
 use pest::Parser;
 
@@ -97,58 +90,77 @@ fn extract_comment_from_pair(
     }
 }
 
-/// Given a block of contiguous comment lines, extract the TODO item (if any)
-/// by:
-/// 1. Removing all lines above the first TODO line.
-/// 2. Dedenting the resulting block.
-/// 3. Checking if the line after the TODO is indented.
-/// 4. Merging the TODO line with all its indented continuation lines.
+/// Given a block of contiguous comment lines (with markers already stripped),
+/// extract the TODO item (if any) by:
+/// 1. Finding the first line containing "TODO:".
+/// 2. Joining that line and any immediately indented following lines.
+/// 3. Dedenting and merging them into a single normalized message.
+/// 4. Removing the "TODO:" prefix and trimming the result.
 fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
-    // Find the first line that contains the "TODO:" marker.
-    let todo_index = block.iter().position(|line| line.text.contains("TODO:"))?;
+    debug!("Extracting TODO from block: {:?}", block);
 
-    // Create a candidate block starting from the TODO line to the end.
-    let todo_block_lines: Vec<&str> = block[todo_index..]
+    // Find the index of the first line with a TODO marker.
+    let todo_index = block.iter().position(|line| line.text.contains("TODO:"))?;
+    debug!("Found TODO marker at index: {}", todo_index);
+
+    // Get the candidate lines from the TODO line until the end of the block.
+    let candidate_lines: Vec<&str> = block[todo_index..]
         .iter()
         .map(|line| line.text.as_str())
         .collect();
+    debug!("Candidate lines: {:?}", candidate_lines);
 
-    // Join the candidate lines into one block (with newline separators).
-    let joined_block = todo_block_lines.join("\n");
+    // Join the candidate lines into a single string.
+    let joined_block = candidate_lines.join("\n");
+    debug!("Joined block:\n{}", joined_block);
 
-    // Dedent the entire block so that the TODO line becomes column 0.
+    // Dedent the block so that the TODO line starts at column 0.
     let dedented_block = common_syntax::dedent_comment(&joined_block);
+    debug!("Dedented block:\n{}", dedented_block);
 
-    // Split the dedented block back into individual lines.
+    // Split the dedented block into individual lines.
     let dedented_lines: Vec<&str> = dedented_block.lines().collect();
+    debug!("Dedented lines: {:?}", dedented_lines);
 
-    // The first line is the TODO line.
-    // For a block TODO, subsequent lines must be indented.
-    let mut collected_lines = Vec::new();
-    if let Some(first_line) = dedented_lines.first() {
-        collected_lines.push(*first_line);
-        // Collect all following lines that are indented.
-        for line in dedented_lines.iter().skip(1) {
+    // Use a helper to extract only the candidate TODO lines: the first line and
+    // any following lines that are indented.
+    let candidate_todo_lines = extract_candidate_todo_lines(&dedented_lines);
+    debug!("Candidate TODO lines: {:?}", candidate_todo_lines);
+
+    // Merge the candidate lines into a normalized single-line string.
+    let merged = common_syntax::merge_comment_lines(&candidate_todo_lines);
+    debug!("Merged TODO message: {}", merged);
+
+    // Remove the "TODO:" prefix if present and trim any extra whitespace.
+    let final_message = if let Some(stripped) = merged.strip_prefix("TODO:") {
+        stripped.trim_start().to_string()
+    } else {
+        merged
+    };
+    debug!("Final TODO message: {}", final_message);
+
+    Some(TodoItem {
+        line_number: block[todo_index].line_number,
+        message: final_message,
+    })
+}
+
+/// Extracts the candidate TODO lines from a list of dedented lines.
+/// It always takes the first line (which contains "TODO:") and then collects
+/// all subsequent lines that are indented (starting with a space or tab).
+fn extract_candidate_todo_lines<'a>(lines: &'a [&'a str]) -> Vec<&'a str> {
+    let mut candidate = Vec::new();
+    if let Some(first_line) = lines.first() {
+        candidate.push(*first_line);
+        for line in lines.iter().skip(1) {
             if line.starts_with(' ') || line.starts_with('\t') {
-                collected_lines.push(*line);
+                candidate.push(*line);
             } else {
                 break;
             }
         }
     }
-
-    // Merge the collected lines into one normalized string.
-    let mut merged = common_syntax::merge_comment_lines(&collected_lines);
-
-    if let Some(stripped) = merged.strip_prefix("TODO:") {
-        // Optionally trim any leading whitespace after removal.
-        merged = stripped.trim_start().to_string();
-    }
-
-    Some(TodoItem {
-        line_number: block[todo_index].line_number,
-        message: merged,
-    })
+    candidate
 }
 
 // TODO: what is this?
@@ -179,8 +191,18 @@ fn flatten_comment_lines(lines: &[CommentLine]) -> Vec<CommentLine> {
     flattened
 }
 
-/// Detects file extension and chooses the parser to gather raw comment lines,
-/// then extracts multi-line TODOs from those comments.
+/// Returns the comment lines extracted by the appropriate parser based on the file extension.
+fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<CommentLine>> {
+    match extension {
+        "py" => Some(crate::languages::python::PythonParser::parse_comments(file_content)),
+        "rs" => Some(crate::languages::rust::RustParser::parse_comments(file_content)),
+        // Add new extensions and their corresponding parser calls here:
+        // "js" => Some(crate::languages::js::JsParser::parse_comments(file_content)),
+        // "ts" => Some(crate::languages::ts::TsParser::parse_comments(file_content)),
+        _ => None,
+    }
+}
+
 pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
     let extension = path
         .extension()
@@ -190,14 +212,10 @@ pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
 
     debug!("extract_todos: extension = '{}'", extension);
 
-    // Call the relevant language parser to extract comment lines.
-    let comment_lines = match extension.as_str() {
-        "py" => PythonParser::parse_comments(file_content),
-        "rs" => RustParser::parse_comments(file_content),
-        // "go" => GoParser::parse_comments(file_content),
-        // "js" => JsParser::parse_comments(file_content),
-        // "ts" => TsParser::parse_comments(file_content),
-        _ => {
+    // Use the helper function to get the comment lines.
+    let comment_lines = match get_parser_comments(extension.as_str(), file_content) {
+        Some(lines) => lines,
+        None => {
             debug!(
                 "No recognized extension for file {:?}; returning empty list.",
                 path
@@ -212,11 +230,12 @@ pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
         comment_lines
     );
 
-    // Next, find any TODOs among these comment lines.
+    // Continue with the existing logic to collect and merge TODOs.
     let todos = collect_todos_from_comment_lines(&comment_lines);
     debug!("extract_todos: found {} TODO items total", todos.len());
     todos
 }
+
 
 /// A single comment line with (line_number, entire_comment_text).
 #[derive(Debug, Clone)]
@@ -227,49 +246,117 @@ pub struct CommentLine {
 
 /// Merge contiguous comment lines into blocks and produce a `TodoItem` for each block
 /// that contains a TODO marker. In a block, the TODO’s line number is taken from
-/// the first comment line.
+/// the first comment line.  
+///  
+/// **New behavior:** If a TODO is encountered in a block that already contains a TODO,  
+/// the current block is terminated (processed) and a new block is started.
 pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> {
-    // Flatten the comments so that multi-line entries become separate lines.
+    debug!(
+        "Starting to collect TODOs from comment lines. Total lines: {}",
+        lines.len()
+    );
+
+    // Flatten multi-line comment entries.
     let flattened_lines = flatten_comment_lines(lines);
-    let mut result = Vec::new();
-    let mut block: Vec<CommentLine> = Vec::new();
+    debug!("Flattened lines count: {}", flattened_lines.len());
+
+    let mut todos = Vec::new();
+    let mut current_block = Vec::new();
 
     for line in &flattened_lines {
-        if block.is_empty() {
-            block.push(line.clone());
-        } else {
-            // If the current line is contiguous (i.e. the next line number), add it to the block.
-            if line.line_number == block.last().unwrap().line_number + 1 {
-                block.push(line.clone());
+        if current_block.is_empty() {
+            debug!("Starting new block with line: {:?}", line);
+            current_block.push(line.clone());
+        } else if is_contiguous(&current_block, line) {
+            // If the current block already contains a TODO and the incoming line also contains one,
+            // we finalize the current block and start a new one.
+            if block_contains_todo(&current_block) && line.text.contains("TODO:") {
+                debug!(
+                    "Found a new TODO marker in a block that already contains one. Splitting block at line: {:?}",
+                    line
+                );
+                process_block(&mut current_block, &mut todos);
+                current_block.push(line.clone());
             } else {
-                let stripped_block: Vec<CommentLine> = block
-                    .iter()
-                    .map(|cl| CommentLine {
-                        line_number: cl.line_number,
-                        text: common_syntax::strip_markers(&cl.text),
-                    })
-                    .collect();
-
-                // Attempt to extract a TODO from the stripped block.
-                if let Some(todo) = extract_todo_from_block(&stripped_block) {
-                    result.push(todo);
-                }
-                block.clear();
-                block.push(line.clone());
+                debug!("Adding contiguous line to current block: {:?}", line);
+                current_block.push(line.clone());
             }
+        } else {
+            debug!("Non-contiguous line encountered. Finalizing current block.");
+            process_block(&mut current_block, &mut todos);
+            debug!("Starting new block with line: {:?}", line);
+            current_block.push(line.clone());
         }
     }
-    if !block.is_empty() {
-        let stripped_block: Vec<CommentLine> = block
-            .iter()
-            .map(|cl| CommentLine {
+
+    // Process any remaining block.
+    if !current_block.is_empty() {
+        debug!("Processing final block.");
+        process_block(&mut current_block, &mut todos);
+    }
+
+    debug!(
+        "Finished collecting TODOs. Total TODOs found: {}",
+        todos.len()
+    );
+    todos
+}
+
+/// Returns true if the current block already contains a line with a TODO marker.
+fn block_contains_todo(block: &[CommentLine]) -> bool {
+    let contains = block.iter().any(|cl| cl.text.contains("TODO:"));
+    debug!(
+        "Checking if current block contains a TODO: {} (block: {:?})",
+        contains, block
+    );
+    contains
+}
+
+/// Checks whether the given `line` is contiguous (i.e. its line number is exactly one
+/// more than the last line in `current_block`).
+fn is_contiguous(current_block: &[CommentLine], line: &CommentLine) -> bool {
+    if let Some(last) = current_block.last() {
+        let contiguous = last.line_number + 1 == line.line_number;
+        debug!(
+            "Checking contiguity: last line {} and current line {} => {}",
+            last.line_number, line.line_number, contiguous
+        );
+        contiguous
+    } else {
+        false
+    }
+}
+
+/// Processes a block of contiguous comment lines by stripping markers and
+/// extracting a TODO item (if present). Clears the block after processing.
+fn process_block(block: &mut Vec<CommentLine>, todos: &mut Vec<TodoItem>) {
+    debug!("Processing block with {} lines: {:?}", block.len(), block);
+    let stripped_block = strip_comment_lines(block);
+    debug!("Stripped block: {:?}", stripped_block);
+
+    if let Some(todo) = extract_todo_from_block(&stripped_block) {
+        debug!("TODO found in block: {:?}", todo);
+        todos.push(todo);
+    } else {
+        debug!("No TODO found in current block.");
+    }
+    block.clear();
+}
+
+/// Strips language-specific markers from each comment line in the block.
+fn strip_comment_lines(block: &[CommentLine]) -> Vec<CommentLine> {
+    block
+        .iter()
+        .map(|cl| {
+            let stripped_text = common_syntax::strip_markers(&cl.text);
+            debug!(
+                "Stripping markers from line {}: '{}' -> '{}'",
+                cl.line_number, cl.text, stripped_text
+            );
+            CommentLine {
                 line_number: cl.line_number,
-                text: common_syntax::strip_markers(&cl.text),
-            })
-            .collect();
-        if let Some(todo) = extract_todo_from_block(&stripped_block) {
-            result.push(todo);
-        }
-    }
-    result
+                text: stripped_text,
+            }
+        })
+        .collect()
 }

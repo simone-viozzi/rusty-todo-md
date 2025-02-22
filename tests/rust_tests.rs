@@ -81,4 +81,90 @@ let x = 10; // TODO: Not a comment
         let comments = RustParser::parse_comments(src);
         assert_eq!(comments.len(), 1); // Only extracts the inline comment
     }
+
+    #[test]
+    fn test_large_rust_file_scenario() {
+        init_logger();
+        let src = r#"
+// This file is simulating ~50 lines of code
+// Some normal comment
+//
+fn example() {   // 4
+    // Another normal comment
+    // TODO: first_todo
+    let x = 10;  // 7
+    println!("hello"); // 8
+    //
+    /*
+        Multi-line block
+        TODO: second_todo
+            still part of second_todo
+     */
+    let y = 20; // 15
+    // 
+    // TODO: third_todo
+    if x + y > 20 {
+        // no todo
+        println!("sum > 20");
+    }
+    // normal
+    // We can check line numbers carefully
+}
+
+// Another function
+fn foo() { 
+    // Another random comment
+    // TODO: fourth_todo
+    /* Some block comment with no TODO inside */
+    let z = "string that says TODO: but inside quotes, so aggregator ignores it";
+    println!("{}", z); // 34
+}
+
+// The end is near
+// Just some padding
+"#;
+
+        let todos = extract_todos(Path::new("large_file.rs"), src);
+
+        // Let's see the aggregator's results:
+        println!("Found {} TODOs: {:#?}", todos.len(), todos);
+
+        // We *expect* 4 TODOs from lines:
+        //   - line 6 => "first_todo"
+        //   - line ~10 => "second_todo" (plus the indented line "still part of second_todo")
+        //   - line 17 => "third_todo"
+        //   - line 31 => "fourth_todo"
+        // Adjust if your real snippet changes line spacing.
+
+        assert_eq!(
+            todos.len(),
+            4,
+            "Should find exactly four TODOs in this snippet"
+        );
+
+        // Check line numbers:
+        assert_eq!(todos[0].line_number, 7);
+        assert_eq!(todos[0].message, "first_todo");
+
+        // second_todo likely merges the line "still part of second_todo"
+        // The aggregator merges indented lines. So the final message might be:
+        //   "second_todo still part of second_todo"
+        assert_eq!(todos[1].line_number, 13);
+        assert!(
+            todos[1].message.contains("second_todo"),
+            "Should contain second_todo text"
+        );
+        assert!(
+            todos[1].message.contains("still part of second_todo"),
+            "Should also include the indented line"
+        );
+
+        // third_todo on line 17
+        assert_eq!(todos[2].line_number, 18);
+        assert_eq!(todos[2].message, "third_todo");
+
+        // fourth_todo on line 31
+        assert_eq!(todos[3].line_number, 30);
+        assert_eq!(todos[3].message, "fourth_todo");
+    }
 }
