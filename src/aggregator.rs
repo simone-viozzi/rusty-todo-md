@@ -67,6 +67,10 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
     comments
 }
 
+/// Extracts a comment from a given `pest::iterators::Pair`.
+///
+/// - `pair`: A `pest::iterators::Pair` representing a parsed token.
+/// - Returns: An `Option<CommentLine>` containing the extracted comment if successful.
 fn extract_comment_from_pair(
     pair: pest::iterators::Pair<impl pest::RuleType>,
 ) -> Option<CommentLine> {
@@ -172,7 +176,10 @@ fn extract_candidate_todo_lines<'a>(lines: &'a [&'a str]) -> Vec<&'a str> {
     candidate
 }
 
-// TODO: what is this?
+// Splits a multi-line comment into individual `CommentLine` entries.
+//
+// - `line`: A `CommentLine` containing multiple lines of text.
+// - Returns: A `Vec<CommentLine>` with each line split into a separate entry.
 fn split_multiline_comment_line(line: &CommentLine) -> Vec<CommentLine> {
     let mut result = Vec::new();
     // Split the text by newline.
@@ -187,7 +194,11 @@ fn split_multiline_comment_line(line: &CommentLine) -> Vec<CommentLine> {
     result
 }
 
-// TODO: what is this?
+// Flattens a list of `CommentLine` entries, splitting any multi-line comments
+// into individual `CommentLine` entries.
+//
+// - `lines`: A slice of `CommentLine` entries.
+// - Returns: A `Vec<CommentLine>` with all multi-line comments split into individual entries.
 fn flatten_comment_lines(lines: &[CommentLine]) -> Vec<CommentLine> {
     let mut flattened = Vec::new();
     for line in lines {
@@ -201,6 +212,10 @@ fn flatten_comment_lines(lines: &[CommentLine]) -> Vec<CommentLine> {
 }
 
 /// Returns the comment lines extracted by the appropriate parser based on the file extension.
+///
+/// - `extension`: The file extension (e.g., "py", "rs").
+/// - `file_content`: The source code text.
+/// - Returns: An `Option<Vec<CommentLine>>` containing extracted comments if successful.
 fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<CommentLine>> {
     match extension {
         "py" => Some(crate::languages::python::PythonParser::parse_comments(
@@ -216,6 +231,11 @@ fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<Commen
     }
 }
 
+/// Extracts TODO items from the given file content based on its extension.
+///
+/// - `path`: The path to the file.
+/// - `file_content`: The source code text.
+/// - Returns: A `Vec<TodoItem>` containing extracted TODO items.
 pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
     let extension = path
         .extension()
@@ -315,6 +335,9 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
 }
 
 /// Returns true if the current block already contains a line with a TODO marker.
+///
+/// - `block`: A slice of `CommentLine` entries representing the current block.
+/// - Returns: `true` if the block contains a TODO marker, `false` otherwise.
 fn block_contains_todo(block: &[CommentLine]) -> bool {
     let contains = block.iter().any(|cl| cl.text.contains("TODO:"));
     debug!(
@@ -326,6 +349,10 @@ fn block_contains_todo(block: &[CommentLine]) -> bool {
 
 /// Checks whether the given `line` is contiguous (i.e. its line number is exactly one
 /// more than the last line in `current_block`).
+///
+/// - `current_block`: A slice of `CommentLine` entries representing the current block.
+/// - `line`: The `CommentLine` to check for contiguity.
+/// - Returns: `true` if the line is contiguous, `false` otherwise.
 fn is_contiguous(current_block: &[CommentLine], line: &CommentLine) -> bool {
     if let Some(last) = current_block.last() {
         let contiguous = last.line_number + 1 == line.line_number;
@@ -341,6 +368,9 @@ fn is_contiguous(current_block: &[CommentLine], line: &CommentLine) -> bool {
 
 /// Processes a block of contiguous comment lines by stripping markers and
 /// extracting a TODO item (if present). Clears the block after processing.
+///
+/// - `block`: A mutable reference to a `Vec<CommentLine>` representing the current block.
+/// - `todos`: A mutable reference to a `Vec<TodoItem>` to store extracted TODO items.
 fn process_block(block: &mut Vec<CommentLine>, todos: &mut Vec<TodoItem>) {
     debug!("Processing block with {} lines: {:?}", block.len(), block);
     let stripped_block = strip_comment_lines(block);
@@ -356,6 +386,9 @@ fn process_block(block: &mut Vec<CommentLine>, todos: &mut Vec<TodoItem>) {
 }
 
 /// Strips language-specific markers from each comment line in the block.
+///
+/// - `block`: A slice of `CommentLine` entries representing the current block.
+/// - Returns: A `Vec<CommentLine>` with markers stripped from each line.
 fn strip_comment_lines(block: &[CommentLine]) -> Vec<CommentLine> {
     block
         .iter()
