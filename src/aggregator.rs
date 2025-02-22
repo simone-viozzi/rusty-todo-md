@@ -2,8 +2,8 @@ use log::debug;
 use std::marker::PhantomData;
 use std::path::Path;
 
-use crate::languages::common_syntax;
 use crate::languages::common::CommentParser;
+use crate::languages::common_syntax;
 use log::{error, info};
 use pest::Parser;
 
@@ -122,21 +122,30 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
     let dedented_lines: Vec<&str> = dedented_block.lines().collect();
     debug!("Dedented lines: {:?}", dedented_lines);
 
-    // Use a helper to extract only the candidate TODO lines: the first line and
-    // any following lines that are indented.
+    // Extract candidate TODO lines (first line and any immediately indented following lines).
     let candidate_todo_lines = extract_candidate_todo_lines(&dedented_lines);
     debug!("Candidate TODO lines: {:?}", candidate_todo_lines);
+
+    // *** NEW: Check if the first candidate line starts with "TODO:" ***
+    if let Some(first_line) = candidate_todo_lines.first() {
+        if !first_line.trim_start().starts_with("TODO:") {
+            debug!("Candidate line does not start with 'TODO:', skipping block.");
+            return None;
+        }
+    } else {
+        return None;
+    }
 
     // Merge the candidate lines into a normalized single-line string.
     let merged = common_syntax::merge_comment_lines(&candidate_todo_lines);
     debug!("Merged TODO message: {}", merged);
 
-    // Remove the "TODO:" prefix if present and trim any extra whitespace.
-    let final_message = if let Some(stripped) = merged.strip_prefix("TODO:") {
-        stripped.trim_start().to_string()
-    } else {
-        merged
-    };
+    // Remove the "TODO:" prefix and trim any extra whitespace.
+    // At this point, merged is guaranteed to start with "TODO:".
+    let final_message = merged
+        .strip_prefix("TODO:")
+        .map(|s| s.trim_start().to_string())
+        .unwrap_or(merged);
     debug!("Final TODO message: {}", final_message);
 
     Some(TodoItem {
@@ -194,8 +203,12 @@ fn flatten_comment_lines(lines: &[CommentLine]) -> Vec<CommentLine> {
 /// Returns the comment lines extracted by the appropriate parser based on the file extension.
 fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<CommentLine>> {
     match extension {
-        "py" => Some(crate::languages::python::PythonParser::parse_comments(file_content)),
-        "rs" => Some(crate::languages::rust::RustParser::parse_comments(file_content)),
+        "py" => Some(crate::languages::python::PythonParser::parse_comments(
+            file_content,
+        )),
+        "rs" => Some(crate::languages::rust::RustParser::parse_comments(
+            file_content,
+        )),
         // Add new extensions and their corresponding parser calls here:
         // "js" => Some(crate::languages::js::JsParser::parse_comments(file_content)),
         // "ts" => Some(crate::languages::ts::TsParser::parse_comments(file_content)),
@@ -235,7 +248,6 @@ pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
     debug!("extract_todos: found {} TODO items total", todos.len());
     todos
 }
-
 
 /// A single comment line with (line_number, entire_comment_text).
 #[derive(Debug, Clone)]
