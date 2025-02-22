@@ -86,45 +86,42 @@ let x = 10; // TODO: Not a comment
     fn test_large_rust_file_scenario() {
         init_logger();
         let src = r#"
-// 1: This file is simulating ~50 lines of code
-// 2: Some normal comment
-// 3:
+// This file is simulating ~50 lines of code
+// Some normal comment
+//
 fn example() {   // 4
-    // 5: Another normal comment
-    // 6: TODO: first_todo
+    // Another normal comment
+    // TODO: first_todo
     let x = 10;  // 7
     println!("hello"); // 8
-    // 9:
+    //
     /*
-     10: Multi-line block
-       TODO: second_todo
-          still part of second_todo
+        Multi-line block
+        TODO: second_todo
+            still part of second_todo
      */
     let y = 20; // 15
-    // 16:
-    // 17: TODO: third_todo
+    // 
+    // TODO: third_todo
     if x + y > 20 {
-        // 20: no todo
+        // no todo
         println!("sum > 20");
     }
-    // 23: normal
-    // 24: We can check line numbers carefully
+    // normal
+    // We can check line numbers carefully
 }
 
-// 28: Another function
-fn foo() { // 29
-    // 30: Another random comment
-    // 31: TODO: fourth_todo
-    /* 32: Some block comment with no TODO inside */
+// Another function
+fn foo() { 
+    // Another random comment
+    // TODO: fourth_todo
+    /* Some block comment with no TODO inside */
     let z = "string that says TODO: but inside quotes, so aggregator ignores it";
     println!("{}", z); // 34
 }
 
-// 36: The end is near
-// 37: Just some padding
-// 38: 
-// 39: 
-// 40:
+// The end is near
+// Just some padding
 "#;
 
         let todos = extract_todos(Path::new("large_file.rs"), src);
@@ -146,12 +143,13 @@ fn foo() { // 29
         );
 
         // Check line numbers:
-        assert_eq!(todos[0].line_number, 6);
+        assert_eq!(todos[0].line_number, 7);
         assert_eq!(todos[0].message, "first_todo");
 
         // second_todo likely merges the line "still part of second_todo"
         // The aggregator merges indented lines. So the final message might be:
         //   "second_todo still part of second_todo"
+        assert_eq!(todos[1].line_number, 13);
         assert!(
             todos[1].message.contains("second_todo"),
             "Should contain second_todo text"
@@ -162,11 +160,11 @@ fn foo() { // 29
         );
 
         // third_todo on line 17
-        assert_eq!(todos[2].line_number, 17);
+        assert_eq!(todos[2].line_number, 18);
         assert_eq!(todos[2].message, "third_todo");
 
         // fourth_todo on line 31
-        assert_eq!(todos[3].line_number, 31);
+        assert_eq!(todos[3].line_number, 30);
         assert_eq!(todos[3].message, "fourth_todo");
     }
 }

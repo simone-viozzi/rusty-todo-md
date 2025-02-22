@@ -94,19 +94,17 @@ def big_function():
     some unrelated text
     """
     x = 42
-"#;
+"#; 
+
+        // TODO: review the logic in this test        
 
         let todos = extract_todos(Path::new("multi_todos.py"), src);
 
         // Print to see the aggregator's actual behavior
         println!("Todos = {:#?}", todos);
 
-        // Depending on aggregator logic, you might get:
-        //   - A single TODO item (the aggregator only picks up the FIRST 'TODO:' in the block).
-        //   - Or it might skip the second one entirely if it doesn't break the block.
-
-        // If the aggregator *only* picks the first “TODO:” in a block, you might see:
-        assert_eq!(todos.len(), 1, "Expected aggregator to only detect the first TODO in a single docstring block if that is the current design.");
+    
+        assert_eq!(todos.len(), 2, "");
 
         // If you want it to detect both TODOs separately, you'd confirm how you intend to handle multiple “TODO:” lines in the same docstring block.
         // For now, we test the existing behavior (which likely sees 1).
