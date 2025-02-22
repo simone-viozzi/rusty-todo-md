@@ -3,14 +3,7 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use crate::languages::common_syntax;
-use crate::languages::{
-    common::CommentParser,
-    python::PythonParser,
-    // go::GoParser,
-    // js::JsParser,
-    // ts::TsParser,
-    rust::RustParser,
-};
+use crate::languages::common::CommentParser;
 use log::{error, info};
 use pest::Parser;
 
@@ -198,8 +191,18 @@ fn flatten_comment_lines(lines: &[CommentLine]) -> Vec<CommentLine> {
     flattened
 }
 
-/// Detects file extension and chooses the parser to gather raw comment lines,
-/// then extracts multi-line TODOs from those comments.
+/// Returns the comment lines extracted by the appropriate parser based on the file extension.
+fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<CommentLine>> {
+    match extension {
+        "py" => Some(crate::languages::python::PythonParser::parse_comments(file_content)),
+        "rs" => Some(crate::languages::rust::RustParser::parse_comments(file_content)),
+        // Add new extensions and their corresponding parser calls here:
+        // "js" => Some(crate::languages::js::JsParser::parse_comments(file_content)),
+        // "ts" => Some(crate::languages::ts::TsParser::parse_comments(file_content)),
+        _ => None,
+    }
+}
+
 pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
     let extension = path
         .extension()
@@ -209,14 +212,10 @@ pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
 
     debug!("extract_todos: extension = '{}'", extension);
 
-    // Call the relevant language parser to extract comment lines.
-    let comment_lines = match extension.as_str() {
-        "py" => PythonParser::parse_comments(file_content),
-        "rs" => RustParser::parse_comments(file_content),
-        // "go" => GoParser::parse_comments(file_content),
-        // "js" => JsParser::parse_comments(file_content),
-        // "ts" => TsParser::parse_comments(file_content),
-        _ => {
+    // Use the helper function to get the comment lines.
+    let comment_lines = match get_parser_comments(extension.as_str(), file_content) {
+        Some(lines) => lines,
+        None => {
             debug!(
                 "No recognized extension for file {:?}; returning empty list.",
                 path
@@ -231,11 +230,12 @@ pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
         comment_lines
     );
 
-    // Next, find any TODOs among these comment lines.
+    // Continue with the existing logic to collect and merge TODOs.
     let todos = collect_todos_from_comment_lines(&comment_lines);
     debug!("extract_todos: found {} TODO items total", todos.len());
     todos
 }
+
 
 /// A single comment line with (line_number, entire_comment_text).
 #[derive(Debug, Clone)]
