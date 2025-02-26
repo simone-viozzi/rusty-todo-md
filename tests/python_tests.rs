@@ -28,7 +28,9 @@ mod python_tests {
 # TODO: do something
 x = "TODO: not a comment"
 "#;
-        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
         let todos = extract_marked_items(Path::new("test.py"), src, &config);
         println!("{:?}", todos);
         assert_eq!(todos.len(), 1);
@@ -47,7 +49,9 @@ def f():
       some more text
     """
 "#;
-        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
         let todos = extract_marked_items(Path::new("test.py"), src, &config);
         assert_eq!(todos.len(), 1);
         let item = &todos[0];
@@ -68,7 +72,9 @@ def f():
 # TODO: Fix performance issues
 # Regular comment
 "#;
-        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
         let todos = extract_marked_items(Path::new("file.py"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].message, "Fix performance issues");
@@ -80,7 +86,9 @@ def f():
         let src = r#"
 # This is just a comment
 "#;
-        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
         let todos = extract_marked_items(Path::new("file.py"), src, &config);
         assert_eq!(todos.len(), 0);
     }
@@ -99,7 +107,9 @@ def big_function():
     """
     x = 42
 "#;
-        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
         let todos = extract_marked_items(Path::new("multi_todos.py"), src, &config);
 
         // Print to see the aggregator's actual behavior

@@ -32,7 +32,9 @@ fn main() {
    let s = "TODO: not a comment in string";
 }
 "#;
-        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
         let todos = extract_marked_items(Path::new("example.rs"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].line_number, 3);
@@ -52,7 +54,9 @@ fn foo() {}
         more lines
 */
 "#;
-        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
         let todos = extract_marked_items(Path::new("lib.rs"), src, &config);
 
         assert_eq!(todos.len(), 2);
@@ -125,12 +129,18 @@ fn foo() {
 // The end is near
 // Just some padding
 "#;
-        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
         let todos = extract_marked_items(Path::new("large_file.rs"), src, &config);
 
         println!("Found {} TODOs: {:#?}", todos.len(), todos);
 
-        assert_eq!(todos.len(), 4, "Should find exactly four TODOs in this snippet");
+        assert_eq!(
+            todos.len(),
+            4,
+            "Should find exactly four TODOs in this snippet"
+        );
 
         // Check line numbers:
         assert_eq!(todos[0].line_number, 7);

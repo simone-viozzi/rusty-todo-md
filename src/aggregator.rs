@@ -105,12 +105,18 @@ fn extract_comment_from_pair(
 /// 2. Joining that line and any immediately indented following lines.
 /// 3. Dedenting and merging them into a single normalized message.
 /// 4. Removing the marker prefix and trimming the result.
-fn extract_marked_item_from_block(block: &[CommentLine], config: &MarkerConfig) -> Option<MarkedItem> {
+fn extract_marked_item_from_block(
+    block: &[CommentLine],
+    config: &MarkerConfig,
+) -> Option<MarkedItem> {
     debug!("Extracting marked item from block: {:?}", block);
 
     // Find the index of the first line with any marker.
     let marker_index = block.iter().position(|line| {
-        config.markers.iter().any(|marker| line.text.contains(marker))
+        config
+            .markers
+            .iter()
+            .any(|marker| line.text.contains(marker))
     })?;
     debug!("Found marker at index: {}", marker_index);
 
@@ -139,7 +145,11 @@ fn extract_marked_item_from_block(block: &[CommentLine], config: &MarkerConfig) 
 
     // *** NEW: Check if the first candidate line starts with any marker ***
     if let Some(first_line) = candidate_marked_lines.first() {
-        if !config.markers.iter().any(|marker| first_line.trim_start().starts_with(marker)) {
+        if !config
+            .markers
+            .iter()
+            .any(|marker| first_line.trim_start().starts_with(marker))
+        {
             debug!("Candidate line does not start with any marker, skipping block.");
             return None;
         }
@@ -153,7 +163,9 @@ fn extract_marked_item_from_block(block: &[CommentLine], config: &MarkerConfig) 
 
     // Remove the marker prefix and trim any extra whitespace.
     let final_message = config.markers.iter().fold(merged, |acc, marker| {
-        acc.strip_prefix(marker).map(|s| s.trim_start().to_string()).unwrap_or(acc)
+        acc.strip_prefix(marker)
+            .map(|s| s.trim_start().to_string())
+            .unwrap_or(acc)
     });
     debug!("Final marked message: {}", final_message);
 
@@ -242,7 +254,11 @@ fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<Commen
 /// - `file_content`: The source code text.
 /// - `config`: The marker configuration.
 /// - Returns: A `Vec<MarkedItem>` containing extracted marked items.
-pub fn extract_marked_items(path: &Path, file_content: &str, config: &MarkerConfig) -> Vec<MarkedItem> {
+pub fn extract_marked_items(
+    path: &Path,
+    file_content: &str,
+    config: &MarkerConfig,
+) -> Vec<MarkedItem> {
     let extension = path
         .extension()
         .and_then(|s| s.to_str())
@@ -271,7 +287,10 @@ pub fn extract_marked_items(path: &Path, file_content: &str, config: &MarkerConf
 
     // Continue with the existing logic to collect and merge marked items.
     let marked_items = collect_marked_items_from_comment_lines(&comment_lines, config);
-    debug!("extract_marked_items: found {} marked items total", marked_items.len());
+    debug!(
+        "extract_marked_items: found {} marked items total",
+        marked_items.len()
+    );
     marked_items
 }
 
@@ -288,7 +307,10 @@ pub struct CommentLine {
 ///  
 /// **New behavior:** If a marker is encountered in a block that already contains a marker,  
 /// the current block is terminated (processed) and a new block is started.
-pub fn collect_marked_items_from_comment_lines(lines: &[CommentLine], config: &MarkerConfig) -> Vec<MarkedItem> {
+pub fn collect_marked_items_from_comment_lines(
+    lines: &[CommentLine],
+    config: &MarkerConfig,
+) -> Vec<MarkedItem> {
     debug!(
         "Starting to collect marked items from comment lines. Total lines: {}",
         lines.len()
@@ -308,7 +330,12 @@ pub fn collect_marked_items_from_comment_lines(lines: &[CommentLine], config: &M
         } else if is_contiguous(&current_block, line) {
             // If the current block already contains a marker and the incoming line also contains one,
             // we finalize the current block and start a new one.
-            if block_contains_marker(&current_block, &config.markers) && config.markers.iter().any(|marker| line.text.contains(marker)) {
+            if block_contains_marker(&current_block, &config.markers)
+                && config
+                    .markers
+                    .iter()
+                    .any(|marker| line.text.contains(marker))
+            {
                 debug!(
                     "Found a new marker in a block that already contains one. Splitting block at line: {:?}",
                     line
@@ -346,7 +373,9 @@ pub fn collect_marked_items_from_comment_lines(lines: &[CommentLine], config: &M
 /// - `markers`: A slice of marker strings.
 /// - Returns: `true` if the block contains a marker, `false` otherwise.
 fn block_contains_marker(block: &[CommentLine], markers: &[String]) -> bool {
-    let contains = block.iter().any(|cl| markers.iter().any(|marker| cl.text.contains(marker)));
+    let contains = block
+        .iter()
+        .any(|cl| markers.iter().any(|marker| cl.text.contains(marker)));
     debug!(
         "Checking if current block contains a marker: {} (block: {:?})",
         contains, block
@@ -379,7 +408,11 @@ fn is_contiguous(current_block: &[CommentLine], line: &CommentLine) -> bool {
 /// - `block`: A mutable reference to a `Vec<CommentLine>` representing the current block.
 /// - `marked_items`: A mutable reference to a `Vec<MarkedItem>` to store extracted marked items.
 /// - `config`: The marker configuration.
-fn process_block(block: &mut Vec<CommentLine>, marked_items: &mut Vec<MarkedItem>, config: &MarkerConfig) {
+fn process_block(
+    block: &mut Vec<CommentLine>,
+    marked_items: &mut Vec<MarkedItem>,
+    config: &MarkerConfig,
+) {
     debug!("Processing block with {} lines: {:?}", block.len(), block);
     let stripped_block = strip_comment_lines(block);
     debug!("Stripped block: {:?}", stripped_block);
