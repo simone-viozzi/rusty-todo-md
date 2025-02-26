@@ -19,7 +19,8 @@ fn main() {
     let path = Path::new(&args[1]);
     let content = std::fs::read_to_string(path).expect("cannot read file");
 
-    // TODO: make this configurable
+    // TODO: make this configurable!
+    //     also remove this main altogether
     let config = MarkerConfig {
         markers: vec!["TODO:".to_string()],
     };
