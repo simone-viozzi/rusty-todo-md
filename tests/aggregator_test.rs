@@ -1,9 +1,10 @@
 #[cfg(test)]
 mod aggregator_tests {
     use log::LevelFilter;
+    use todo_extractor::MarkerConfig;
     use std::path::Path;
     use std::sync::Once;
-    use todo_extractor::extract_todos;
+    use todo_extractor::extract_marked_items;
     use todo_extractor::logger;
 
     static INIT: Once = Once::new();
@@ -23,7 +24,8 @@ mod aggregator_tests {
     fn test_valid_rust_extension() {
         init_logger();
         let src = "// TODO: Implement feature X";
-        let todos = extract_todos(Path::new("file.rs"), src);
+        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
     }
 
@@ -31,7 +33,8 @@ mod aggregator_tests {
     fn test_invalid_extension() {
         init_logger();
         let src = "// TODO: This should not be processed";
-        let todos = extract_todos(Path::new("file.unknown"), src);
+        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let todos = extract_marked_items(Path::new("file.unknown"), src, &config);
         assert_eq!(todos.len(), 0);
     }
 
@@ -43,7 +46,8 @@ mod aggregator_tests {
 //     Improve error handling
 //     Add logging
 "#;
-        let todos = extract_todos(Path::new("file.rs"), src);
+        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(
             todos[0].message,
@@ -58,7 +62,8 @@ mod aggregator_tests {
 // TODO: Improve API
 // Refactor later
 "#;
-        let todos = extract_todos(Path::new("file.rs"), src);
+        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].message, "Improve API"); // Does not merge second line
     }
@@ -70,7 +75,8 @@ mod aggregator_tests {
 // Some comment
 // TODO: Implement caching
 "#;
-        let todos = extract_todos(Path::new("file.rs"), src);
+        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].line_number, 3);
         assert_eq!(todos[0].message, "Implement caching");
@@ -80,7 +86,8 @@ mod aggregator_tests {
     fn test_empty_input_no_todos() {
         init_logger();
         let src = "";
-        let todos = extract_todos(Path::new("file.rs"), src);
+        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 0);
     }
 
@@ -88,7 +95,8 @@ mod aggregator_tests {
     fn test_display_todo_output() {
         init_logger();
         let src = "// TODO: Improve logging";
-        let todos = extract_todos(Path::new("file.rs"), src);
+        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
 
         let output = format!("{} - {}", todos[0].line_number, todos[0].message);
         assert_eq!(output, "1 - Improve logging");
@@ -98,7 +106,8 @@ mod aggregator_tests {
     fn test_display_no_todos() {
         init_logger();
         let src = "fn main() {}";
-        let todos = extract_todos(Path::new("file.rs"), src);
+        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert!(todos.is_empty());
     }
 
@@ -114,7 +123,8 @@ mod aggregator_tests {
         let src = r#"
 let message = "TODO: This should not be detected";
 "#;
-        let todos = extract_todos(Path::new("file.rs"), src);
+        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 0);
     }
 
@@ -125,30 +135,27 @@ let message = "TODO: This should not be detected";
 // TODO: todo1
 // TODO: todo2
 "#;
+        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
 
-        // We simulate a .rs file so it picks the Rust parser:
-        let todos = extract_todos(Path::new("file.rs"), src);
-
-        // We expect 2 separate TODOs because there's no indentation to merge them
         assert_eq!(todos.len(), 2);
 
         // Check their line numbers and messages
         // The first TODO should be on line 2, the second on line 3 (1-based from Pest)
         assert_eq!(todos[0].line_number, 2);
         assert_eq!(todos[0].message, "todo1");
-
         assert_eq!(todos[1].line_number, 3);
         assert_eq!(todos[1].message, "todo2");
     }
 
     #[test]
     fn test_ignore_todo_not_at_beginning() {
-        // This comment has "TODO:" in the middle and should NOT be detected.
         let src = r#"
 // This is a comment with a TODO: not at the beginning
 fn main() {}
 "#;
-        let todos = extract_todos(Path::new("file.rs"), src);
+        let config = MarkerConfig { markers: vec!["TODO".to_string()] };
+        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(
             todos.len(),
             0,
