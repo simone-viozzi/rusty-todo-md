@@ -3,10 +3,11 @@ mod rust_tests {
     use log::LevelFilter;
     use std::path::Path;
     use std::sync::Once;
-    use todo_extractor::aggregator::extract_todos;
+    use todo_extractor::aggregator::extract_marked_items;
     use todo_extractor::languages::common::CommentParser;
     use todo_extractor::languages::rust::RustParser;
     use todo_extractor::logger;
+    use todo_extractor::MarkerConfig;
 
     static INIT: Once = Once::new();
 
@@ -31,7 +32,10 @@ fn main() {
    let s = "TODO: not a comment in string";
 }
 "#;
-        let todos = extract_todos(Path::new("example.rs"), src);
+        let config = MarkerConfig {
+            markers: vec!["TODO:".to_string()],
+        };
+        let todos = extract_marked_items(Path::new("example.rs"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].line_number, 3);
         assert_eq!(todos[0].message, "single line");
@@ -50,9 +54,11 @@ fn foo() {}
         more lines
 */
 "#;
-        let todos = extract_todos(Path::new("lib.rs"), src);
+        let config = MarkerConfig {
+            markers: vec!["TODO:".to_string()],
+        };
+        let todos = extract_marked_items(Path::new("lib.rs"), src, &config);
 
-        // Now we should expect only the correctly merged lines
         assert_eq!(todos.len(), 2);
 
         // Doc comment
@@ -123,18 +129,12 @@ fn foo() {
 // The end is near
 // Just some padding
 "#;
+        let config = MarkerConfig {
+            markers: vec!["TODO:".to_string()],
+        };
+        let todos = extract_marked_items(Path::new("large_file.rs"), src, &config);
 
-        let todos = extract_todos(Path::new("large_file.rs"), src);
-
-        // Let's see the aggregator's results:
         println!("Found {} TODOs: {:#?}", todos.len(), todos);
-
-        // We *expect* 4 TODOs from lines:
-        //   - line 6 => "first_todo"
-        //   - line ~10 => "second_todo" (plus the indented line "still part of second_todo")
-        //   - line 17 => "third_todo"
-        //   - line 31 => "fourth_todo"
-        // Adjust if your real snippet changes line spacing.
 
         assert_eq!(
             todos.len(),
@@ -147,17 +147,9 @@ fn foo() {
         assert_eq!(todos[0].message, "first_todo");
 
         // second_todo likely merges the line "still part of second_todo"
-        // The aggregator merges indented lines. So the final message might be:
-        //   "second_todo still part of second_todo"
         assert_eq!(todos[1].line_number, 13);
-        assert!(
-            todos[1].message.contains("second_todo"),
-            "Should contain second_todo text"
-        );
-        assert!(
-            todos[1].message.contains("still part of second_todo"),
-            "Should also include the indented line"
-        );
+        assert!(todos[1].message.contains("second_todo"));
+        assert!(todos[1].message.contains("still part of second_todo"));
 
         // third_todo on line 17
         assert_eq!(todos[2].line_number, 18);

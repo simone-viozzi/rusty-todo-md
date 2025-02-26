@@ -2,6 +2,7 @@ use log::{info, warn};
 use std::env;
 use std::path::Path;
 mod logger;
+use todo_extractor::{extract_marked_items, MarkerConfig};
 
 fn main() {
     // Initialize the logger
@@ -18,8 +19,14 @@ fn main() {
     let path = Path::new(&args[1]);
     let content = std::fs::read_to_string(path).expect("cannot read file");
 
+    // TODO: make this configurable!
+    //     also remove this main altogether
+    let config = MarkerConfig {
+        markers: vec!["TODO:".to_string()],
+    };
+
     // Use the library's extractor
-    let todos = todo_extractor::extract_todos(path, &content);
+    let todos = extract_marked_items(path, &content, &config);
 
     if todos.is_empty() {
         info!("No TODOs found.");

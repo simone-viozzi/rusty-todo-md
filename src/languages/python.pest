@@ -3,48 +3,30 @@
 // ===============================
 
 // A Python file consists of comments, code, and string literals.
-python_file = { SOI ~ (comment | docstring | str_literal | any_non_comment)* ~ EOI }
+python_file = { SOI ~ (comment | str_literal | any_non_comment)* ~ EOI }
 
 // ===============================
-// 🎯 TODO Comments Extraction
+// 📌 Comment Extraction
 // ===============================
 
-// Single-line `TODO:` comments (# TODO: ...)
-todo_comment = @{
-    "#" ~ "TODO:" ~ (!NEWLINE ~ ANY)*
-}
-
-// Multi-line docstring with `TODO:`
-todo_docstring = @{
-    ("\"\"\"" | "'''") ~ "TODO:" ~ (!("\"\"\"" | "'''") ~ ANY)* ~ ("\"\"\"" | "'''")
-}
-
-// ===============================
-// 📌 Regular Comments
-// ===============================
-
-// Regular single-line comments (`# ...`)
+// Single-line comments: match '#' followed by any characters until newline.
 line_comment = @{
     "#" ~ (!NEWLINE ~ ANY)*
 }
 
-// General comment rule (captures all comments)
-comment = { todo_comment | line_comment }
-
-// ===============================
-// 📜 Docstrings
-// ===============================
-
-// Triple-quoted string (`""" ... """` or `''' ... '''` used as docstrings)
+// Docstrings: match triple-quoted strings (either ''' or """).
 docstring = @{
     ("\"\"\"" | "'''") ~ (!("\"\"\"" | "'''") ~ ANY)* ~ ("\"\"\"" | "'''")
 }
+
+// General comment rule: captures both line comments and docstrings.
+comment = { line_comment | docstring }
 
 // ===============================
 // 🚫 Ignoring String Literals
 // ===============================
 
-// Avoid capturing TODOs inside regular string literals
+// String literals: either double-quoted or single-quoted strings.
 str_literal = _{
     "\"" ~ (!"\"" ~ ANY)* ~ "\"" |
     "'" ~ (!"'" ~ ANY)* ~ "'"
@@ -54,5 +36,5 @@ str_literal = _{
 // ❌ Any Other Non-Comment Code
 // ===============================
 
-// Anything that is NOT a comment, docstring, or string
-any_non_comment = { !(comment | docstring | str_literal) ~ ANY }
+// Anything that is NOT a comment or a string literal.
+any_non_comment = { !(comment | str_literal) ~ ANY }

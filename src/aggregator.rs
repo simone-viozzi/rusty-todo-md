@@ -7,11 +7,16 @@ use crate::languages::common_syntax;
 use log::{error, info};
 use pest::Parser;
 
-/// Represents a single found TODO item.
+/// Represents a single found marked item.
 #[derive(Debug, PartialEq)]
-pub struct TodoItem {
+pub struct MarkedItem {
     pub line_number: usize,
     pub message: String,
+}
+
+/// Configuration for comment markers.
+pub struct MarkerConfig {
+    pub markers: Vec<String>,
 }
 
 /// Generic function to parse comments from source code.
@@ -95,20 +100,28 @@ fn extract_comment_from_pair(
 }
 
 /// Given a block of contiguous comment lines (with markers already stripped),
-/// extract the TODO item (if any) by:
-/// 1. Finding the first line containing "TODO:".
+/// extract the marked item (if any) by:
+/// 1. Finding the first line containing any marker.
 /// 2. Joining that line and any immediately indented following lines.
 /// 3. Dedenting and merging them into a single normalized message.
-/// 4. Removing the "TODO:" prefix and trimming the result.
-fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
-    debug!("Extracting TODO from block: {:?}", block);
+/// 4. Removing the marker prefix and trimming the result.
+fn extract_marked_item_from_block(
+    block: &[CommentLine],
+    config: &MarkerConfig,
+) -> Option<MarkedItem> {
+    debug!("Extracting marked item from block: {:?}", block);
 
-    // Find the index of the first line with a TODO marker.
-    let todo_index = block.iter().position(|line| line.text.contains("TODO:"))?;
-    debug!("Found TODO marker at index: {}", todo_index);
+    // Find the index of the first line with any marker.
+    let marker_index = block.iter().position(|line| {
+        config
+            .markers
+            .iter()
+            .any(|marker| line.text.contains(marker))
+    })?;
+    debug!("Found marker at index: {}", marker_index);
 
-    // Get the candidate lines from the TODO line until the end of the block.
-    let candidate_lines: Vec<&str> = block[todo_index..]
+    // Get the candidate lines from the marker line until the end of the block.
+    let candidate_lines: Vec<&str> = block[marker_index..]
         .iter()
         .map(|line| line.text.as_str())
         .collect();
@@ -118,7 +131,7 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
     let joined_block = candidate_lines.join("\n");
     debug!("Joined block:\n{}", joined_block);
 
-    // Dedent the block so that the TODO line starts at column 0.
+    // Dedent the block so that the marker line starts at column 0.
     let dedented_block = common_syntax::dedent_comment(&joined_block);
     debug!("Dedented block:\n{}", dedented_block);
 
@@ -126,14 +139,18 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
     let dedented_lines: Vec<&str> = dedented_block.lines().collect();
     debug!("Dedented lines: {:?}", dedented_lines);
 
-    // Extract candidate TODO lines (first line and any immediately indented following lines).
-    let candidate_todo_lines = extract_candidate_todo_lines(&dedented_lines);
-    debug!("Candidate TODO lines: {:?}", candidate_todo_lines);
+    // Extract candidate marked lines (first line and any immediately indented following lines).
+    let candidate_marked_lines = extract_candidate_marked_lines(&dedented_lines);
+    debug!("Candidate marked lines: {:?}", candidate_marked_lines);
 
-    // *** NEW: Check if the first candidate line starts with "TODO:" ***
-    if let Some(first_line) = candidate_todo_lines.first() {
-        if !first_line.trim_start().starts_with("TODO:") {
-            debug!("Candidate line does not start with 'TODO:', skipping block.");
+    // *** NEW: Check if the first candidate line starts with any marker ***
+    if let Some(first_line) = candidate_marked_lines.first() {
+        if !config
+            .markers
+            .iter()
+            .any(|marker| first_line.trim_start().starts_with(marker))
+        {
+            debug!("Candidate line does not start with any marker, skipping block.");
             return None;
         }
     } else {
@@ -141,27 +158,39 @@ fn extract_todo_from_block(block: &[CommentLine]) -> Option<TodoItem> {
     }
 
     // Merge the candidate lines into a normalized single-line string.
-    let merged = common_syntax::merge_comment_lines(&candidate_todo_lines);
-    debug!("Merged TODO message: {}", merged);
+    let merged = common_syntax::merge_comment_lines(&candidate_marked_lines);
+    debug!("Merged marked message: {}", merged);
 
-    // Remove the "TODO:" prefix and trim any extra whitespace.
-    // At this point, merged is guaranteed to start with "TODO:".
-    let final_message = merged
-        .strip_prefix("TODO:")
-        .map(|s| s.trim_start().to_string())
-        .unwrap_or(merged);
-    debug!("Final TODO message: {}", final_message);
+    // Remove the marker prefix and trim any extra whitespace.
+    // Remove the marker prefix and trim any extra whitespace.
+    // This version makes an optional colon after the marker removable.
+    let final_message = config.markers.iter().fold(merged, |acc, marker| {
+        if let Some(s) = acc.strip_prefix(marker) {
+            let s = s.trim_start();
+            // If a colon is present right after the marker, remove it along with any whitespace.
+            let s = if s.starts_with(':') {
+                &s[1..]
+            } else {
+                s
+            };
+            s.trim().to_string()
+        } else {
+            acc
+        }
+    });
 
-    Some(TodoItem {
-        line_number: block[todo_index].line_number,
+    debug!("Final marked message: {}", final_message);
+
+    Some(MarkedItem {
+        line_number: block[marker_index].line_number,
         message: final_message,
     })
 }
 
-/// Extracts the candidate TODO lines from a list of dedented lines.
-/// It always takes the first line (which contains "TODO:") and then collects
+/// Extracts the candidate marked lines from a list of dedented lines.
+/// It always takes the first line (which contains a marker) and then collects
 /// all subsequent lines that are indented (starting with a space or tab).
-fn extract_candidate_todo_lines<'a>(lines: &'a [&'a str]) -> Vec<&'a str> {
+fn extract_candidate_marked_lines<'a>(lines: &'a [&'a str]) -> Vec<&'a str> {
     let mut candidate = Vec::new();
     if let Some(first_line) = lines.first() {
         candidate.push(*first_line);
@@ -231,19 +260,24 @@ fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<Commen
     }
 }
 
-/// Extracts TODO items from the given file content based on its extension.
+/// Extracts marked items from the given file content based on its extension.
 ///
 /// - `path`: The path to the file.
 /// - `file_content`: The source code text.
-/// - Returns: A `Vec<TodoItem>` containing extracted TODO items.
-pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
+/// - `config`: The marker configuration.
+/// - Returns: A `Vec<MarkedItem>` containing extracted marked items.
+pub fn extract_marked_items(
+    path: &Path,
+    file_content: &str,
+    config: &MarkerConfig,
+) -> Vec<MarkedItem> {
     let extension = path
         .extension()
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_lowercase();
 
-    debug!("extract_todos: extension = '{}'", extension);
+    debug!("extract_marked_items: extension = '{}'", extension);
 
     // Use the helper function to get the comment lines.
     let comment_lines = match get_parser_comments(extension.as_str(), file_content) {
@@ -258,15 +292,18 @@ pub fn extract_todos(path: &Path, file_content: &str) -> Vec<TodoItem> {
     };
 
     debug!(
-        "extract_todos: found {} comment lines from parser: {:?}",
+        "extract_marked_items: found {} comment lines from parser: {:?}",
         comment_lines.len(),
         comment_lines
     );
 
-    // Continue with the existing logic to collect and merge TODOs.
-    let todos = collect_todos_from_comment_lines(&comment_lines);
-    debug!("extract_todos: found {} TODO items total", todos.len());
-    todos
+    // Continue with the existing logic to collect and merge marked items.
+    let marked_items = collect_marked_items_from_comment_lines(&comment_lines, config);
+    debug!(
+        "extract_marked_items: found {} marked items total",
+        marked_items.len()
+    );
+    marked_items
 }
 
 /// A single comment line with (line_number, entire_comment_text).
@@ -276,15 +313,18 @@ pub struct CommentLine {
     pub text: String,
 }
 
-/// Merge contiguous comment lines into blocks and produce a `TodoItem` for each block
-/// that contains a TODO marker. In a block, the TODO’s line number is taken from
+/// Merge contiguous comment lines into blocks and produce a `MarkedItem` for each block
+/// that contains a marker. In a block, the marker’s line number is taken from
 /// the first comment line.  
 ///  
-/// **New behavior:** If a TODO is encountered in a block that already contains a TODO,  
+/// **New behavior:** If a marker is encountered in a block that already contains a marker,  
 /// the current block is terminated (processed) and a new block is started.
-pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> {
+pub fn collect_marked_items_from_comment_lines(
+    lines: &[CommentLine],
+    config: &MarkerConfig,
+) -> Vec<MarkedItem> {
     debug!(
-        "Starting to collect TODOs from comment lines. Total lines: {}",
+        "Starting to collect marked items from comment lines. Total lines: {}",
         lines.len()
     );
 
@@ -292,7 +332,7 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
     let flattened_lines = flatten_comment_lines(lines);
     debug!("Flattened lines count: {}", flattened_lines.len());
 
-    let mut todos = Vec::new();
+    let mut marked_items = Vec::new();
     let mut current_block = Vec::new();
 
     for line in &flattened_lines {
@@ -300,14 +340,19 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
             debug!("Starting new block with line: {:?}", line);
             current_block.push(line.clone());
         } else if is_contiguous(&current_block, line) {
-            // If the current block already contains a TODO and the incoming line also contains one,
+            // If the current block already contains a marker and the incoming line also contains one,
             // we finalize the current block and start a new one.
-            if block_contains_todo(&current_block) && line.text.contains("TODO:") {
+            if block_contains_marker(&current_block, &config.markers)
+                && config
+                    .markers
+                    .iter()
+                    .any(|marker| line.text.contains(marker))
+            {
                 debug!(
-                    "Found a new TODO marker in a block that already contains one. Splitting block at line: {:?}",
+                    "Found a new marker in a block that already contains one. Splitting block at line: {:?}",
                     line
                 );
-                process_block(&mut current_block, &mut todos);
+                process_block(&mut current_block, &mut marked_items, config);
                 current_block.push(line.clone());
             } else {
                 debug!("Adding contiguous line to current block: {:?}", line);
@@ -315,7 +360,7 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
             }
         } else {
             debug!("Non-contiguous line encountered. Finalizing current block.");
-            process_block(&mut current_block, &mut todos);
+            process_block(&mut current_block, &mut marked_items, config);
             debug!("Starting new block with line: {:?}", line);
             current_block.push(line.clone());
         }
@@ -324,24 +369,27 @@ pub fn collect_todos_from_comment_lines(lines: &[CommentLine]) -> Vec<TodoItem> 
     // Process any remaining block.
     if !current_block.is_empty() {
         debug!("Processing final block.");
-        process_block(&mut current_block, &mut todos);
+        process_block(&mut current_block, &mut marked_items, config);
     }
 
     debug!(
-        "Finished collecting TODOs. Total TODOs found: {}",
-        todos.len()
+        "Finished collecting marked items. Total marked items found: {}",
+        marked_items.len()
     );
-    todos
+    marked_items
 }
 
-/// Returns true if the current block already contains a line with a TODO marker.
+/// Returns true if the current block already contains a line with a marker.
 ///
 /// - `block`: A slice of `CommentLine` entries representing the current block.
-/// - Returns: `true` if the block contains a TODO marker, `false` otherwise.
-fn block_contains_todo(block: &[CommentLine]) -> bool {
-    let contains = block.iter().any(|cl| cl.text.contains("TODO:"));
+/// - `markers`: A slice of marker strings.
+/// - Returns: `true` if the block contains a marker, `false` otherwise.
+fn block_contains_marker(block: &[CommentLine], markers: &[String]) -> bool {
+    let contains = block
+        .iter()
+        .any(|cl| markers.iter().any(|marker| cl.text.contains(marker)));
     debug!(
-        "Checking if current block contains a TODO: {} (block: {:?})",
+        "Checking if current block contains a marker: {} (block: {:?})",
         contains, block
     );
     contains
@@ -367,20 +415,25 @@ fn is_contiguous(current_block: &[CommentLine], line: &CommentLine) -> bool {
 }
 
 /// Processes a block of contiguous comment lines by stripping markers and
-/// extracting a TODO item (if present). Clears the block after processing.
+/// extracting a marked item (if present). Clears the block after processing.
 ///
 /// - `block`: A mutable reference to a `Vec<CommentLine>` representing the current block.
-/// - `todos`: A mutable reference to a `Vec<TodoItem>` to store extracted TODO items.
-fn process_block(block: &mut Vec<CommentLine>, todos: &mut Vec<TodoItem>) {
+/// - `marked_items`: A mutable reference to a `Vec<MarkedItem>` to store extracted marked items.
+/// - `config`: The marker configuration.
+fn process_block(
+    block: &mut Vec<CommentLine>,
+    marked_items: &mut Vec<MarkedItem>,
+    config: &MarkerConfig,
+) {
     debug!("Processing block with {} lines: {:?}", block.len(), block);
     let stripped_block = strip_comment_lines(block);
     debug!("Stripped block: {:?}", stripped_block);
 
-    if let Some(todo) = extract_todo_from_block(&stripped_block) {
-        debug!("TODO found in block: {:?}", todo);
-        todos.push(todo);
+    if let Some(marked_item) = extract_marked_item_from_block(&stripped_block, config) {
+        debug!("Marked item found in block: {:?}", marked_item);
+        marked_items.push(marked_item);
     } else {
-        debug!("No TODO found in current block.");
+        debug!("No marked item found in current block.");
     }
     block.clear();
 }

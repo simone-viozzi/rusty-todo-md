@@ -6,52 +6,37 @@
 rust_file = { SOI ~ (comment | str_literal | any_non_comment)* ~ EOI }
 
 // =======================
-// 🎯 TODO Comments Extraction
-// =======================
-
-// Single-line `TODO:` (// TODO: ...)
-todo_comment = @{
-    "//" ~ "TODO:" ~ (!NEWLINE ~ ANY)*
-}
-
-// Block-style `TODO:` (/* TODO: ... */)
-todo_block_comment = @{
-    "/*" ~ "TODO:" ~ (!"*/" ~ ANY)* ~ "*/"
-}
-
-// Doc-style `TODO:` (/// TODO: ...)
-todo_doc_comment = @{
-    "///" ~ "TODO:" ~ (!NEWLINE ~ ANY)*
-}
-
-// =======================
 // 📌 Regular Comments
 // =======================
 
-// Single-line comments: `// ...`
+// Single-line comments: matches lines starting with "//" and continuing until a newline.
 line_comment = @{
     "//" ~ (!NEWLINE ~ ANY)*
 }
 
-// Block comments: `/* ... */`
+// Block comments: matches C-style block comments "/* ... */".
 block_comment = @{
     "/*" ~ (!"*/" ~ ANY)* ~ "*/"
 }
 
-// Rust doc comments: `/// ...` or `//! ...`
+// Doc comments: matches both "///" (line doc) and "//!" (inner doc) comments.
 doc_comment = @{
     "///" ~ (!NEWLINE ~ ANY)* |
     "//!" ~ (!NEWLINE ~ ANY)*
 }
 
-// General comments (captures any kind of comment)
-comment = { todo_comment | todo_block_comment | todo_doc_comment | line_comment | block_comment | doc_comment }
+// =======================
+// General Comments
+// =======================
+
+// Collect all kinds of comments (regular line, block, and doc comments).
+comment = { line_comment | block_comment | doc_comment }
 
 // =======================
 // 🚫 Ignoring String Literals
 // =======================
 
-// Avoids capturing `TODO:` inside strings like `let s = "TODO: fix this";`
+// Matches string literals to avoid extracting comments inside strings.
 str_literal = _{
     "\"" ~ (!"\"" ~ ANY)* ~ "\"" |
     "'" ~ (!"'" ~ ANY)* ~ "'"
@@ -61,5 +46,5 @@ str_literal = _{
 // ❌ Any Other Non-Comment Code
 // =======================
 
-// Matches everything that is NOT a comment or string
+// Matches anything that is NOT a comment or a string literal.
 any_non_comment = { !(comment | str_literal) ~ ANY }
