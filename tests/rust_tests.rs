@@ -33,7 +33,7 @@ fn main() {
 }
 "#;
         let config = MarkerConfig {
-            markers: vec!["TODO".to_string()],
+            markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("example.rs"), src, &config);
         assert_eq!(todos.len(), 1);
@@ -55,7 +55,7 @@ fn foo() {}
 */
 "#;
         let config = MarkerConfig {
-            markers: vec!["TODO".to_string()],
+            markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("lib.rs"), src, &config);
 
@@ -130,7 +130,7 @@ fn foo() {
 // Just some padding
 "#;
         let config = MarkerConfig {
-            markers: vec!["TODO".to_string()],
+            markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("large_file.rs"), src, &config);
 

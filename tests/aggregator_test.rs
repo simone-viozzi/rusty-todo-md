@@ -25,7 +25,7 @@ mod aggregator_tests {
         init_logger();
         let src = "// TODO: Implement feature X";
         let config = MarkerConfig {
-            markers: vec!["TODO".to_string()],
+            markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
@@ -36,7 +36,7 @@ mod aggregator_tests {
         init_logger();
         let src = "// TODO: This should not be processed";
         let config = MarkerConfig {
-            markers: vec!["TODO".to_string()],
+            markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("file.unknown"), src, &config);
         assert_eq!(todos.len(), 0);
@@ -51,7 +51,7 @@ mod aggregator_tests {
 //     Add logging
 "#;
         let config = MarkerConfig {
-            markers: vec!["TODO".to_string()],
+            markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
@@ -69,7 +69,7 @@ mod aggregator_tests {
 // Refactor later
 "#;
         let config = MarkerConfig {
-            markers: vec!["TODO".to_string()],
+            markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
@@ -84,7 +84,7 @@ mod aggregator_tests {
 // TODO: Implement caching
 "#;
         let config = MarkerConfig {
-            markers: vec!["TODO".to_string()],
+            markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
@@ -97,7 +97,7 @@ mod aggregator_tests {
         init_logger();
         let src = "";
         let config = MarkerConfig {
-            markers: vec!["TODO".to_string()],
+            markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 0);
@@ -108,7 +108,7 @@ mod aggregator_tests {
         init_logger();
         let src = "// TODO: Improve logging";
         let config = MarkerConfig {
-            markers: vec!["TODO".to_string()],
+            markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("file.rs"), src, &config);
 
@@ -121,7 +121,7 @@ mod aggregator_tests {
         init_logger();
         let src = "fn main() {}";
         let config = MarkerConfig {
-            markers: vec!["TODO".to_string()],
+            markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert!(todos.is_empty());
@@ -140,7 +140,7 @@ mod aggregator_tests {
 let message = "TODO: This should not be detected";
 "#;
         let config = MarkerConfig {
-            markers: vec!["TODO".to_string()],
+            markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 0);
@@ -154,7 +154,7 @@ let message = "TODO: This should not be detected";
 // TODO: todo2
 "#;
         let config = MarkerConfig {
-            markers: vec!["TODO".to_string()],
+            markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("file.rs"), src, &config);
 
@@ -175,7 +175,7 @@ let message = "TODO: This should not be detected";
 fn main() {}
 "#;
         let config = MarkerConfig {
-            markers: vec!["TODO".to_string()],
+            markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(
