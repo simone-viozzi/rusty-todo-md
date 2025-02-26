@@ -184,4 +184,110 @@ fn main() {}
             "A TODO not at the beginning should not be detected"
         );
     }
+
+    #[test]
+    fn test_fixme_with_colon() {
+        // Test a comment that uses FIXME with a colon.
+        let src = r#"
+    // FIXME: Correct the error handling
+    "#;
+        let config = MarkerConfig {
+            markers: vec!["FIXME".to_string()],
+        };
+        let items = extract_marked_items(Path::new("file.rs"), src, &config);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].message, "Correct the error handling");
+    }
+
+    #[test]
+    fn test_fixme_without_colon() {
+        // Test a comment that uses FIXME without a colon.
+        let src = r#"
+    // FIXME Correct the error handling
+    "#;
+        let config = MarkerConfig {
+            markers: vec!["FIXME".to_string()],
+        };
+        let items = extract_marked_items(Path::new("file.rs"), src, &config);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].message, "Correct the error handling");
+    }
+
+    #[test]
+    fn test_mixed_markers() {
+        // Test a file that mixes both TODO and FIXME comments,
+        // with and without the colon.
+        let src = r#"
+    // TODO: Implement feature A
+    // FIXME: Fix bug in module
+    // Some regular comment
+    // TODO Implement feature B
+    // FIXME Fix another bug
+    "#;
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string(), "FIXME".to_string()],
+        };
+        let items = extract_marked_items(Path::new("file.rs"), src, &config);
+
+        // We expect four items in order.
+        assert_eq!(items.len(), 4);
+        assert_eq!(items[0].message, "Implement feature A");
+        assert_eq!(items[1].message, "Fix bug in module");
+        assert_eq!(items[2].message, "Implement feature B");
+        assert_eq!(items[3].message, "Fix another bug");
+    }
+
+    #[test]
+    fn test_mixed_markers_complex() {
+        // This test mixes both TODO and FIXME comments (with and without a colon),
+        // includes multiline comment blocks, and interleaves non-comment code.
+        let src = r#"
+// TODO: Implement feature A
+
+fn some_function() {
+    // This is a normal comment
+    // FIXME: Fix bug in module
+    println!("Hello, world!");
+}
+
+/*
+   TODO: Implement feature C
+       with additional multiline details
+*/
+
+/// FIXME Fix critical bug
+///   that occurs on edge cases
+
+// TODO Implement feature B
+
+// FIXME Fix another bug
+"#;
+
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string(), "FIXME".to_string()],
+        };
+        let items = extract_marked_items(Path::new("file.rs"), src, &config);
+
+        // We expect six separate marked items:
+        // 1. "Implement feature A"
+        // 2. "Fix bug in module"
+        // 3. "Implement feature C with additional multiline details"
+        // 4. "Fix critical bug that occurs on edge cases"
+        // 5. "Implement feature B"
+        // 6. "Fix another bug"
+        assert_eq!(items.len(), 6);
+
+        assert_eq!(items[0].message, "Implement feature A");
+        assert_eq!(items[1].message, "Fix bug in module");
+        assert_eq!(
+            items[2].message,
+            "Implement feature C with additional multiline details"
+        );
+        assert_eq!(
+            items[3].message,
+            "Fix critical bug that occurs on edge cases"
+        );
+        assert_eq!(items[4].message, "Implement feature B");
+        assert_eq!(items[5].message, "Fix another bug");
+    }
 }

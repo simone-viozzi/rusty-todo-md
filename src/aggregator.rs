@@ -162,11 +162,23 @@ fn extract_marked_item_from_block(
     debug!("Merged marked message: {}", merged);
 
     // Remove the marker prefix and trim any extra whitespace.
+    // Remove the marker prefix and trim any extra whitespace.
+    // This version makes an optional colon after the marker removable.
     let final_message = config.markers.iter().fold(merged, |acc, marker| {
-        acc.strip_prefix(marker)
-            .map(|s| s.trim_start().to_string())
-            .unwrap_or(acc)
+        if let Some(s) = acc.strip_prefix(marker) {
+            let s = s.trim_start();
+            // If a colon is present right after the marker, remove it along with any whitespace.
+            let s = if s.starts_with(':') {
+                &s[1..]
+            } else {
+                s
+            };
+            s.trim().to_string()
+        } else {
+            acc
+        }
     });
+
     debug!("Final marked message: {}", final_message);
 
     Some(MarkedItem {
