@@ -5,7 +5,6 @@ pub use crate::todo_extractor_internal::aggregator::{
 };
 
 pub fn extract_todos(file_path: &Path, content: &str) -> Vec<MarkedItem> {
-    let todos = extract_marked_items(file_path, content, &MarkerConfig::default());
-
-    return todos;
+    extract_marked_items(file_path, content, &MarkerConfig::default())
 }
+
