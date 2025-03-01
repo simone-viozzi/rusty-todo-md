@@ -84,4 +84,36 @@ mod integration_tests {
             "Expected TODO comment in TODO.md"
         );
     }
+
+    #[test]
+    fn test_run_workflow_all_files() {
+        init_logger();
+        // Set up a temporary Git repository using our test helper.
+        let temp_repo = TempGitRepo::new();
+        let todo_path = temp_repo.repo_path.join("TODO.md");
+
+        // Create a new file with a TODO comment and commit it so that it is tracked.
+        temp_repo.create_file("file_all.rs", "// TODO: Implement all features");
+        temp_repo.stage_file("file_all.rs");
+        temp_repo.commit("Add file_all.rs");
+
+        // Run the workflow with the --all-files option enabled (i.e. all_files flag set to true).
+        let result = run_workflow(&todo_path, &temp_repo.repo_path, true);
+        assert!(result.is_ok(), "Workflow failed with error: {:?}", result);
+
+        // Verify that TODO.md has been created.
+        assert!(todo_path.exists(), "TODO.md should have been created");
+
+        // Read and verify that the content of TODO.md includes our file and TODO comment.
+        let content = std::fs::read_to_string(&todo_path).expect("Failed to read TODO.md");
+        log::debug!("TODO.md content:\n{}", content);
+        assert!(
+            content.contains("file_all.rs"),
+            "Expected file_all.rs in TODO.md"
+        );
+        assert!(
+            content.contains("Implement all features"),
+            "Expected TODO comment in TODO.md"
+        );
+    }
 }
