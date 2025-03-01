@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub use crate::todo_extractor_internal::aggregator::{
     extract_marked_items, MarkedItem, MarkerConfig,
