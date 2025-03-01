@@ -3,9 +3,9 @@ mod python_tests {
     use log::LevelFilter;
     use std::path::Path;
     use std::sync::Once;
-    use todo_extractor::aggregator::extract_marked_items;
+    use todo_extractor::{extract_marked_items, MarkerConfig};
     use todo_extractor::logger;
-    use todo_extractor::MarkerConfig;
+
 
     static INIT: Once = Once::new();
 
