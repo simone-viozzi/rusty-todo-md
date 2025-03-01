@@ -1,0 +1,50 @@
+// =======================
+// 🦀 Rust Comment Parser
+// =======================
+
+// The entire Rust file consists of sequences of comments, code, and string literals.
+rust_file = { SOI ~ (comment | str_literal | any_non_comment)* ~ EOI }
+
+// =======================
+// 📌 Regular Comments
+// =======================
+
+// Single-line comments: matches lines starting with "//" and continuing until a newline.
+line_comment = @{
+    "//" ~ (!NEWLINE ~ ANY)*
+}
+
+// Block comments: matches C-style block comments "/* ... */".
+block_comment = @{
+    "/*" ~ (!"*/" ~ ANY)* ~ "*/"
+}
+
+// Doc comments: matches both "///" (line doc) and "//!" (inner doc) comments.
+doc_comment = @{
+    "///" ~ (!NEWLINE ~ ANY)* |
+    "//!" ~ (!NEWLINE ~ ANY)*
+}
+
+// =======================
+// General Comments
+// =======================
+
+// Collect all kinds of comments (regular line, block, and doc comments).
+comment = { line_comment | block_comment | doc_comment }
+
+// =======================
+// 🚫 Ignoring String Literals
+// =======================
+
+// Matches string literals to avoid extracting comments inside strings.
+str_literal = _{
+    "\"" ~ (!"\"" ~ ANY)* ~ "\"" |
+    "'" ~ (!"'" ~ ANY)* ~ "'"
+}
+
+// =======================
+// ❌ Any Other Non-Comment Code
+// =======================
+
+// Matches anything that is NOT a comment or a string literal.
+any_non_comment = { !(comment | str_literal) ~ ANY }

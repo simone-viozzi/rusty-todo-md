@@ -1,4 +1,4 @@
-use crate::todo_extractor::TodoItem;
+use crate::todo_extractor::MarkedItem;
 use comrak::{nodes::AstNode, parse_document, Arena, ComrakOptions};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 ///
 /// # Returns
 /// A vector of `TodoItem`s parsed from the existing TODO.md file.
-pub fn read_todo_file(todo_path: &Path) -> Vec<TodoItem> {
+pub fn read_todo_file(todo_path: &Path) -> Vec<MarkedItem> {
     let mut todos = Vec::new();
     let arena = Arena::new();
     let options = ComrakOptions::default();
@@ -27,7 +27,7 @@ pub fn read_todo_file(todo_path: &Path) -> Vec<TodoItem> {
 }
 
 /// Recursively processes the AST nodes to extract TODO items.
-fn extract_todos_from_ast<'a>(node: &'a AstNode<'a>, todos: &mut Vec<TodoItem>) {
+fn extract_todos_from_ast<'a>(node: &'a AstNode<'a>, todos: &mut Vec<MarkedItem>) {
     let mut current_path: Option<String> = None;
     let mut current_line: Option<usize> = None;
 
@@ -49,10 +49,10 @@ fn extract_todos_from_ast<'a>(node: &'a AstNode<'a>, todos: &mut Vec<TodoItem>) 
                     // Trim leading ": " or whitespace
                     let cleaned_comment = comment.trim().trim_start_matches(':').trim();
 
-                    todos.push(TodoItem {
+                    todos.push(MarkedItem {
                         file_path: PathBuf::from(path),
                         line_number: line,
-                        comment: cleaned_comment.to_string(),
+                        message: cleaned_comment.to_string(),
                     });
                 }
                 current_path = None;
@@ -83,7 +83,7 @@ fn parse_link(link: &str) -> Option<(&str, usize)> {
     None
 }
 
-pub fn sync_todo_file(todo_path: &Path, new_todos: Vec<TodoItem>) -> Result<(), std::io::Error> {
+pub fn sync_todo_file(todo_path: &Path, new_todos: Vec<MarkedItem>) -> Result<(), std::io::Error> {
     let mut existing_todos = read_todo_file(todo_path);
     existing_todos.retain(|existing| new_todos.contains(existing));
 
@@ -107,7 +107,7 @@ pub fn sync_todo_file(todo_path: &Path, new_todos: Vec<TodoItem>) -> Result<(), 
 /// # Arguments
 /// - `todo_path`: The path to the TODO.md file.
 /// - `todos`: A list of `TodoItem`s to write.
-pub fn write_todo_file(todo_path: &Path, todos: &[TodoItem]) -> std::io::Result<()> {
+pub fn write_todo_file(todo_path: &Path, todos: &[MarkedItem]) -> std::io::Result<()> {
     let mut content = String::new();
 
     for todo in todos {
@@ -117,7 +117,7 @@ pub fn write_todo_file(todo_path: &Path, todos: &[TodoItem]) -> std::io::Result<
             todo.line_number,
             todo.file_path.display(),
             todo.line_number,
-            todo.comment
+            todo.message
         ));
     }
 
@@ -136,15 +136,15 @@ mod tests {
         let todo_path = temp_dir.path().join("TODO.md");
 
         let new_todos = vec![
-            TodoItem {
+            MarkedItem {
                 file_path: PathBuf::from("src/main.rs"),
                 line_number: 10,
-                comment: "Refactor this function".to_string(),
+                message: "Refactor this function".to_string(),
             },
-            TodoItem {
+            MarkedItem {
                 file_path: PathBuf::from("src/lib.rs"),
                 line_number: 5,
-                comment: "Add error handling".to_string(),
+                message: "Add error handling".to_string(),
             },
         ];
 
@@ -176,18 +176,18 @@ mod tests {
         assert_eq!(todos.len(), 2);
         assert_eq!(
             todos[0],
-            TodoItem {
+            MarkedItem {
                 file_path: PathBuf::from("src/main.rs"),
                 line_number: 12,
-                comment: "Refactor this function".to_string(),
+                message: "Refactor this function".to_string(),
             }
         );
         assert_eq!(
             todos[1],
-            TodoItem {
+            MarkedItem {
                 file_path: PathBuf::from("src/lib.rs"),
                 line_number: 5,
-                comment: "Add error handling".to_string(),
+                message: "Add error handling".to_string(),
             }
         );
     }
