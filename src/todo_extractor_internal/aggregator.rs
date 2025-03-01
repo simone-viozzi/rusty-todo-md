@@ -178,7 +178,11 @@ fn extract_marked_item_from_block(
         if let Some(s) = acc.strip_prefix(marker) {
             let s = s.trim_start();
             // If a colon is present right after the marker, remove it along with any whitespace.
-            let s = if let Some(stripped) = s.strip_prefix(':') { stripped } else { s };
+            let s = if let Some(stripped) = s.strip_prefix(':') {
+                stripped
+            } else {
+                s
+            };
             s.trim().to_string()
         } else {
             acc
