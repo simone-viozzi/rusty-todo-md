@@ -1,4 +1,5 @@
 use git2::{DiffOptions, Error as GitError, Repository};
+use log::info;
 use std::path::{Path, PathBuf};
 
 /// Opens the Git repository at the specified path.
@@ -41,6 +42,8 @@ pub fn get_staged_files(repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
         None,
         None,
     )?;
+
+    info!("found {} staged files", staged_files.len());
 
     Ok(staged_files)
 }

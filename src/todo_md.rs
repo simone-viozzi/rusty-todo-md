@@ -1,5 +1,6 @@
 use crate::todo_extractor::MarkedItem;
 use comrak::{nodes::AstNode, parse_document, Arena, ComrakOptions};
+use log::info;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -22,6 +23,12 @@ pub fn read_todo_file(todo_path: &Path) -> Vec<MarkedItem> {
         // Traverse the AST to extract TODO items
         extract_todos_from_ast(root, &mut todos);
     }
+
+    info!(
+        "Read {} TODO items from {}",
+        todos.len(),
+        todo_path.display()
+    );
 
     todos
 }
