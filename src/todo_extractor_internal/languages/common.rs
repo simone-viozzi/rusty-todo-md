@@ -1,6 +1,6 @@
 // src/languages/common.rs
 
-use crate::aggregator::CommentLine;
+use crate::todo_extractor_internal::aggregator::CommentLine;
 
 /// A trait for parsing comments from source code.
 pub trait CommentParser {

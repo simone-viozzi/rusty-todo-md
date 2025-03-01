@@ -1,12 +1,12 @@
 // src/languages/rust.rs
 
-use crate::aggregator::{parse_comments, CommentLine};
-use crate::languages::common::CommentParser; // Import the trait
+use crate::todo_extractor_internal::aggregator::{parse_comments, CommentLine};
+use crate::todo_extractor_internal::languages::common::CommentParser; // Import the trait
 use pest_derive::Parser;
 use std::marker::PhantomData;
 
 #[derive(Parser)]
-#[grammar = "languages/rust.pest"]
+#[grammar = "todo_extractor_internal/languages/rust.pest"]
 pub struct RustParser;
 
 impl CommentParser for RustParser {

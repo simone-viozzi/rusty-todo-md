@@ -2,8 +2,8 @@ use log::debug;
 use std::marker::PhantomData;
 use std::path::Path;
 
-use crate::languages::common::CommentParser;
-use crate::languages::common_syntax;
+use crate::todo_extractor_internal::languages::common::CommentParser;
+use crate::todo_extractor_internal::languages::common_syntax;
 use log::{error, info};
 use pest::Parser;
 
@@ -243,10 +243,10 @@ fn flatten_comment_lines(lines: &[CommentLine]) -> Vec<CommentLine> {
 /// - Returns: An `Option<Vec<CommentLine>>` containing extracted comments if successful.
 fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<CommentLine>> {
     match extension {
-        "py" => Some(crate::languages::python::PythonParser::parse_comments(
+        "py" => Some(crate::todo_extractor_internal::languages::python::PythonParser::parse_comments(
             file_content,
         )),
-        "rs" => Some(crate::languages::rust::RustParser::parse_comments(
+        "rs" => Some(crate::todo_extractor_internal::languages::rust::RustParser::parse_comments(
             file_content,
         )),
         // Add new extensions and their corresponding parser calls here:
