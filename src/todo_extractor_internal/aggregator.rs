@@ -16,6 +16,7 @@ pub struct MarkedItem {
 }
 
 /// Configuration for comment markers.
+/// TODO make sure we strip : from markers, so that TODO and TODO: are treated the same
 pub struct MarkerConfig {
     pub markers: Vec<String>,
 }
@@ -57,17 +58,17 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
             for pair in pairs {
                 // Iterate over children of the rust_file or python_file.
                 for inner_pair in pair.into_inner() {
-                    debug!(
-                        "Processing child pair: {:?} => '{}'",
-                        inner_pair.as_rule(),
-                        inner_pair.as_str().replace('\n', "\\n")
-                    );
+                    //debug!(
+                    //    "Processing child pair: {:?} => '{}'",
+                    //    inner_pair.as_rule(),
+                    //    inner_pair.as_str().replace('\n', "\\n")
+                    //);
 
                     if let Some(comment) = extract_comment_from_pair(inner_pair) {
                         debug!("Extracted comment: {:?}", comment);
                         comments.push(comment);
                     } else {
-                        debug!("Skipped non-comment pair.");
+                        //debug!("Skipped non-comment pair.");
                     }
                 }
             }
@@ -356,7 +357,7 @@ pub fn collect_marked_items_from_comment_lines(
             debug!("Starting new block with line: {:?}", line);
             current_block.push(line.clone());
         } else if is_contiguous(&current_block, line) {
-            // If the current block already contains a marker and the incoming line also contains one,
+            // If the current block already contains a marker and the incoming line also starts with one,
             // we finalize the current block and start a new one.
             if block_contains_marker(&current_block, &config.markers)
                 && config
@@ -766,5 +767,25 @@ fn some_function() {
         );
         assert_eq!(items[4].message, "Implement feature B");
         assert_eq!(items[5].message, "Fix another bug");
+    }
+
+    
+
+    #[test]
+    fn test_merge_multiline_todo_with_todo_in_str() {
+        init_logger();
+        let src = r#"
+// TODO add a new argument to specify what markers to look for
+//      like --markers "TODO, FIXME, HACK"
+"#;
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
+        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
+
+        assert_eq!(todos.len(), 1);
+
+        assert_eq!(todos[0].line_number, 2);
+        assert_eq!(todos[0].message, "add a new argument to specify what markers to look for like --markers \"TODO, FIXME, HACK\"");
     }
 }
