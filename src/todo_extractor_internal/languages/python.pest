@@ -1,0 +1,40 @@
+// ===============================
+// 🐍 Python Comment Parser
+// ===============================
+
+// A Python file consists of comments, code, and string literals.
+python_file = { SOI ~ (comment | str_literal | any_non_comment)* ~ EOI }
+
+// ===============================
+// 📌 Comment Extraction
+// ===============================
+
+// Single-line comments: match '#' followed by any characters until newline.
+line_comment = @{
+    "#" ~ (!NEWLINE ~ ANY)*
+}
+
+// Docstrings: match triple-quoted strings (either ''' or """).
+docstring = @{
+    ("\"\"\"" | "'''") ~ (!("\"\"\"" | "'''") ~ ANY)* ~ ("\"\"\"" | "'''")
+}
+
+// General comment rule: captures both line comments and docstrings.
+comment = { line_comment | docstring }
+
+// ===============================
+// 🚫 Ignoring String Literals
+// ===============================
+
+// String literals: either double-quoted or single-quoted strings.
+str_literal = _{
+    "\"" ~ (!"\"" ~ ANY)* ~ "\"" |
+    "'" ~ (!"'" ~ ANY)* ~ "'"
+}
+
+// ===============================
+// ❌ Any Other Non-Comment Code
+// ===============================
+
+// Anything that is NOT a comment or a string literal.
+any_non_comment = { !(comment | str_literal) ~ ANY }
