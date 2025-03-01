@@ -15,15 +15,13 @@ impl CommentParser for PythonParser {
     }
 }
 
-
 #[cfg(test)]
 mod python_tests {
+    use crate::logger;
+    use crate::todo_extractor_internal::aggregator::{extract_marked_items, MarkerConfig};
     use log::LevelFilter;
     use std::path::Path;
     use std::sync::Once;
-    use crate::todo_extractor_internal::aggregator::{extract_marked_items, MarkerConfig};
-    use crate::logger;
-
 
     static INIT: Once = Once::new();
 

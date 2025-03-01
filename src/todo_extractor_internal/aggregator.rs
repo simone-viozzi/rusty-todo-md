@@ -1,6 +1,6 @@
 use log::debug;
-use std::marker::PhantomData;
 use std::path::Path;
+use std::{marker::PhantomData, path::PathBuf};
 
 use crate::todo_extractor_internal::languages::common::CommentParser;
 use crate::todo_extractor_internal::languages::common_syntax;
@@ -8,8 +8,9 @@ use log::{error, info};
 use pest::Parser;
 
 /// Represents a single found marked item.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct MarkedItem {
+    pub file_path: PathBuf,
     pub line_number: usize,
     pub message: String,
 }
@@ -17,6 +18,14 @@ pub struct MarkedItem {
 /// Configuration for comment markers.
 pub struct MarkerConfig {
     pub markers: Vec<String>,
+}
+
+impl Default for MarkerConfig {
+    fn default() -> Self {
+        MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        }
+    }
 }
 
 /// Generic function to parse comments from source code.
@@ -108,6 +117,7 @@ fn extract_comment_from_pair(
 fn extract_marked_item_from_block(
     block: &[CommentLine],
     config: &MarkerConfig,
+    path: &Path,
 ) -> Option<MarkedItem> {
     debug!("Extracting marked item from block: {:?}", block);
 
@@ -180,6 +190,7 @@ fn extract_marked_item_from_block(
     Some(MarkedItem {
         line_number: block[marker_index].line_number,
         message: final_message,
+        file_path: path.to_path_buf(),
     })
 }
 
@@ -243,12 +254,16 @@ fn flatten_comment_lines(lines: &[CommentLine]) -> Vec<CommentLine> {
 /// - Returns: An `Option<Vec<CommentLine>>` containing extracted comments if successful.
 fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<CommentLine>> {
     match extension {
-        "py" => Some(crate::todo_extractor_internal::languages::python::PythonParser::parse_comments(
-            file_content,
-        )),
-        "rs" => Some(crate::todo_extractor_internal::languages::rust::RustParser::parse_comments(
-            file_content,
-        )),
+        "py" => Some(
+            crate::todo_extractor_internal::languages::python::PythonParser::parse_comments(
+                file_content,
+            ),
+        ),
+        "rs" => Some(
+            crate::todo_extractor_internal::languages::rust::RustParser::parse_comments(
+                file_content,
+            ),
+        ),
         // Add new extensions and their corresponding parser calls here:
         // "js" => Some(crate::languages::js::JsParser::parse_comments(file_content)),
         // "ts" => Some(crate::languages::ts::TsParser::parse_comments(file_content)),
@@ -294,7 +309,7 @@ pub fn extract_marked_items(
     );
 
     // Continue with the existing logic to collect and merge marked items.
-    let marked_items = collect_marked_items_from_comment_lines(&comment_lines, config);
+    let marked_items = collect_marked_items_from_comment_lines(&comment_lines, config, path);
     debug!(
         "extract_marked_items: found {} marked items total",
         marked_items.len()
@@ -318,6 +333,7 @@ pub struct CommentLine {
 pub fn collect_marked_items_from_comment_lines(
     lines: &[CommentLine],
     config: &MarkerConfig,
+    path: &Path,
 ) -> Vec<MarkedItem> {
     debug!(
         "Starting to collect marked items from comment lines. Total lines: {}",
@@ -348,7 +364,7 @@ pub fn collect_marked_items_from_comment_lines(
                     "Found a new marker in a block that already contains one. Splitting block at line: {:?}",
                     line
                 );
-                process_block(&mut current_block, &mut marked_items, config);
+                process_block(&mut current_block, &mut marked_items, config, path);
                 current_block.push(line.clone());
             } else {
                 debug!("Adding contiguous line to current block: {:?}", line);
@@ -356,7 +372,7 @@ pub fn collect_marked_items_from_comment_lines(
             }
         } else {
             debug!("Non-contiguous line encountered. Finalizing current block.");
-            process_block(&mut current_block, &mut marked_items, config);
+            process_block(&mut current_block, &mut marked_items, config, path);
             debug!("Starting new block with line: {:?}", line);
             current_block.push(line.clone());
         }
@@ -365,7 +381,7 @@ pub fn collect_marked_items_from_comment_lines(
     // Process any remaining block.
     if !current_block.is_empty() {
         debug!("Processing final block.");
-        process_block(&mut current_block, &mut marked_items, config);
+        process_block(&mut current_block, &mut marked_items, config, path);
     }
 
     debug!(
@@ -420,12 +436,13 @@ fn process_block(
     block: &mut Vec<CommentLine>,
     marked_items: &mut Vec<MarkedItem>,
     config: &MarkerConfig,
+    path: &Path,
 ) {
     debug!("Processing block with {} lines: {:?}", block.len(), block);
     let stripped_block = strip_comment_lines(block);
     debug!("Stripped block: {:?}", stripped_block);
 
-    if let Some(marked_item) = extract_marked_item_from_block(&stripped_block, config) {
+    if let Some(marked_item) = extract_marked_item_from_block(&stripped_block, config, path) {
         debug!("Marked item found in block: {:?}", marked_item);
         marked_items.push(marked_item);
     } else {
@@ -455,15 +472,13 @@ fn strip_comment_lines(block: &[CommentLine]) -> Vec<CommentLine> {
         .collect()
 }
 
-
-
 #[cfg(test)]
 mod aggregator_tests {
     use super::*;
+    use crate::logger;
     use log::LevelFilter;
     use std::path::Path;
     use std::sync::Once;
-    use crate::logger;
 
     static INIT: Once = Once::new();
 
