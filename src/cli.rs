@@ -3,6 +3,7 @@ use crate::todo_extractor;
 use crate::todo_md;
 use clap::{Arg, ArgAction, Command};
 use std::path::Path;
+use log::{debug, error, info};
 
 pub fn run_cli() {
     // Define CLI arguments using clap
@@ -26,11 +27,11 @@ pub fn run_cli() {
         .get_one::<String>("todo_path")
         .expect("TODO.md path should have a default value");
 
-    println!("Updating TODO file at: {}", todo_path);
+    info!("Updating TODO file at: {}", todo_path);
 
     // Run the workflow
     if let Err(e) = run_workflow(Path::new(todo_path), Path::new(".")) {
-        eprintln!("Error: {}", e);
+        error!("Error: {}", e);
         std::process::exit(1);
     }
 }
@@ -46,13 +47,13 @@ pub fn run_workflow(todo_path: &Path, repo_path: &Path) -> Result<(), String> {
         .map_err(|e| format!("Failed to retrieve staged files: {}", e))?;
 
     if staged_files.is_empty() {
-        println!("No staged files found.");
+        info!("No staged files found.");
         return Ok(());
     }
 
-    println!("Staged files:");
+    info!("Staged files:");
     for file in &staged_files {
-        println!("- {:?}", file);
+        info!("- {:?}", file);
     }
 
     // Extract TODO comments from staged files
@@ -63,12 +64,12 @@ pub fn run_workflow(todo_path: &Path, repo_path: &Path) -> Result<(), String> {
             let todos = todo_extractor::extract_todos(&file, &content);
             new_todos.extend(todos);
         } else {
-            eprintln!("Warning: Could not read file {:?}, skipping.", file);
+            error!("Warning: Could not read file {:?}, skipping.", file);
         }
     }
 
     if new_todos.is_empty() {
-        println!("No TODO comments found in staged files.");
+        info!("No TODO comments found in staged files.");
         return Ok(());
     }
 
@@ -76,6 +77,6 @@ pub fn run_workflow(todo_path: &Path, repo_path: &Path) -> Result<(), String> {
     todo_md::sync_todo_file(todo_path, new_todos)
         .map_err(|e| format!("Failed to update TODO.md: {}", e))?;
 
-    println!("TODO.md successfully updated.");
+    info!("TODO.md successfully updated.");
     Ok(())
 }

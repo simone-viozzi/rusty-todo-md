@@ -2,6 +2,7 @@ use crate::todo_extractor::MarkedItem;
 use comrak::{nodes::AstNode, parse_document, Arena, ComrakOptions};
 use std::fs;
 use std::path::{Path, PathBuf};
+use log::{debug, error, info};
 
 /// Reads the existing TODO.md file and returns a vector of `TodoItem`s.
 /// If the file does not exist, returns an empty vector.
@@ -22,6 +23,8 @@ pub fn read_todo_file(todo_path: &Path) -> Vec<MarkedItem> {
         // Traverse the AST to extract TODO items
         extract_todos_from_ast(root, &mut todos);
     }
+
+    info!("Read {} TODO items from {}", todos.len(), todo_path.display());
 
     todos
 }
