@@ -2,8 +2,8 @@ use crate::git_utils;
 use crate::todo_extractor;
 use crate::todo_md;
 use clap::{Arg, ArgAction, Command};
+use log::{error, info};
 use std::path::Path;
-use log::{debug, error, info};
 
 pub fn run_cli() {
     // Define CLI arguments using clap

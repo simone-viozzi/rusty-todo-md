@@ -1,6 +1,6 @@
 use git2::{DiffOptions, Error as GitError, Repository};
+use log::info;
 use std::path::{Path, PathBuf};
-use log::{debug, error, info};
 
 /// Opens the Git repository at the specified path.
 /// Returns an error if the specified path is not a Git repository.

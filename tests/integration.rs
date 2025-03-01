@@ -2,13 +2,13 @@ mod utils;
 
 mod integration_tests {
     use super::*;
+    use log::LevelFilter;
     use rusty_todo_md::cli::run_workflow;
+    use rusty_todo_md::git_utils;
     use rusty_todo_md::git_utils::get_staged_files;
+    use rusty_todo_md::logger;
     use std::fs;
     use std::path::PathBuf;
-    use rusty_todo_md::logger;
-    use log::LevelFilter;
-    use rusty_todo_md::git_utils;
     use std::sync::Once;
     use utils::TempGitRepo;
 
