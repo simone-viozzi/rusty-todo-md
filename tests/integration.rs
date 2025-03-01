@@ -68,7 +68,7 @@ mod integration_tests {
         log::debug!("Staged files from index: {:?}", staged_files);
 
         // Run the workflow
-        let result = run_workflow(&todo_path, &temp_repo.repo_path);
+        let result = run_workflow(&todo_path, &temp_repo.repo_path, false);
 
         assert!(result.is_ok(), "Workflow failed with error: {:?}", result);
 
