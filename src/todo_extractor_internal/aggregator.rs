@@ -329,91 +329,91 @@ pub struct CommentLine {
     pub text: String,
 }
 
-/// Merge contiguous comment lines into blocks and produce a `MarkedItem` for each block
-/// that starts with a marker. For each block:
-/// 1. All comment markers are stripped from the lines.
-/// 2. A new block is started whenever a line begins with any marker.
-/// 3. Any following indented lines (i.e. starting with a space or tab) are treated as
-///    continuations of the current marked item.
-/// 4. The block is merged into a single normalized message with the marker prefix removed.
+/// Merge flattened and stripped comment lines into blocks and produce a `MarkedItem` for each block.
+/// A block is defined as a group of lines that starts with a marker (e.g. "TODO:" or "FIXME")
+/// and includes any immediately indented lines (which are treated as continuations).
 pub fn collect_marked_items_from_comment_lines(
     lines: &[CommentLine],
     config: &MarkerConfig,
     path: &Path,
 ) -> Vec<MarkedItem> {
-    // First, flatten any multi-line comment entries.
-    let flattened_lines = flatten_comment_lines(lines);
+    // First, flatten multi-line comments and strip language-specific markers.
+    let stripped_lines = strip_and_flatten(lines);
+    // Group the lines into blocks based on marker lines and their indented continuations.
+    let blocks = group_lines_into_blocks(stripped_lines, &config.markers);
+    // Convert each block into a MarkedItem.
+    blocks
+        .into_iter()
+        .map(|(line_number, block)| MarkedItem {
+            file_path: path.to_path_buf(),
+            line_number,
+            message: process_block_lines(&block, &config.markers),
+        })
+        .collect()
+}
 
-    // Remove language-specific markers from all lines upfront.
-    let stripped_lines: Vec<CommentLine> = flattened_lines
-        .iter()
+/// Utility: Flattens multi-line comment entries and strips language-specific markers from each line.
+fn strip_and_flatten(lines: &[CommentLine]) -> Vec<CommentLine> {
+    flatten_comment_lines(lines)
+        .into_iter()
         .map(|cl| CommentLine {
             line_number: cl.line_number,
             text: common_syntax::strip_markers(&cl.text),
         })
-        .collect();
+        .collect()
+}
 
-    let mut marked_items = Vec::new();
-    // current_block holds an optional tuple:
-    // (line number where the marker was found, and the accumulated lines for this marked item)
+/// Utility: Groups stripped comment lines into blocks. Each block is a tuple containing:
+/// - The line number where the block starts (i.e. the marker line)
+/// - A vector of strings representing the block’s lines (with markers already stripped)
+fn group_lines_into_blocks(
+    lines: Vec<CommentLine>,
+    markers: &[String],
+) -> Vec<(usize, Vec<String>)> {
+    let mut blocks = Vec::new();
     let mut current_block: Option<(usize, Vec<String>)> = None;
 
-    for cl in stripped_lines {
-        let trimmed = cl.text.trim();
-        // Check if this line starts with any marker.
-        if config.markers.iter().any(|marker| trimmed.starts_with(marker)) {
-            // If there is an active block, finalize it first.
-            if let Some((line_number, block_lines)) = current_block.take() {
-                let message = process_block_lines(&block_lines, &config.markers);
-                marked_items.push(MarkedItem {
-                    file_path: path.to_path_buf(),
-                    line_number,
-                    message,
-                });
+    for cl in lines {
+        // Use the trimmed version for grouping.
+        let trimmed = cl.text.trim().to_string();
+        if is_marker_line(&trimmed, markers) {
+            // If a block is in progress, finalize it.
+            if let Some(block) = current_block.take() {
+                blocks.push(block);
             }
-            // Start a new block with the current marker line.
-            current_block = Some((cl.line_number, vec![trimmed.to_string()]));
+            // Start a new block with this marker line.
+            current_block = Some((cl.line_number, vec![trimmed]));
         } else if let Some((_, ref mut block_lines)) = current_block {
-            // If the line is indented, it is a continuation of the current block.
+            // If the line is indented, treat it as a continuation of the current block.
             if cl.text.starts_with(' ') || cl.text.starts_with('\t') {
-                block_lines.push(trimmed.to_string());
+                block_lines.push(trimmed);
             } else {
-                // If the line is not indented, then finalize the current block and ignore this line.
-                let (line_number, block_lines) = current_block.take().unwrap();
-                let message = process_block_lines(&block_lines, &config.markers);
-                marked_items.push(MarkedItem {
-                    file_path: path.to_path_buf(),
-                    line_number,
-                    message,
-                });
+                // Otherwise, finalize the current block.
+                blocks.push(current_block.take().unwrap());
             }
         }
-        // Lines that don’t start with a marker and aren’t indented in an active block are ignored.
+        // Lines that are not marker lines and not indented within a block are ignored.
     }
 
     // Finalize any remaining block.
-    if let Some((line_number, block_lines)) = current_block.take() {
-        let message = process_block_lines(&block_lines, &config.markers);
-        marked_items.push(MarkedItem {
-            file_path: path.to_path_buf(),
-            line_number,
-            message,
-        });
+    if let Some(block) = current_block {
+        blocks.push(block);
     }
-
-    marked_items
+    blocks
 }
 
+/// Utility: Returns true if the given text starts with any of the marker strings.
+fn is_marker_line(text: &str, markers: &[String]) -> bool {
+    markers.iter().any(|marker| text.starts_with(marker))
+}
 
-/// Merges the given block lines into a single normalized message and removes the marker prefix.
+/// Utility: Merges block lines into a single normalized message and removes the marker prefix.
 /// For example, if the block lines are:
 ///   ["TODO: first", "more text"]
-/// and the marker is "TODO:", then the resulting message will be:
+/// and the marker is "TODO:", the resulting message will be:
 ///   "first more text"
 fn process_block_lines(lines: &[String], markers: &[String]) -> String {
-    // Merge the block lines into one string.
     let merged = lines.join(" ");
-    // Remove the marker prefix from the beginning if present.
     markers.iter().fold(merged, |acc, marker| {
         if let Some(stripped) = acc.strip_prefix(marker) {
             stripped.trim().to_string()
