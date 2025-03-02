@@ -359,11 +359,7 @@ pub fn collect_marked_items_from_comment_lines(
         } else if is_contiguous(&current_block, line) {
             // If the current block already contains a marker and the incoming line also starts with one,
             // we finalize the current block and start a new one.
-            if block_contains_marker(&current_block, &config.markers)
-                && config
-                    .markers
-                    .iter()
-                    .any(|marker| line.text.contains(marker))
+            if !block_starts_with_marker(&current_block, &config.markers)
             {
                 debug!(
                     "Found a new marker in a block that already contains one. Splitting block at line: {:?}",
@@ -401,16 +397,24 @@ pub fn collect_marked_items_from_comment_lines(
 /// - `block`: A slice of `CommentLine` entries representing the current block.
 /// - `markers`: A slice of marker strings.
 /// - Returns: `true` if the block contains a marker, `false` otherwise.
-fn block_contains_marker(block: &[CommentLine], markers: &[String]) -> bool {
-    let contains = block
-        .iter()
-        .any(|cl| markers.iter().any(|marker| cl.text.contains(marker)));
-    debug!(
-        "Checking if current block contains a marker: {} (block: {:?})",
-        contains, block
-    );
-    contains
+fn block_starts_with_marker(block: &[CommentLine], markers: &[String]) -> bool {
+    if let Some(first_line) = block.first() {
+        // Use the existing function to remove comment markers.
+        let stripped = common_syntax::strip_markers(&first_line.text);
+        // Check if the stripped line (after trimming) starts with any of the provided markers.
+        let starts_with_marker = markers
+            .iter()
+            .any(|marker| stripped.trim_start().starts_with(marker));
+        debug!(
+            "Checking if first line starts with a marker: {} (stripped line: {:?}, markers: {:?})",
+            starts_with_marker, stripped, markers
+        );
+        starts_with_marker
+    } else {
+        false
+    }
 }
+
 
 /// Checks whether the given `line` is contiguous (i.e. its line number is exactly one
 /// more than the last line in `current_block`).
