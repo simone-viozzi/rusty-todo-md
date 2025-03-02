@@ -330,91 +330,98 @@ pub struct CommentLine {
 }
 
 /// Merge contiguous comment lines into blocks and produce a `MarkedItem` for each block
-/// that contains a marker. In a block, the marker’s line number is taken from
-/// the first comment line.  
-///  
-/// **New behavior:** If a marker is encountered in a block that already contains a marker,  
-/// the current block is terminated (processed) and a new block is started.
+/// that starts with a marker. For each block:
+/// 1. All comment markers are stripped from the lines.
+/// 2. A new block is started whenever a line begins with any marker.
+/// 3. Any following indented lines (i.e. starting with a space or tab) are treated as
+///    continuations of the current marked item.
+/// 4. The block is merged into a single normalized message with the marker prefix removed.
 pub fn collect_marked_items_from_comment_lines(
     lines: &[CommentLine],
     config: &MarkerConfig,
     path: &Path,
 ) -> Vec<MarkedItem> {
-    debug!(
-        "Starting to collect marked items from comment lines. Total lines: {}",
-        lines.len()
-    );
-
-    // Flatten multi-line comment entries.
+    // First, flatten any multi-line comment entries.
     let flattened_lines = flatten_comment_lines(lines);
-    debug!("Flattened lines count: {}", flattened_lines.len());
+
+    // Remove language-specific markers from all lines upfront.
+    let stripped_lines: Vec<CommentLine> = flattened_lines
+        .iter()
+        .map(|cl| CommentLine {
+            line_number: cl.line_number,
+            text: common_syntax::strip_markers(&cl.text),
+        })
+        .collect();
 
     let mut marked_items = Vec::new();
-    let mut current_block = Vec::new();
+    // current_block holds an optional tuple:
+    // (line number where the marker was found, and the accumulated lines for this marked item)
+    let mut current_block: Option<(usize, Vec<String>)> = None;
 
-    for line in &flattened_lines {
-        if current_block.is_empty() {
-            debug!("Starting new block with line: {:?}", line);
-            current_block.push(line.clone());
-        } else if is_contiguous(&current_block, line) {
-            // If the current block already contains a marker and the incoming line also starts with one,
-            // we finalize the current block and start a new one.
-            if !block_starts_with_marker(&current_block, &config.markers)
-            {
-                debug!(
-                    "Found a new marker in a block that already contains one. Splitting block at line: {:?}",
-                    line
-                );
-                process_block(&mut current_block, &mut marked_items, config, path);
-                current_block.push(line.clone());
-            } else {
-                debug!("Adding contiguous line to current block: {:?}", line);
-                current_block.push(line.clone());
+    for cl in stripped_lines {
+        let trimmed = cl.text.trim();
+        // Check if this line starts with any marker.
+        if config.markers.iter().any(|marker| trimmed.starts_with(marker)) {
+            // If there is an active block, finalize it first.
+            if let Some((line_number, block_lines)) = current_block.take() {
+                let message = process_block_lines(&block_lines, &config.markers);
+                marked_items.push(MarkedItem {
+                    file_path: path.to_path_buf(),
+                    line_number,
+                    message,
+                });
             }
-        } else {
-            debug!("Non-contiguous line encountered. Finalizing current block.");
-            process_block(&mut current_block, &mut marked_items, config, path);
-            debug!("Starting new block with line: {:?}", line);
-            current_block.push(line.clone());
+            // Start a new block with the current marker line.
+            current_block = Some((cl.line_number, vec![trimmed.to_string()]));
+        } else if let Some((_, ref mut block_lines)) = current_block {
+            // If the line is indented, it is a continuation of the current block.
+            if cl.text.starts_with(' ') || cl.text.starts_with('\t') {
+                block_lines.push(trimmed.to_string());
+            } else {
+                // If the line is not indented, then finalize the current block and ignore this line.
+                let (line_number, block_lines) = current_block.take().unwrap();
+                let message = process_block_lines(&block_lines, &config.markers);
+                marked_items.push(MarkedItem {
+                    file_path: path.to_path_buf(),
+                    line_number,
+                    message,
+                });
+            }
         }
+        // Lines that don’t start with a marker and aren’t indented in an active block are ignored.
     }
 
-    // Process any remaining block.
-    if !current_block.is_empty() {
-        debug!("Processing final block.");
-        process_block(&mut current_block, &mut marked_items, config, path);
+    // Finalize any remaining block.
+    if let Some((line_number, block_lines)) = current_block.take() {
+        let message = process_block_lines(&block_lines, &config.markers);
+        marked_items.push(MarkedItem {
+            file_path: path.to_path_buf(),
+            line_number,
+            message,
+        });
     }
 
-    debug!(
-        "Finished collecting marked items. Total marked items found: {}",
-        marked_items.len()
-    );
     marked_items
 }
 
-/// Returns true if the current block already contains a line with a marker.
-///
-/// - `block`: A slice of `CommentLine` entries representing the current block.
-/// - `markers`: A slice of marker strings.
-/// - Returns: `true` if the block contains a marker, `false` otherwise.
-fn block_starts_with_marker(block: &[CommentLine], markers: &[String]) -> bool {
-    if let Some(first_line) = block.first() {
-        // Use the existing function to remove comment markers.
-        let stripped = common_syntax::strip_markers(&first_line.text);
-        // Check if the stripped line (after trimming) starts with any of the provided markers.
-        let starts_with_marker = markers
-            .iter()
-            .any(|marker| stripped.trim_start().starts_with(marker));
-        debug!(
-            "Checking if first line starts with a marker: {} (stripped line: {:?}, markers: {:?})",
-            starts_with_marker, stripped, markers
-        );
-        starts_with_marker
-    } else {
-        false
-    }
-}
 
+/// Merges the given block lines into a single normalized message and removes the marker prefix.
+/// For example, if the block lines are:
+///   ["TODO: first", "more text"]
+/// and the marker is "TODO:", then the resulting message will be:
+///   "first more text"
+fn process_block_lines(lines: &[String], markers: &[String]) -> String {
+    // Merge the block lines into one string.
+    let merged = lines.join(" ");
+    // Remove the marker prefix from the beginning if present.
+    markers.iter().fold(merged, |acc, marker| {
+        if let Some(stripped) = acc.strip_prefix(marker) {
+            stripped.trim().to_string()
+        } else {
+            acc
+        }
+    })
+}
 
 /// Checks whether the given `line` is contiguous (i.e. its line number is exactly one
 /// more than the last line in `current_block`).
