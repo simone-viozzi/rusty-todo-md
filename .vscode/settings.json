@@ -1,0 +1,29 @@
+{
+    "lldb.verboseLogging": false,
+    "lldb.launch.env": {
+        "NIX_LD": "/nix/store/nqb2ns2d1lahnd5ncwmn6k84qfd7vx2k-glibc-2.40-36/lib/ld-linux-x86-64.so.2",
+        "LD_LIBRARY_PATH": "/nix/store/l5g2v1jgfyf3j0jp9iv5b79fi8yrwzpp-zlib-1.3.1/lib"
+        // etc...
+    },
+    "rust-analyzer.debug.engine": "vadimcn.vscode-lldb",
+    "rust-analyzer.debug.engineSettings": {
+        // Not all engine settings are documented, but you can pass
+        // environment variables to CodeLLDB here as well:
+        "env": {
+            "NIX_LD": "/nix/store/nqb2ns2d1lahnd5ncwmn6k84qfd7vx2k-glibc-2.40-36/lib/ld-linux-x86-64.so.2",
+            "LD_LIBRARY_PATH": "/nix/store/l5g2v1jgfyf3j0jp9iv5b79fi8yrwzpp-zlib-1.3.1/lib"
+            // etc...
+        },
+        "adapterEnv": {
+            "NIX_LD": "/nix/store/nqb2ns2d1lahnd5ncwmn6k84qfd7vx2k-glibc-2.40-36/lib/ld-linux-x86-64.so.2",
+            "LD_LIBRARY_PATH": "/nix/store/l5g2v1jgfyf3j0jp9iv5b79fi8yrwzpp-zlib-1.3.1/lib"
+            // etc...
+        }
+    },
+    "lldb.adapterEnv": {
+        "NIX_LD": "/nix/store/nqb2ns2d1lahnd5ncwmn6k84qfd7vx2k-glibc-2.40-36/lib/ld-linux-x86-64.so.2",
+        "LD_LIBRARY_PATH": "/nix/store/l5g2v1jgfyf3j0jp9iv5b79fi8yrwzpp-zlib-1.3.1/lib"
+        // etc...
+    },
+    //"lldb.library": ""
+}
