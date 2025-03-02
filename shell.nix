@@ -20,10 +20,6 @@ let
   };
 
   pythonPackages = pkgs.python312Packages;
-
-  # Define the CodeLLDB extension directory and its lldb/lib subdirectory
-  codelldbExt = "$HOME/.vscode/extensions/vadimcn.vscode-lldb-1.11.4";
-  codelldbLib = "${codelldbExt}/lldb/lib";
 in
 
 pkgs.mkShell {
@@ -36,6 +32,8 @@ pkgs.mkShell {
     pkgs.stdenv.cc.cc
     pkgs.openssl
     pkgs.zlib
+    pkgs.lldb.lib
+    pkgs.lldb.out
   ];
 
   buildInputs = with pkgs; [
@@ -46,6 +44,8 @@ pkgs.mkShell {
     git
     pre-commit
     lldb
+    lldb.lib 
+    lldb.out
     llvmPackages.libllvm
     gcc
     zlib
@@ -59,9 +59,7 @@ pkgs.mkShell {
     pythonPackages.pathspec
     pythonPackages.tqdm
     pythonPackages.pytest
-    pre-commit
     patchelf
-    lldb
   ];
 
   postVenvCreation = ''
@@ -81,26 +79,33 @@ pkgs.mkShell {
     export NIX_LD_LIBRARY_PATH
     export LD_LIBRARY_PATH=${pkgs.zlib}/lib:$LD_LIBRARY_PATH
 
-    # Add CodeLLDB's lldb/lib directory to LD_LIBRARY_PATH so libpython312.so is found.
-    if [ -d "${codelldbLib}" ]; then
-      export LD_LIBRARY_PATH="${codelldbLib}:$LD_LIBRARY_PATH"
-    fi
-
     unset SOURCE_DATE_EPOCH
     pip install --upgrade wheel setuptools
     export PKG_CONFIG_PATH="${pkgs.openssl.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"
 
-    # --- Automatically patch codelldb adapter if found ---
-    for file in ~/.vscode/extensions/vadimcn.vscode-lldb-*/adapter/codelldb; do
-      if [ -x "$file" ]; then
-        echo "Patching codelldb adapter: $file"
-        # Set the interpreter to the proper glibc dynamic linker.
-        patchelf --set-interpreter "${pkgs.glibc}/lib/ld-linux-x86-64.so.2" "$file"
-        # Include both the zlib lib and the CodeLLDB lldb/lib in the rpath.
-        patchelf --set-rpath "${pkgs.zlib}/lib:${codelldbLib}" "$file"
-      fi
-    done
+    export LLDB_DEBUGSERVER_PATH="${pkgs.lldb.out}/bin/lldb-server"
 
-    # ---------------------------------------------------------
+    # Create a local directory for LLDB symlinks
+    LLDB_BIN_DIR="./lldb-bin"
+    mkdir -p "$LLDB_BIN_DIR"
+
+    # Symlink liblldb.so from the lldb.lib output to the local directory
+    ln -sf "${pkgs.lldb.lib}/lib/liblldb.so" "$LLDB_BIN_DIR/liblldb.so"
+
+    # Symlink lldb-server from the lldb.out output to the local directory
+    ln -sf "${pkgs.lldb.out}/bin/lldb-server" "$LLDB_BIN_DIR/lldb-server"
+
+    echo "Created local LLDB bin directory at $(pwd)/lldb-bin"
+    echo "Set VSCode 'lldb.library' to $(pwd)/lldb-bin/liblldb.so"
+
+    # Patch the codelldb adapter executable with the correct dynamic linker.
+    if [ -f "$HOME/.vscode/extensions/vadimcn.vscode-lldb-1.11.4/adapter/codelldb" ]; then
+      echo "Patching codelldb adapter..."
+      patchelf --set-interpreter "$NIX_LD" "$HOME/.vscode/extensions/vadimcn.vscode-lldb-1.11.4/adapter/codelldb"
+    else
+      echo "codelldb adapter not found, skipping patch."
+      exit 1
+    fi
+
   '';
 }

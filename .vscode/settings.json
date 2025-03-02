@@ -1,29 +1,20 @@
 {
-    "lldb.verboseLogging": false,
-    "lldb.launch.env": {
-        "NIX_LD": "/nix/store/nqb2ns2d1lahnd5ncwmn6k84qfd7vx2k-glibc-2.40-36/lib/ld-linux-x86-64.so.2",
-        "LD_LIBRARY_PATH": "/nix/store/l5g2v1jgfyf3j0jp9iv5b79fi8yrwzpp-zlib-1.3.1/lib"
-        // etc...
-    },
+    "lldb.verboseLogging": true,
     "rust-analyzer.debug.engine": "vadimcn.vscode-lldb",
+    "lldb.library": "/home/simone/workspace/pre-commit-todo/lldb-bin/liblldb.so",
+    "lldb.launch.env": {
+        "LLDB_DEBUGSERVER_PATH": "/home/simone/workspace/pre-commit-todo/lldb-bin/lldb-server"
+    },
     "rust-analyzer.debug.engineSettings": {
-        // Not all engine settings are documented, but you can pass
-        // environment variables to CodeLLDB here as well:
         "env": {
-            "NIX_LD": "/nix/store/nqb2ns2d1lahnd5ncwmn6k84qfd7vx2k-glibc-2.40-36/lib/ld-linux-x86-64.so.2",
-            "LD_LIBRARY_PATH": "/nix/store/l5g2v1jgfyf3j0jp9iv5b79fi8yrwzpp-zlib-1.3.1/lib"
-            // etc...
+            "LLDB_DEBUGSERVER_PATH": "/home/simone/workspace/pre-commit-todo/lldb-bin/lldb-server"
         },
         "adapterEnv": {
-            "NIX_LD": "/nix/store/nqb2ns2d1lahnd5ncwmn6k84qfd7vx2k-glibc-2.40-36/lib/ld-linux-x86-64.so.2",
-            "LD_LIBRARY_PATH": "/nix/store/l5g2v1jgfyf3j0jp9iv5b79fi8yrwzpp-zlib-1.3.1/lib"
-            // etc...
+            "LLDB_DEBUGSERVER_PATH": "/home/simone/workspace/pre-commit-todo/lldb-bin/lldb-server"
         }
     },
     "lldb.adapterEnv": {
-        "NIX_LD": "/nix/store/nqb2ns2d1lahnd5ncwmn6k84qfd7vx2k-glibc-2.40-36/lib/ld-linux-x86-64.so.2",
-        "LD_LIBRARY_PATH": "/nix/store/l5g2v1jgfyf3j0jp9iv5b79fi8yrwzpp-zlib-1.3.1/lib"
-        // etc...
+        "LLDB_DEBUGSERVER_PATH": "/home/simone/workspace/pre-commit-todo/lldb-bin/lldb-server"
     },
-    //"lldb.library": ""
+ 
 }

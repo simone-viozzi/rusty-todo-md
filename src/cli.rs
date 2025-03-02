@@ -7,6 +7,8 @@ use std::path::Path;
 
 pub fn run_cli() {
     // Define CLI arguments, including the new --all-files flag.
+    // TODO add a new argument to specify what markers to look for
+    //      like --markers "TODO, FIXME, HACK"
     let matches = Command::new("rusty-todo-md")
         .version("0.1.5")
         .author("Simone Viozzi <you@example.com>")
