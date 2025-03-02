@@ -407,15 +407,24 @@ fn is_marker_line(text: &str, markers: &[String]) -> bool {
     markers.iter().any(|marker| text.starts_with(marker))
 }
 
-/// Utility: Merges block lines into a single normalized message and removes the marker prefix.
+/// Merges the given block lines into a single normalized message and removes the marker prefix.
+/// It also removes an optional colon (":") that immediately follows the marker.
 /// For example, if the block lines are:
-///   ["TODO: first", "more text"]
-/// and the marker is "TODO:", the resulting message will be:
-///   "first more text"
+///   ["TODO Implement feature A", "more details"]
+/// or
+///   ["TODO: Implement feature A", "more details"]
+/// the resulting message will be:
+///   "Implement feature A more details"
 fn process_block_lines(lines: &[String], markers: &[String]) -> String {
     let merged = lines.join(" ");
     markers.iter().fold(merged, |acc, marker| {
         if let Some(stripped) = acc.strip_prefix(marker) {
+            // If a colon immediately follows the marker, remove it.
+            let stripped = if let Some(rest) = stripped.strip_prefix(":") {
+                rest
+            } else {
+                stripped
+            };
             stripped.trim().to_string()
         } else {
             acc
