@@ -1,0 +1,20 @@
+[build-system]
+requires = ["maturin>=0.12"]
+build-backend = "maturin"
+
+[project]
+name = "rusty_todo_md"
+version = "0.1.7"
+description = "Multi-language TODO comment extractor written in Rust."
+authors = [
+    { name = "Simone Viozzi", email = "simoneviozzi97@gmail.com" }
+]
+readme = "README.md"
+license = { text = "MIT License" }
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "License :: OSI Approved :: MIT License"
+]
+

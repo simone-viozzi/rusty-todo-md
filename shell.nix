@@ -60,6 +60,7 @@ pkgs.mkShell {
     pythonPackages.tqdm
     pythonPackages.pytest
     patchelf
+    maturin
   ];
 
   postVenvCreation = ''
