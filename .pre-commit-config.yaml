@@ -1,0 +1,5 @@
+repos:
+  - repo: https://github.com/simone-viozzi/rusty-todo-md.git
+    rev: v0.1.7
+    hooks:
+      - id: rusty-todo-md
