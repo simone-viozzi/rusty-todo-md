@@ -11,6 +11,12 @@ pub struct TempGitRepo {
     pub repo_path: PathBuf,
 }
 
+impl Default for TempGitRepo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TempGitRepo {
     /// Creates a new temporary Git repository.
     pub fn new() -> Self {
