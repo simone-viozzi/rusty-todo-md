@@ -1,5 +1,25 @@
 repos:
-  - repo: https://github.com/simone-viozzi/rusty-todo-md.git
-    rev: v0.1.7
+  - repo: local
     hooks:
       - id: rusty-todo-md
+        name: Rusty TODO Extractor
+        entry: ./target/release/rusty-todo-md
+        language: system
+        pass_filenames: true
+        types: [rust]
+  - repo: local
+    hooks:
+      - id: rustfmt
+        name: Rustfmt
+        entry: cargo fmt --all
+        language: system
+        pass_filenames: false
+        types: [rust]
+  - repo: local
+    hooks:
+      - id: clippy
+        name: Clippy
+        entry: cargo clippy --all-targets --all-features -- -D warnings
+        language: system
+        pass_filenames: false
+        types: [rust]

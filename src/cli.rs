@@ -115,7 +115,6 @@ pub fn run_workflow(todo_path: &Path, repo_path: &Path, all_files: bool) -> Resu
     Ok(())
 }
 
-
 pub fn process_files_from_list(todo_path: &Path, files: Vec<String>) -> Result<(), String> {
     let mut new_todos = Vec::new();
     for file in files {
