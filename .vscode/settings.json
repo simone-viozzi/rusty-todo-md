@@ -1,0 +1,20 @@
+{
+    "lldb.verboseLogging": true,
+    "rust-analyzer.debug.engine": "vadimcn.vscode-lldb",
+    "lldb.library": "/home/simone/workspace/pre-commit-todo/lldb-bin/liblldb.so",
+    "lldb.launch.env": {
+        "LLDB_DEBUGSERVER_PATH": "/home/simone/workspace/pre-commit-todo/lldb-bin/lldb-server"
+    },
+    "rust-analyzer.debug.engineSettings": {
+        "env": {
+            "LLDB_DEBUGSERVER_PATH": "/home/simone/workspace/pre-commit-todo/lldb-bin/lldb-server"
+        },
+        "adapterEnv": {
+            "LLDB_DEBUGSERVER_PATH": "/home/simone/workspace/pre-commit-todo/lldb-bin/lldb-server"
+        }
+    },
+    "lldb.adapterEnv": {
+        "LLDB_DEBUGSERVER_PATH": "/home/simone/workspace/pre-commit-todo/lldb-bin/lldb-server"
+    },
+ 
+}

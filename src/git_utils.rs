@@ -1,4 +1,5 @@
 use git2::{DiffOptions, Error as GitError, Repository};
+use git2::{ObjectType, TreeWalkMode, TreeWalkResult};
 use log::info;
 use std::path::{Path, PathBuf};
 
@@ -46,4 +47,28 @@ pub fn get_staged_files(repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
     info!("found {} staged files", staged_files.len());
 
     Ok(staged_files)
+}
+
+/// Retrieves all files that are currently tracked by Git by walking the HEAD tree.
+/// This function ignores directories (like the .git folder) and returns file paths relative to the repository root.
+pub fn get_tracked_files(repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
+    let head_tree = repo.head()?.peel_to_tree()?;
+    let mut tracked_files = Vec::new();
+
+    head_tree.walk(TreeWalkMode::PreOrder, |root, entry| {
+        // Only include blobs (files).
+        if entry.kind() == Some(ObjectType::Blob) {
+            // Build the file path relative to the repository root.
+            let path = if root.is_empty() {
+                entry.name().unwrap_or("").into()
+            } else {
+                format!("{}/{}", root, entry.name().unwrap_or(""))
+            };
+            tracked_files.push(PathBuf::from(path));
+        }
+        TreeWalkResult::Ok
+    })?;
+
+    info!("Found {} tracked files", tracked_files.len());
+    Ok(tracked_files)
 }

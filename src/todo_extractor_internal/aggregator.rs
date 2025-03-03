@@ -16,6 +16,7 @@ pub struct MarkedItem {
 }
 
 /// Configuration for comment markers.
+/// TODO make sure we strip : from markers, so that TODO and TODO: are treated the same
 pub struct MarkerConfig {
     pub markers: Vec<String>,
 }
@@ -57,17 +58,17 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
             for pair in pairs {
                 // Iterate over children of the rust_file or python_file.
                 for inner_pair in pair.into_inner() {
-                    debug!(
-                        "Processing child pair: {:?} => '{}'",
-                        inner_pair.as_rule(),
-                        inner_pair.as_str().replace('\n', "\\n")
-                    );
+                    //debug!(
+                    //    "Processing child pair: {:?} => '{}'",
+                    //    inner_pair.as_rule(),
+                    //    inner_pair.as_str().replace('\n', "\\n")
+                    //);
 
                     if let Some(comment) = extract_comment_from_pair(inner_pair) {
                         debug!("Extracted comment: {:?}", comment);
                         comments.push(comment);
                     } else {
-                        debug!("Skipped non-comment pair.");
+                        //debug!("Skipped non-comment pair.");
                     }
                 }
             }
@@ -106,114 +107,6 @@ fn extract_comment_from_pair(
     } else {
         None
     }
-}
-
-/// Given a block of contiguous comment lines (with markers already stripped),
-/// extract the marked item (if any) by:
-/// 1. Finding the first line containing any marker.
-/// 2. Joining that line and any immediately indented following lines.
-/// 3. Dedenting and merging them into a single normalized message.
-/// 4. Removing the marker prefix and trimming the result.
-fn extract_marked_item_from_block(
-    block: &[CommentLine],
-    config: &MarkerConfig,
-    path: &Path,
-) -> Option<MarkedItem> {
-    debug!("Extracting marked item from block: {:?}", block);
-
-    // Find the index of the first line with any marker.
-    let marker_index = block.iter().position(|line| {
-        config
-            .markers
-            .iter()
-            .any(|marker| line.text.contains(marker))
-    })?;
-    debug!("Found marker at index: {}", marker_index);
-
-    // Get the candidate lines from the marker line until the end of the block.
-    let candidate_lines: Vec<&str> = block[marker_index..]
-        .iter()
-        .map(|line| line.text.as_str())
-        .collect();
-    debug!("Candidate lines: {:?}", candidate_lines);
-
-    // Join the candidate lines into a single string.
-    let joined_block = candidate_lines.join("\n");
-    debug!("Joined block:\n{}", joined_block);
-
-    // Dedent the block so that the marker line starts at column 0.
-    let dedented_block = common_syntax::dedent_comment(&joined_block);
-    debug!("Dedented block:\n{}", dedented_block);
-
-    // Split the dedented block into individual lines.
-    let dedented_lines: Vec<&str> = dedented_block.lines().collect();
-    debug!("Dedented lines: {:?}", dedented_lines);
-
-    // Extract candidate marked lines (first line and any immediately indented following lines).
-    let candidate_marked_lines = extract_candidate_marked_lines(&dedented_lines);
-    debug!("Candidate marked lines: {:?}", candidate_marked_lines);
-
-    // *** NEW: Check if the first candidate line starts with any marker ***
-    if let Some(first_line) = candidate_marked_lines.first() {
-        if !config
-            .markers
-            .iter()
-            .any(|marker| first_line.trim_start().starts_with(marker))
-        {
-            debug!("Candidate line does not start with any marker, skipping block.");
-            return None;
-        }
-    } else {
-        return None;
-    }
-
-    // Merge the candidate lines into a normalized single-line string.
-    let merged = common_syntax::merge_comment_lines(&candidate_marked_lines);
-    debug!("Merged marked message: {}", merged);
-
-    // Remove the marker prefix and trim any extra whitespace.
-    // Remove the marker prefix and trim any extra whitespace.
-    // This version makes an optional colon after the marker removable.
-    let final_message = config.markers.iter().fold(merged, |acc, marker| {
-        if let Some(s) = acc.strip_prefix(marker) {
-            let s = s.trim_start();
-            // If a colon is present right after the marker, remove it along with any whitespace.
-            let s = if let Some(stripped) = s.strip_prefix(':') {
-                stripped
-            } else {
-                s
-            };
-            s.trim().to_string()
-        } else {
-            acc
-        }
-    });
-
-    debug!("Final marked message: {}", final_message);
-
-    Some(MarkedItem {
-        line_number: block[marker_index].line_number,
-        message: final_message,
-        file_path: path.to_path_buf(),
-    })
-}
-
-/// Extracts the candidate marked lines from a list of dedented lines.
-/// It always takes the first line (which contains a marker) and then collects
-/// all subsequent lines that are indented (starting with a space or tab).
-fn extract_candidate_marked_lines<'a>(lines: &'a [&'a str]) -> Vec<&'a str> {
-    let mut candidate = Vec::new();
-    if let Some(first_line) = lines.first() {
-        candidate.push(*first_line);
-        for line in lines.iter().skip(1) {
-            if line.starts_with(' ') || line.starts_with('\t') {
-                candidate.push(*line);
-            } else {
-                break;
-            }
-        }
-    }
-    candidate
 }
 
 // Splits a multi-line comment into individual `CommentLine` entries.
@@ -328,152 +221,107 @@ pub struct CommentLine {
     pub text: String,
 }
 
-/// Merge contiguous comment lines into blocks and produce a `MarkedItem` for each block
-/// that contains a marker. In a block, the marker’s line number is taken from
-/// the first comment line.  
-///  
-/// **New behavior:** If a marker is encountered in a block that already contains a marker,  
-/// the current block is terminated (processed) and a new block is started.
+/// Merge flattened and stripped comment lines into blocks and produce a `MarkedItem` for each block.
+/// A block is defined as a group of lines that starts with a marker (e.g. "TODO:" or "FIXME")
+/// and includes any immediately indented lines (which are treated as continuations).
 pub fn collect_marked_items_from_comment_lines(
     lines: &[CommentLine],
     config: &MarkerConfig,
     path: &Path,
 ) -> Vec<MarkedItem> {
-    debug!(
-        "Starting to collect marked items from comment lines. Total lines: {}",
-        lines.len()
-    );
-
-    // Flatten multi-line comment entries.
-    let flattened_lines = flatten_comment_lines(lines);
-    debug!("Flattened lines count: {}", flattened_lines.len());
-
-    let mut marked_items = Vec::new();
-    let mut current_block = Vec::new();
-
-    for line in &flattened_lines {
-        if current_block.is_empty() {
-            debug!("Starting new block with line: {:?}", line);
-            current_block.push(line.clone());
-        } else if is_contiguous(&current_block, line) {
-            // If the current block already contains a marker and the incoming line also contains one,
-            // we finalize the current block and start a new one.
-            if block_contains_marker(&current_block, &config.markers)
-                && config
-                    .markers
-                    .iter()
-                    .any(|marker| line.text.contains(marker))
-            {
-                debug!(
-                    "Found a new marker in a block that already contains one. Splitting block at line: {:?}",
-                    line
-                );
-                process_block(&mut current_block, &mut marked_items, config, path);
-                current_block.push(line.clone());
-            } else {
-                debug!("Adding contiguous line to current block: {:?}", line);
-                current_block.push(line.clone());
-            }
-        } else {
-            debug!("Non-contiguous line encountered. Finalizing current block.");
-            process_block(&mut current_block, &mut marked_items, config, path);
-            debug!("Starting new block with line: {:?}", line);
-            current_block.push(line.clone());
-        }
-    }
-
-    // Process any remaining block.
-    if !current_block.is_empty() {
-        debug!("Processing final block.");
-        process_block(&mut current_block, &mut marked_items, config, path);
-    }
-
-    debug!(
-        "Finished collecting marked items. Total marked items found: {}",
-        marked_items.len()
-    );
-    marked_items
-}
-
-/// Returns true if the current block already contains a line with a marker.
-///
-/// - `block`: A slice of `CommentLine` entries representing the current block.
-/// - `markers`: A slice of marker strings.
-/// - Returns: `true` if the block contains a marker, `false` otherwise.
-fn block_contains_marker(block: &[CommentLine], markers: &[String]) -> bool {
-    let contains = block
-        .iter()
-        .any(|cl| markers.iter().any(|marker| cl.text.contains(marker)));
-    debug!(
-        "Checking if current block contains a marker: {} (block: {:?})",
-        contains, block
-    );
-    contains
-}
-
-/// Checks whether the given `line` is contiguous (i.e. its line number is exactly one
-/// more than the last line in `current_block`).
-///
-/// - `current_block`: A slice of `CommentLine` entries representing the current block.
-/// - `line`: The `CommentLine` to check for contiguity.
-/// - Returns: `true` if the line is contiguous, `false` otherwise.
-fn is_contiguous(current_block: &[CommentLine], line: &CommentLine) -> bool {
-    if let Some(last) = current_block.last() {
-        let contiguous = last.line_number + 1 == line.line_number;
-        debug!(
-            "Checking contiguity: last line {} and current line {} => {}",
-            last.line_number, line.line_number, contiguous
-        );
-        contiguous
-    } else {
-        false
-    }
-}
-
-/// Processes a block of contiguous comment lines by stripping markers and
-/// extracting a marked item (if present). Clears the block after processing.
-///
-/// - `block`: A mutable reference to a `Vec<CommentLine>` representing the current block.
-/// - `marked_items`: A mutable reference to a `Vec<MarkedItem>` to store extracted marked items.
-/// - `config`: The marker configuration.
-fn process_block(
-    block: &mut Vec<CommentLine>,
-    marked_items: &mut Vec<MarkedItem>,
-    config: &MarkerConfig,
-    path: &Path,
-) {
-    debug!("Processing block with {} lines: {:?}", block.len(), block);
-    let stripped_block = strip_comment_lines(block);
-    debug!("Stripped block: {:?}", stripped_block);
-
-    if let Some(marked_item) = extract_marked_item_from_block(&stripped_block, config, path) {
-        debug!("Marked item found in block: {:?}", marked_item);
-        marked_items.push(marked_item);
-    } else {
-        debug!("No marked item found in current block.");
-    }
-    block.clear();
-}
-
-/// Strips language-specific markers from each comment line in the block.
-///
-/// - `block`: A slice of `CommentLine` entries representing the current block.
-/// - Returns: A `Vec<CommentLine>` with markers stripped from each line.
-fn strip_comment_lines(block: &[CommentLine]) -> Vec<CommentLine> {
-    block
-        .iter()
-        .map(|cl| {
-            let stripped_text = common_syntax::strip_markers(&cl.text);
-            debug!(
-                "Stripping markers from line {}: '{}' -> '{}'",
-                cl.line_number, cl.text, stripped_text
-            );
-            CommentLine {
-                line_number: cl.line_number,
-                text: stripped_text,
-            }
+    // First, flatten multi-line comments and strip language-specific markers.
+    let stripped_lines = strip_and_flatten(lines);
+    // Group the lines into blocks based on marker lines and their indented continuations.
+    let blocks = group_lines_into_blocks(stripped_lines, &config.markers);
+    // Convert each block into a MarkedItem.
+    blocks
+        .into_iter()
+        .map(|(line_number, block)| MarkedItem {
+            file_path: path.to_path_buf(),
+            line_number,
+            message: process_block_lines(&block, &config.markers),
         })
         .collect()
+}
+
+/// Utility: Flattens multi-line comment entries and strips language-specific markers from each line.
+fn strip_and_flatten(lines: &[CommentLine]) -> Vec<CommentLine> {
+    flatten_comment_lines(lines)
+        .into_iter()
+        .map(|cl| CommentLine {
+            line_number: cl.line_number,
+            text: common_syntax::strip_markers(&cl.text),
+        })
+        .collect()
+}
+
+/// Utility: Groups stripped comment lines into blocks. Each block is a tuple containing:
+/// - The line number where the block starts (i.e. the marker line)
+/// - A vector of strings representing the block’s lines (with markers already stripped)
+fn group_lines_into_blocks(
+    lines: Vec<CommentLine>,
+    markers: &[String],
+) -> Vec<(usize, Vec<String>)> {
+    let mut blocks = Vec::new();
+    let mut current_block: Option<(usize, Vec<String>)> = None;
+
+    for cl in lines {
+        // Use the trimmed version for grouping.
+        let trimmed = cl.text.trim().to_string();
+        if is_marker_line(&trimmed, markers) {
+            // If a block is in progress, finalize it.
+            if let Some(block) = current_block.take() {
+                blocks.push(block);
+            }
+            // Start a new block with this marker line.
+            current_block = Some((cl.line_number, vec![trimmed]));
+        } else if let Some((_, ref mut block_lines)) = current_block {
+            // If the line is indented, treat it as a continuation of the current block.
+            if cl.text.starts_with(' ') || cl.text.starts_with('\t') {
+                block_lines.push(trimmed);
+            } else {
+                // Otherwise, finalize the current block.
+                blocks.push(current_block.take().unwrap());
+            }
+        }
+        // Lines that are not marker lines and not indented within a block are ignored.
+    }
+
+    // Finalize any remaining block.
+    if let Some(block) = current_block {
+        blocks.push(block);
+    }
+    blocks
+}
+
+/// Utility: Returns true if the given text starts with any of the marker strings.
+fn is_marker_line(text: &str, markers: &[String]) -> bool {
+    markers.iter().any(|marker| text.starts_with(marker))
+}
+
+/// Merges the given block lines into a single normalized message and removes the marker prefix.
+/// It also removes an optional colon (":") that immediately follows the marker.
+/// For example, if the block lines are:
+///   ["TODO Implement feature A", "more details"]
+/// or
+///   ["TODO: Implement feature A", "more details"]
+/// the resulting message will be:
+///   "Implement feature A more details"
+fn process_block_lines(lines: &[String], markers: &[String]) -> String {
+    let merged = lines.join(" ");
+    markers.iter().fold(merged, |acc, marker| {
+        if let Some(stripped) = acc.strip_prefix(marker) {
+            // If a colon immediately follows the marker, remove it.
+            let stripped = if let Some(rest) = stripped.strip_prefix(":") {
+                rest
+            } else {
+                stripped
+            };
+            stripped.trim().to_string()
+        } else {
+            acc
+        }
+    })
 }
 
 #[cfg(test)]
@@ -766,5 +614,23 @@ fn some_function() {
         );
         assert_eq!(items[4].message, "Implement feature B");
         assert_eq!(items[5].message, "Fix another bug");
+    }
+
+    #[test]
+    fn test_merge_multiline_todo_with_todo_in_str() {
+        init_logger();
+        let src = r#"
+// TODO add a new argument to specify what markers to look for
+//      like --markers "TODO, FIXME, HACK"
+"#;
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
+        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
+
+        assert_eq!(todos.len(), 1);
+
+        assert_eq!(todos[0].line_number, 2);
+        assert_eq!(todos[0].message, "add a new argument to specify what markers to look for like --markers \"TODO, FIXME, HACK\"");
     }
 }

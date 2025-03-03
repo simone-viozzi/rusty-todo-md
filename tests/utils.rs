@@ -49,8 +49,23 @@ impl TempGitRepo {
         let tree_id = index.write_tree().unwrap();
         let tree = self.repo.find_tree(tree_id).unwrap();
         let sig = Signature::now("Test User", "test@example.com").unwrap();
-        self.repo
-            .commit(Some("HEAD"), &sig, &sig, message, &tree, &[])
-            .unwrap();
+
+        // Check if there's a HEAD commit. If yes, use it as the parent.
+        let commit_result = match self.repo.head() {
+            Ok(head) => {
+                if let Ok(parent_commit) = head.peel_to_commit() {
+                    self.repo
+                        .commit(Some("HEAD"), &sig, &sig, message, &tree, &[&parent_commit])
+                } else {
+                    self.repo
+                        .commit(Some("HEAD"), &sig, &sig, message, &tree, &[])
+                }
+            }
+            Err(_) => self
+                .repo
+                .commit(Some("HEAD"), &sig, &sig, message, &tree, &[]),
+        };
+
+        commit_result.unwrap();
     }
 }

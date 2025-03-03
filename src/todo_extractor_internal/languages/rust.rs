@@ -109,25 +109,26 @@ let x = 10; // TODO: Not a comment
         let src = r#"
 // This file is simulating ~50 lines of code
 // Some normal comment
-//
-fn example() {   // 4
+
+fn example() {
     // Another normal comment
     // TODO: first_todo
     let x = 10;  // 7
-    println!("hello"); // 8
-    //
+    println!("hello");
+
     /*
         Multi-line block
         TODO: second_todo
             still part of second_todo
      */
-    let y = 20; // 15
-    // 
+    let y = 20;
+    
     // TODO: third_todo
     if x + y > 20 {
         // no todo
         println!("sum > 20");
     }
+
     // normal
     // We can check line numbers carefully
 }
@@ -171,7 +172,7 @@ fn foo() {
         assert_eq!(todos[2].message, "third_todo");
 
         // fourth_todo on line 31
-        assert_eq!(todos[3].line_number, 30);
+        assert_eq!(todos[3].line_number, 31);
         assert_eq!(todos[3].message, "fourth_todo");
     }
 }
