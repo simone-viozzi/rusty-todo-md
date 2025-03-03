@@ -1,0 +1,7 @@
+- id: rusty-todo-md
+  name: Rusty TODO Extractor
+  entry: rusty-todo-md
+  language: rust
+  language_version: stable
+  # Adjust the file pattern as needed (e.g. match source files in your project)
+  types: [python, rust]
