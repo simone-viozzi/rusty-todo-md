@@ -49,8 +49,6 @@ pub fn get_staged_files(repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
     Ok(staged_files)
 }
 
-
-
 /// Retrieves all files that are currently tracked by Git by walking the HEAD tree.
 /// This function ignores directories (like the .git folder) and returns file paths relative to the repository root.
 pub fn get_tracked_files(repo: &Repository) -> Result<Vec<PathBuf>, GitError> {

@@ -109,7 +109,6 @@ fn extract_comment_from_pair(
     }
 }
 
-
 // Splits a multi-line comment into individual `CommentLine` entries.
 //
 // - `line`: A `CommentLine` containing multiple lines of text.
@@ -324,7 +323,6 @@ fn process_block_lines(lines: &[String], markers: &[String]) -> String {
         }
     })
 }
-
 
 #[cfg(test)]
 mod aggregator_tests {
@@ -617,8 +615,6 @@ fn some_function() {
         assert_eq!(items[4].message, "Implement feature B");
         assert_eq!(items[5].message, "Fix another bug");
     }
-
-    
 
     #[test]
     fn test_merge_multiline_todo_with_todo_in_str() {

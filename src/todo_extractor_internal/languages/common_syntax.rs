@@ -47,9 +47,6 @@ pub fn strip_markers(text: &str) -> String {
     result
 }
 
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -81,5 +78,4 @@ mod tests {
         let output = strip_markers(input);
         assert_eq!(output, "    Indented comment");
     }
-
 }

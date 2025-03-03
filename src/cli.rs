@@ -45,7 +45,7 @@ pub fn run_cli() {
 }
 
 /// Main workflow for scanning files and updating TODO.md.
-/// 
+///
 /// When `all_files` is true, it retrieves all tracked files from Git;
 /// otherwise, it gets only the staged files.
 pub fn run_workflow(todo_path: &Path, repo_path: &Path, all_files: bool) -> Result<(), String> {
