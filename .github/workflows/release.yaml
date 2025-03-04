@@ -17,8 +17,19 @@ jobs:
         with:
           rust-version: stable
 
-      - name: Build Release Binary
-        run: cargo build --release
+      - name: Set Up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: Build Wheel using maturin
+        run: maturin build --release --bindings bin
+
+      - name: List built wheels
+        run: ls -l target/wheels/
 
       - name: Create GitHub Release
         id: create_release
@@ -32,12 +43,14 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Upload Release Asset
+      - name: Upload Release Asset (Wheel)
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          # Use the wheel file from the target/wheels directory.
+          # Adjust the pattern if necessary.
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./target/release/rusty-todo-md
-          asset_name: rusty-todo-md
+          asset_path: $(ls target/wheels/*.whl)
+          asset_name: rusty_todo_md-${{ github.ref_name }}.whl
           asset_content_type: application/octet-stream
