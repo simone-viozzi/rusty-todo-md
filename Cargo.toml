@@ -3,6 +3,12 @@ name = "rusty-todo-md"
 version = "0.1.7"
 edition = "2021"
 
+description = "A multi-language TODO comment extractor for source code files."
+license = "MIT"
+homepage = "https://github.com/simone-viozzi/rusty-todo-md"
+repository = "https://github.com/simone-viozzi/rusty-todo-md"
+documentation = "https://github.com/simone-viozzi/rusty-todo-md"
+
 [dependencies]
 clap = { version = "4.5.27", features = ["derive"] }
 comrak = "0.35.0"
@@ -26,5 +32,5 @@ tag-name = "v{{version}}"
 # Automatically push the commit and tag to remote
 push = true
 
-pre-release-hook = ["bump-version.sh"]
+pre-release-hook = ["./bump-version.sh"]
 
