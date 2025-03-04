@@ -19,3 +19,12 @@ pest_derive = { version = "2.7.15", features = ["grammar-extras"] }
 
 [package.metadata.maturin]
 bindings = "bin"
+
+[package.metadata.release]
+# Format the Git tag as "v<version>"
+tag-name = "v{{version}}"
+# Automatically push the commit and tag to remote
+push = true
+
+pre-release-hook = ["bump-version.sh"]
+
