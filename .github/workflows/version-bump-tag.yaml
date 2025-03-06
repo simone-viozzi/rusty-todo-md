@@ -38,3 +38,5 @@ jobs:
 
       - name: Run Cargo Release (Bump Version)
         run: cargo release ${{ github.event.inputs.bump_level }} --execute --no-confirm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
