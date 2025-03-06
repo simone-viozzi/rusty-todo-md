@@ -1,0 +1,21 @@
+repos:
+  - repo: https://github.com/simone-viozzi/rusty-todo-md
+    rev: Release v0.1.8-alpha.6
+    hooks:
+      - id: rusty-todo-md
+  - repo: local
+    hooks:
+      - id: rustfmt
+        name: Rustfmt
+        entry: cargo fmt --all
+        language: system
+        pass_filenames: false
+        types: [rust]
+  - repo: local
+    hooks:
+      - id: clippy
+        name: Clippy
+        entry: cargo clippy --all-targets --all-features -- -D warnings
+        language: system
+        pass_filenames: false
+        types: [rust]

@@ -1,7 +1,13 @@
 [package]
 name = "rusty-todo-md"
-version = "0.1.6"
+version = "0.1.8-alpha.6"
 edition = "2021"
+
+description = "A multi-language TODO comment extractor for source code files."
+license = "MIT"
+homepage = "https://github.com/simone-viozzi/rusty-todo-md"
+repository = "https://github.com/simone-viozzi/rusty-todo-md"
+documentation = "https://github.com/simone-viozzi/rusty-todo-md"
 
 [dependencies]
 clap = { version = "4.5.27", features = ["derive"] }
@@ -16,3 +22,15 @@ log = "0.4.25"
 once_cell = "1.20.2"
 pest = { version = "2.7.15", features = ["pretty-print"] }
 pest_derive = { version = "2.7.15", features = ["grammar-extras"] }
+
+[package.metadata.maturin]
+bindings = "bin"
+
+[package.metadata.release]
+# Format the Git tag as "v<version>"
+tag-name = "v{{version}}"
+# Automatically push the commit and tag to remote
+push = true
+
+pre-release-hook = ["./bump-version.sh"]
+

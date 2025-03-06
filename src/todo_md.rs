@@ -91,6 +91,7 @@ fn parse_link(link: &str) -> Option<(&str, usize)> {
 }
 
 pub fn sync_todo_file(todo_path: &Path, new_todos: Vec<MarkedItem>) -> Result<(), std::io::Error> {
+    // TODO create more tests to see if todo file is updated correctly
     let mut existing_todos = read_todo_file(todo_path);
     existing_todos.retain(|existing| new_todos.contains(existing));
 

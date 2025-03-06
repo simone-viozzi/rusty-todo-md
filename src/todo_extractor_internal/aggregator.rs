@@ -16,7 +16,6 @@ pub struct MarkedItem {
 }
 
 /// Configuration for comment markers.
-/// TODO make sure we strip : from markers, so that TODO and TODO: are treated the same
 pub struct MarkerConfig {
     pub markers: Vec<String>,
 }
