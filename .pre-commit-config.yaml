@@ -1,12 +1,8 @@
 repos:
-  - repo: local
+  - repo: https://github.com/simone-viozzi/rusty-todo-md
+    rev: Release v0.1.8-alpha.6
     hooks:
       - id: rusty-todo-md
-        name: Rusty TODO Extractor
-        entry: ./target/release/rusty-todo-md
-        language: system
-        pass_filenames: true
-        types: [rust]
   - repo: local
     hooks:
       - id: rustfmt
