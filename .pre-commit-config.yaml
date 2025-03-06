@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/simone-viozzi/rusty-todo-md
-    rev: Release v0.1.8-alpha.6
+    rev: bf6f5cc5cb848d83b01b8c84612369e8ba0251c6
     hooks:
       - id: rusty-todo-md
   - repo: local
