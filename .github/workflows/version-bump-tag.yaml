@@ -1,5 +1,8 @@
 name: Version Bump & Tag
 
+permissions:
+  contents: write 
+
 on:
   workflow_dispatch:
     inputs:
@@ -14,6 +17,11 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
+      
+      - name: Configure Git Identity
+        run: |
+          git config --global user.email "release-bot@example.com"
+          git config --global user.name "Release Bot"
 
       - name: Set Up Rust
         uses: dtolnay/rust-toolchain@stable
