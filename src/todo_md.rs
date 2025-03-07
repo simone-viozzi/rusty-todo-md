@@ -54,23 +54,29 @@ pub fn read_todo_file(todo_path: &Path) -> Vec<MarkedItem> {
 }
 
 pub fn sync_todo_file(todo_path: &Path, new_todos: Vec<MarkedItem>) -> Result<(), std::io::Error> {
-    // TODO create more tests to see if todo file is updated correctly
-    let mut existing_todos = read_todo_file(todo_path);
-    existing_todos.retain(|existing| new_todos.contains(existing));
+    // Read existing TODO items from the file using the new parser.
+    let existing_todos = read_todo_file(todo_path);
 
-    for new_todo in new_todos {
-        if !existing_todos.contains(&new_todo) {
-            existing_todos.push(new_todo);
-        }
+    // Create a TodoCollection from the existing TODO items.
+    let mut existing_collection = TodoCollection::new();
+    for item in existing_todos {
+        existing_collection.add_item(item);
     }
 
-    existing_todos.sort_by(|a, b| {
-        a.file_path
-            .cmp(&b.file_path)
-            .then_with(|| a.line_number.cmp(&b.line_number))
-    });
+    // Create a TodoCollection from the new TODO items.
+    let mut new_collection = TodoCollection::new();
+    for item in new_todos {
+        new_collection.add_item(item);
+    }
 
-    write_todo_file(todo_path, &existing_todos)
+    // Merge new TODO items into the existing collection.
+    existing_collection.merge(new_collection);
+
+    // Convert the merged collection back into a sorted vector of MarkedItems.
+    let merged_todos = existing_collection.to_sorted_vec();
+
+    // Write the merged and sorted TODO items back to the TODO.md file in the new sectioned format.
+    write_todo_file(todo_path, &merged_todos)
 }
 
 /// Writes the given list of `TodoItem`s to the TODO.md file in markdown format.
