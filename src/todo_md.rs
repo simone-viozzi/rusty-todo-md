@@ -9,8 +9,10 @@ use std::path::PathBuf;
 ///
 /// The new format groups TODO items under section headers of the form:
 ///
-///     ## <file-path>
-///     * [<file-path>:<line_number>](<file-path>#L<line_number>): <message>
+/// ```markdown
+/// ## <file-path>
+/// * [<file-path>:<line_number>](<file-path>#L<line_number>): <message>
+/// ```
 ///
 /// This function uses regex to detect section headers to set the current file context, and then
 /// parses subsequent todo item lines accordingly.
@@ -124,7 +126,9 @@ pub fn write_todo_file(todo_path: &Path, todos: &[MarkedItem]) -> std::io::Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::todo_extractor::MarkedItem;
     use std::fs;
+    use std::path::PathBuf;
     use tempfile::tempdir;
 
     #[test]
@@ -157,15 +161,18 @@ mod tests {
     #[test]
     fn test_read_todo_file_with_markdown_parser() {
         let content = r#"
+## src/main.rs
 * [src/main.rs:12](src/main.rs#L12): Refactor this function
+
+## src/lib.rs
 * [src/lib.rs:5](src/lib.rs#L5): Add error handling
 "#;
 
-        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_dir = tempdir().unwrap();
         let todo_path = temp_dir.path().join("TODO.md");
 
         // Write the test content to TODO.md
-        std::fs::write(&todo_path, content).unwrap();
+        fs::write(&todo_path, content).unwrap();
 
         // Read and parse the TODO.md file
         let todos = read_todo_file(&todo_path);
@@ -187,5 +194,59 @@ mod tests {
                 message: "Add error handling".to_string(),
             }
         );
+    }
+
+    #[test]
+    fn test_write_todo_file_sectioned() {
+        let temp_dir = tempdir().unwrap();
+        let todo_path = temp_dir.path().join("TODO.md");
+
+        // Create a list of TODO items from two different files.
+        let items = vec![
+            MarkedItem {
+                file_path: PathBuf::from("src/foo.rs"),
+                line_number: 20,
+                message: "Fix bug in foo".to_string(),
+            },
+            MarkedItem {
+                file_path: PathBuf::from("src/bar.rs"),
+                line_number: 10,
+                message: "Refactor bar".to_string(),
+            },
+            MarkedItem {
+                file_path: PathBuf::from("src/foo.rs"),
+                line_number: 30,
+                message: "Add tests for foo".to_string(),
+            },
+        ];
+
+        // Write the TODO items using the new sectioned format.
+        let result = write_todo_file(&todo_path, &items);
+        assert!(result.is_ok());
+
+        let content = fs::read_to_string(&todo_path).unwrap();
+
+        // Verify that each file has its own section header.
+        assert!(
+            content.contains("## src/bar.rs"),
+            "Missing section for src/bar.rs"
+        );
+        assert!(
+            content.contains("## src/foo.rs"),
+            "Missing section for src/foo.rs"
+        );
+
+        // Verify that the TODO items are correctly formatted.
+        let expected_bar = "* [src/bar.rs:10](src/bar.rs#L10): Refactor bar";
+        let expected_foo_20 = "* [src/foo.rs:20](src/foo.rs#L20): Fix bug in foo";
+        let expected_foo_30 = "* [src/foo.rs:30](src/foo.rs#L30): Add tests for foo";
+        assert!(content.contains(expected_bar));
+        assert!(content.contains(expected_foo_20));
+        assert!(content.contains(expected_foo_30));
+
+        // Ensure that the sections appear in lexicographical order.
+        let bar_index = content.find("## src/bar.rs").unwrap();
+        let foo_index = content.find("## src/foo.rs").unwrap();
+        assert!(bar_index < foo_index, "Section ordering is incorrect");
     }
 }

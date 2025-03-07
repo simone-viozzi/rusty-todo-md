@@ -33,6 +33,9 @@ impl TodoCollection {
     pub fn merge(&mut self, other: TodoCollection) {
         for (file, mut items) in other.todos {
             let entry = self.todos.entry(file).or_default();
+            // TODO this logic seams to be wrong, why only add new items if they are not already present?
+            //     what about removing items that are not present in the new collection?
+            //     given that this is divide by file we can just replace the entry for a file with the new one
             for new_item in items.drain(..) {
                 if !entry.contains(&new_item) {
                     entry.push(new_item);

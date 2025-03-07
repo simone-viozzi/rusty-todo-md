@@ -1,1 +1,1 @@
-* [src/todo_md.rs:57](src/todo_md.rs#L57): create more tests to see if todo file is updated correctly
+* [src/todo_md_internal.rs:36](src/todo_md_internal.rs#L36): this logic seams to be wrong, why only add new items if they are not already present? what about removing items that are not present in the new collection? given that this is divide by file we can just replace the entry for a file with the new one
