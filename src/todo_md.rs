@@ -1,93 +1,56 @@
 use crate::todo_extractor::MarkedItem;
-use comrak::{nodes::AstNode, parse_document, Arena, ComrakOptions};
-use log::info;
+use crate::todo_md_internal::TodoCollection;
+use regex::Regex;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::path::PathBuf;
 
-/// Reads the existing TODO.md file and returns a vector of `TodoItem`s.
-/// If the file does not exist, returns an empty vector.
+/// Reads the existing TODO.md file (in the new sectioned format) and returns a vector of `MarkedItem`s.
 ///
-/// # Arguments
-/// - `todo_path`: The path to the TODO.md file.
+/// The new format groups TODO items under section headers of the form:
 ///
-/// # Returns
-/// A vector of `TodoItem`s parsed from the existing TODO.md file.
+///     ## <file-path>
+///     * [<file-path>:<line_number>](<file-path>#L<line_number>): <message>
+///
+/// This function uses regex to detect section headers to set the current file context, and then
+/// parses subsequent todo item lines accordingly.
 pub fn read_todo_file(todo_path: &Path) -> Vec<MarkedItem> {
     let mut todos = Vec::new();
-    let arena = Arena::new();
-    let options = ComrakOptions::default();
+    let content = fs::read_to_string(todo_path).unwrap_or_default();
 
-    if let Ok(content) = fs::read_to_string(todo_path) {
-        let root = parse_document(&arena, &content, &options);
+    // Regex for matching a section header, e.g., "## src/cli.rs"
+    let section_re = Regex::new(r"^##\s+(.*)$").unwrap();
+    // Regex for matching a TODO item line, e.g.,
+    // "* [src/cli.rs:10](src/cli.rs#L10): add a new argument to specify what markers to look for"
+    let todo_re = Regex::new(r"^\*\s+\[(.+):(\d+)\]\(.+#L\d+\):\s*(.+)$").unwrap();
 
-        // Traverse the AST to extract TODO items
-        extract_todos_from_ast(root, &mut todos);
+    let mut current_file: Option<String> = None;
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        // If the line is a section header, update the current file context.
+        if let Some(caps) = section_re.captures(line) {
+            current_file = Some(caps[1].trim().to_string());
+            continue;
+        }
+        // If the line matches a TODO item, parse it.
+        if let Some(caps) = todo_re.captures(line) {
+            // Prefer the current file context if available.
+            let file_path_str = current_file.clone().unwrap_or_else(|| caps[1].to_string());
+            let file_path = PathBuf::from(file_path_str);
+            let line_number = caps[2].parse::<usize>().unwrap_or(0);
+            let message = caps[3].to_string();
+            todos.push(MarkedItem {
+                file_path,
+                line_number,
+                message,
+            });
+        }
     }
-
-    info!(
-        "Read {} TODO items from {}",
-        todos.len(),
-        todo_path.display()
-    );
-
     todos
-}
-
-/// Recursively processes the AST nodes to extract TODO items.
-fn extract_todos_from_ast<'a>(node: &'a AstNode<'a>, todos: &mut Vec<MarkedItem>) {
-    let mut current_path: Option<String> = None;
-    let mut current_line: Option<usize> = None;
-
-    for child in node.children() {
-        let data = &child.data.borrow();
-
-        match data.value {
-            comrak::nodes::NodeValue::Link(ref link) => {
-                // Convert Vec<u8> to String for parsing
-                if let Ok(link_str) = String::from_utf8(link.url.clone().into()) {
-                    if let Some((path, line)) = parse_link(&link_str) {
-                        current_path = Some(path.to_string());
-                        current_line = Some(line);
-                    }
-                }
-            }
-            comrak::nodes::NodeValue::Text(ref comment) => {
-                if let (Some(path), Some(line)) = (&current_path, current_line) {
-                    // Trim leading ": " or whitespace
-                    let cleaned_comment = comment.trim().trim_start_matches(':').trim();
-
-                    todos.push(MarkedItem {
-                        file_path: PathBuf::from(path),
-                        line_number: line,
-                        message: cleaned_comment.to_string(),
-                    });
-                }
-                current_path = None;
-                current_line = None;
-            }
-            _ => {}
-        }
-
-        // Recursively process child nodes
-        extract_todos_from_ast(child, todos);
-    }
-}
-
-/// Parses a link from TODO.md in the format `src/main.rs#L12`
-/// and extracts the file path and line number.
-///
-/// # Arguments
-/// - `link`: The Markdown link.
-///
-/// # Returns
-/// An optional tuple containing the file path and line number.
-fn parse_link(link: &str) -> Option<(&str, usize)> {
-    if let Some((path, line)) = link.split_once("#L") {
-        if let Ok(line_number) = line.parse::<usize>() {
-            return Some((path, line_number));
-        }
-    }
-    None
 }
 
 pub fn sync_todo_file(todo_path: &Path, new_todos: Vec<MarkedItem>) -> Result<(), std::io::Error> {
@@ -116,9 +79,6 @@ pub fn sync_todo_file(todo_path: &Path, new_todos: Vec<MarkedItem>) -> Result<()
 /// - `todo_path`: The path to the TODO.md file.
 /// - `todos`: A list of `TodoItem`s to write.
 pub fn write_todo_file(todo_path: &Path, todos: &[MarkedItem]) -> std::io::Result<()> {
-    use crate::todo_md_internal::TodoCollection;
-    use std::fs;
-
     // Create a TodoCollection from the provided TODO items.
     let mut collection = TodoCollection::new();
     for todo in todos {
@@ -221,13 +181,5 @@ mod tests {
                 message: "Add error handling".to_string(),
             }
         );
-    }
-
-    #[test]
-    fn test_parse_link() {
-        let link = "src/main.rs#L12";
-        let parsed = parse_link(link).unwrap();
-        assert_eq!(parsed.0, "src/main.rs");
-        assert_eq!(parsed.1, 12);
     }
 }
