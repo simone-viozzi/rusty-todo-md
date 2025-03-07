@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "rusty_todo_md"
-version = "0.1.8-alpha.10"
+version = "0.1.8-alpha.11"
 description = "Multi-language TODO comment extractor written in Rust."
 authors = [
     { name = "Simone Viozzi", email = "simoneviozzi97@gmail.com" }
