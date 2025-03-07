@@ -116,17 +116,40 @@ pub fn sync_todo_file(todo_path: &Path, new_todos: Vec<MarkedItem>) -> Result<()
 /// - `todo_path`: The path to the TODO.md file.
 /// - `todos`: A list of `TodoItem`s to write.
 pub fn write_todo_file(todo_path: &Path, todos: &[MarkedItem]) -> std::io::Result<()> {
-    let mut content = String::new();
+    use crate::todo_md_internal::TodoCollection;
+    use std::fs;
 
+    // Create a TodoCollection from the provided TODO items.
+    let mut collection = TodoCollection::new();
     for todo in todos {
-        content.push_str(&format!(
-            "* [{}:{}]({}#L{}): {}\n",
-            todo.file_path.display(),
-            todo.line_number,
-            todo.file_path.display(),
-            todo.line_number,
-            todo.message
-        ));
+        collection.add_item(todo.clone());
+    }
+
+    // Sort the file paths (keys) to ensure a consistent order.
+    let mut files: Vec<_> = collection.todos.keys().collect();
+    files.sort_by_key(|a| a.display().to_string());
+
+    let mut content = String::new();
+    // For each file, write a markdown section header and its TODO items.
+    for file in files {
+        // Write a section header for the file.
+        content.push_str(&format!("## {}\n", file.display()));
+
+        // Retrieve and sort TODO items for the current file by line number.
+        let mut items = collection.todos.get(file).unwrap().clone();
+        items.sort_by_key(|item| item.line_number);
+        for item in items {
+            content.push_str(&format!(
+                "* [{}:{}]({}#L{}): {}\n",
+                item.file_path.display(),
+                item.line_number,
+                item.file_path.display(),
+                item.line_number,
+                item.message
+            ));
+        }
+        // Add an extra newline between sections.
+        content.push('\n');
     }
 
     fs::write(todo_path, content)
