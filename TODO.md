@@ -1,3 +1,5 @@
-* [src/cli.rs:10](src/cli.rs#L10): add a new argument to specify what markers to look for like --markers "TODO, FIXME, HACK"
-* [src/cli.rs:83](src/cli.rs#L83): remove this functionality
-* [src/todo_md.rs:94](src/todo_md.rs#L94): create more tests to see if todo file is updated correctly
+* [src/cli.rs:27](src/cli.rs#L27): remove this functionality, it's not needed, pre-commit will pass the list of files
+* [src/cli.rs:75](src/cli.rs#L75): delete this function
+* [src/cli.rs:87](src/cli.rs#L87): remove this functionality
+* [src/git_utils.rs:7](src/git_utils.rs#L7): schedule for removal!
+* [tests/utils.rs:8](tests/utils.rs#L8): schedule for removal!

@@ -8,7 +8,7 @@ use log::{error, info};
 use pest::Parser;
 
 /// Represents a single found marked item.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq)]
 pub struct MarkedItem {
     pub file_path: PathBuf,
     pub line_number: usize,

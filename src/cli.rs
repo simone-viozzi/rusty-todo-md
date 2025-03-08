@@ -5,10 +5,11 @@ use clap::{Arg, ArgAction, Command};
 use log::{error, info};
 use std::path::Path;
 
-pub fn run_cli() {
-    // Define CLI arguments, including the new --all-files flag.
-    // TODO add a new argument to specify what markers to look for
-    //      like --markers "TODO, FIXME, HACK"
+pub fn run_cli_with_args<I, T>(args: I)
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
     let matches = Command::new("rusty-todo-md")
         .version("0.1.5")
         .author("Simone Viozzi <you@example.com>")
@@ -23,6 +24,7 @@ pub fn run_cli() {
                 .default_value("TODO.md"),
         )
         .arg(
+            // TODO remove this functionality, it's not needed, pre-commit will pass the list of files
             Arg::new("all_files")
                 .long("all-files")
                 .help("Ignore staged files logic and scan all tracked files in the repository")
@@ -34,13 +36,14 @@ pub fn run_cli() {
                 .help("Optional list of files to process (passed by pre-commit)")
                 .num_args(0..),
         )
-        .get_matches();
+        .get_matches_from(args);
 
-    // Get the path to TODO.md and the flag value.
     let todo_path = matches
         .get_one::<String>("todo_path")
         .expect("TODO.md path should have a default value");
+
     let all_files = *matches.get_one::<bool>("all_files").unwrap_or(&false);
+
     let files: Vec<String> = matches
         .get_many::<String>("files")
         .unwrap_or_default()
@@ -48,20 +51,20 @@ pub fn run_cli() {
         .collect();
 
     if !files.is_empty() {
-        // Run in file-list mode (pre-commit passes staged files)
-        info!("Processing files passed by pre-commit: {:?}", files);
-        if let Err(e) = process_files_from_list(Path::new(todo_path), files) {
-            error!("Error: {}", e);
+        if let Err(e) = crate::cli::process_files_from_list(Path::new(todo_path), files) {
+            eprintln!("Error: {}", e);
             std::process::exit(1);
         }
-    } else {
-        // Fall back to your existing workflow (using git scanning)
-        info!("No file arguments provided. Using git logic...");
-        if let Err(e) = run_workflow(Path::new(todo_path), Path::new("."), all_files) {
-            error!("Error: {}", e);
-            std::process::exit(1);
-        }
+        // this funcionaity is not needed, pre-commit will pass the list of files
+    } else if let Err(e) = crate::cli::run_workflow(Path::new(todo_path), Path::new("."), all_files)
+    {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
     }
+}
+
+pub fn run_cli() {
+    run_cli_with_args(std::env::args());
 }
 
 /// Main workflow for scanning files and updating TODO.md.
@@ -69,6 +72,7 @@ pub fn run_cli() {
 /// When `all_files` is true, it retrieves all tracked files from Git;
 /// otherwise, it gets only the staged files.
 pub fn run_workflow(todo_path: &Path, repo_path: &Path, all_files: bool) -> Result<(), String> {
+    // TODO delete this function
     // Open the Git repository.
     let repo = git_utils::open_repository(repo_path)
         .map_err(|e| format!("Failed to open Git repository: {}", e))?;

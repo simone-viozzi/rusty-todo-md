@@ -3,6 +3,7 @@ pub mod git_utils;
 pub mod logger;
 pub mod todo_extractor;
 pub mod todo_md;
+pub mod todo_md_internal;
 
 mod todo_extractor_internal;
 

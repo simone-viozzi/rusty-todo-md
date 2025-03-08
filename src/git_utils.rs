@@ -3,6 +3,10 @@ use git2::{ObjectType, TreeWalkMode, TreeWalkResult};
 use log::info;
 use std::path::{Path, PathBuf};
 
+/*
+    TODO schedule for removal!
+*/
+
 /// Opens the Git repository at the specified path.
 /// Returns an error if the specified path is not a Git repository.
 pub fn open_repository(repo_path: &Path) -> Result<Repository, GitError> {
