@@ -30,22 +30,26 @@ impl TodoCollection {
             .push(item);
     }
 
-    /// Merges another `TodoCollection` into this one.
-    /// For each file, new items are added if they are not already present.
-    /// New Function.
-    pub fn merge(&mut self, other: TodoCollection) {
-        info!("Merging another TodoCollection into this one");
-        for (file, mut items) in other.todos {
-            let entry = self.todos.entry(file.clone()).or_default();
-            debug!("Merging items for file: {:?}", file);
-            // TODO this logic seams to be wrong, why only add new items if they are not already present?
-            //     what about removing items that are not present in the new collection?
-            //     given that this is divide by file we can just replace the entry for a file with the new one
-            for new_item in items.drain(..) {
-                if !entry.contains(&new_item) {
-                    entry.push(new_item);
-                }
-            }
+    /// Merges another `TodoCollection` (the new scan) into this one (the existing collection),
+    /// using `deleted_files` to remove todos for files that have been deleted.
+    ///
+    /// Merge Logic:
+    /// - For files present in the new collection, replace the old list with the new list.
+    /// - For files in the old collection that are not in the new collection, keep them unchanged.
+    /// - For files that are deleted (in `deleted_files`), remove them from the merged collection.
+    pub fn merge(&mut self, new: TodoCollection, deleted_files: Vec<PathBuf>) {
+        info!("Merging new TodoCollection into existing one");
+
+        // Replace or add entries for files present in the new collection.
+        for (file, new_items) in new.todos {
+            debug!("Updating todos for file: {:?}", file);
+            self.todos.insert(file, new_items);
+        }
+
+        // Remove entries for files that have been deleted.
+        for file in deleted_files {
+            debug!("Removing todos for deleted file: {:?}", file);
+            self.todos.remove(&file);
         }
     }
 
@@ -126,10 +130,11 @@ mod tests {
             line_number: 20,
             message: "Implement new feature".to_string(),
         };
+        col2.add_item(item1.clone());
         col2.add_item(item2.clone());
 
-        // Merge col2 into col1; expect both items to be present.
-        col1.merge(col2);
+        // Updated merge call with an empty deleted_files list.
+        col1.merge(col2, vec![]);
 
         let foo_items = col1.todos.get(&PathBuf::from("src/foo.rs")).unwrap();
         assert_eq!(foo_items.len(), 2, "Expected two items for src/foo.rs");
@@ -153,7 +158,7 @@ mod tests {
         // Add the same item in the second collection.
         col2.add_item(item.clone());
 
-        col1.merge(col2);
+        col1.merge(col2, vec![]);
 
         let bar_items = col1.todos.get(&PathBuf::from("src/bar.rs")).unwrap();
         assert_eq!(bar_items.len(), 1, "Expected no duplicates for src/bar.rs");
@@ -174,7 +179,7 @@ mod tests {
 
         let col2 = TodoCollection::new(); // empty collection
 
-        col1.merge(col2);
+        col1.merge(col2, vec![]);
 
         let baz_items = col1.todos.get(&PathBuf::from("src/baz.rs")).unwrap();
         assert_eq!(baz_items.len(), 1, "Existing item should not be removed");
@@ -201,7 +206,7 @@ mod tests {
         };
         col2.add_item(item2.clone());
 
-        col1.merge(col2);
+        col1.merge(col2, vec![]);
 
         // Both files should be present with their respective items.
         assert!(col1.todos.contains_key(&PathBuf::from("src/a.rs")));
@@ -273,13 +278,13 @@ mod tests {
         col2.add_item(item3.clone());
 
         // Merge col2 into col1
-        col1.merge(col2);
+        col1.merge(col2, vec![]);
 
         // Expect col1 to contain both items for src/foo.rs and one for src/bar.rs.
         assert!(col1.todos.contains_key(&PathBuf::from("src/foo.rs")));
         assert!(col1.todos.contains_key(&PathBuf::from("src/bar.rs")));
         let foo_items = col1.todos.get(&PathBuf::from("src/foo.rs")).unwrap();
-        assert_eq!(foo_items.len(), 2);
+        assert_eq!(foo_items.len(), 1);
         let bar_items = col1.todos.get(&PathBuf::from("src/bar.rs")).unwrap();
         assert_eq!(bar_items.len(), 1);
     }
@@ -340,12 +345,11 @@ mod tests {
         };
         col2.add_item(item_new.clone());
 
-        // Intended functionality:
-        // Replace the list for "src/foo.rs" with the new list from col2.
-        col1.merge(col2);
+        // Updated merge call.
+        col1.merge(col2, vec![]);
 
         let foo_items = col1.todos.get(&PathBuf::from("src/foo.rs")).unwrap();
-        // We expect that the stale items have been removed and only the new one remains.
+        // We expect that the stale items have been replaced and only the new one remains.
         assert_eq!(
             foo_items.len(),
             1,
@@ -416,10 +420,11 @@ mod tests {
         };
         col2.add_item(d_item1.clone());
 
-        // Intended functionality:
-        // For files present in col2, replace the list in col1 with col2's list.
-        // Also, files in col1 not present in col2 (like File C) should be removed.
-        col1.merge(col2);
+        // Simulate that File C has been deleted by passing its path in the deleted_files list.
+        let deleted_files = vec![PathBuf::from("src/c.rs")];
+
+        // Updated merge call with deleted_files.
+        col1.merge(col2, deleted_files);
 
         // File A should now have only the new item.
         let a_items = col1.todos.get(&PathBuf::from("src/a.rs")).unwrap();
@@ -441,7 +446,7 @@ mod tests {
         assert_eq!(d_items.len(), 1);
         assert_eq!(d_items[0], d_item1);
 
-        // File C should have been removed since it is not present in col2.
+        // File C should have been removed.
         assert!(
             !col1.todos.contains_key(&PathBuf::from("src/c.rs")),
             "File C should have been removed"
