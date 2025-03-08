@@ -3,13 +3,13 @@ mod utils;
 mod integration_tests {
     use super::*;
     use log::LevelFilter;
-    use rusty_todo_md::cli::run_workflow;
+    use rusty_todo_md::cli::{run_cli_with_args, run_workflow};
     use rusty_todo_md::git_utils;
     use rusty_todo_md::git_utils::get_staged_files;
     use rusty_todo_md::logger;
-    use std::fs;
     use std::path::PathBuf;
     use std::sync::Once;
+    use std::{env, fs};
     use utils::TempGitRepo;
 
     static INIT: Once = Once::new();
@@ -23,6 +23,73 @@ mod integration_tests {
                 .try_init()
                 .ok();
         });
+    }
+
+    #[test]
+    fn test_cli_integration_all_files() {
+        // Set up a temporary Git repository and change current directory to it.
+        let temp_repo = TempGitRepo::new();
+        let repo_path = temp_repo.repo_path.clone();
+        env::set_current_dir(&repo_path).expect("Failed to change directory");
+
+        // Create a file with a TODO comment and commit it to simulate a tracked file.
+        temp_repo.create_file("file_all.rs", "// TODO: Implement feature X");
+        temp_repo.stage_file("file_all.rs");
+        temp_repo.commit("Add file_all.rs");
+
+        // Build CLI arguments for full-project scan.
+        let todo_path = repo_path.join("TODO.md");
+        let args = vec![
+            "rusty-todo-md",
+            "--todo-path",
+            todo_path.to_str().unwrap(),
+            "--all-files",
+        ];
+        run_cli_with_args(args);
+
+        // Check that the TODO.md file contains the expected content.
+        let content = fs::read_to_string(&todo_path).unwrap();
+        assert!(
+            content.contains("file_all.rs"),
+            "Expected TODO entry for file_all.rs"
+        );
+        assert!(
+            content.contains("Implement feature X"),
+            "Expected TODO message in file_all.rs"
+        );
+    }
+
+    #[test]
+    fn test_cli_integration_staged() {
+        // Set up a temporary Git repository and change current directory to it.
+        let temp_repo = TempGitRepo::new();
+        let repo_path = temp_repo.repo_path.clone();
+        env::set_current_dir(&repo_path).expect("Failed to change directory");
+
+        // Create a file with a TODO comment and stage it (simulate staged files).
+        temp_repo.create_file("file_staged.rs", "// TODO: Update documentation");
+        temp_repo.stage_file("file_staged.rs");
+
+        // Build CLI arguments for file list processing.
+        let todo_path = repo_path.join("TODO.md");
+        let args = vec![
+            "rusty-todo-md",
+            "--todo-path",
+            todo_path.to_str().unwrap(),
+            "file_staged.rs",
+        ];
+        run_cli_with_args(args);
+
+        // Check that the TODO.md file contains the expected content.
+        let content = fs::read_to_string(&todo_path).unwrap();
+        assert!(
+            content.contains("file_staged.rs"),
+            "Expected TODO entry for file_staged.rs"
+        );
+        assert!(
+            content.contains("Update documentation"),
+            "Expected TODO message in file_staged.rs"
+        );
     }
 
     #[test]
