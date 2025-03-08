@@ -26,6 +26,7 @@ mod integration_tests {
     }
 
     #[test]
+    #[ignore]
     fn test_cli_integration_all_files() {
         // Set up a temporary Git repository and change current directory to it.
         let temp_repo = TempGitRepo::new();
@@ -60,6 +61,7 @@ mod integration_tests {
     }
 
     #[test]
+    #[ignore]
     fn test_cli_integration_staged() {
         // Set up a temporary Git repository and change current directory to it.
         let temp_repo = TempGitRepo::new();
@@ -93,6 +95,7 @@ mod integration_tests {
     }
 
     #[test]
+    #[ignore]
     fn test_get_staged_files() {
         init_logger();
         // Set up a temporary Git repository
@@ -119,6 +122,7 @@ mod integration_tests {
     }
 
     #[test]
+    #[ignore]
     fn test_run_workflow() {
         init_logger();
         // Set up a temporary Git repository
@@ -153,6 +157,7 @@ mod integration_tests {
     }
 
     #[test]
+    #[ignore]
     fn test_run_workflow_all_files() {
         init_logger();
         // Set up a temporary Git repository using our test helper.

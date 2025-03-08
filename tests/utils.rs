@@ -4,6 +4,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
+/*
+    TODO schedule for removal!
+*/
+
 /// Struct to manage a temporary Git repository for testing.
 pub struct TempGitRepo {
     /// Keep the temp directory alive, preventing it from being deleted until this struct is dropped.

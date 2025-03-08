@@ -24,6 +24,7 @@ where
                 .default_value("TODO.md"),
         )
         .arg(
+            // TODO remove this functionality, it's not needed, pre-commit will pass the list of files
             Arg::new("all_files")
                 .long("all-files")
                 .help("Ignore staged files logic and scan all tracked files in the repository")
@@ -40,7 +41,9 @@ where
     let todo_path = matches
         .get_one::<String>("todo_path")
         .expect("TODO.md path should have a default value");
+
     let all_files = *matches.get_one::<bool>("all_files").unwrap_or(&false);
+
     let files: Vec<String> = matches
         .get_many::<String>("files")
         .unwrap_or_default()
@@ -52,6 +55,7 @@ where
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
+        // this funcionaity is not needed, pre-commit will pass the list of files
     } else if let Err(e) = crate::cli::run_workflow(Path::new(todo_path), Path::new("."), all_files)
     {
         eprintln!("Error: {}", e);
@@ -68,6 +72,7 @@ pub fn run_cli() {
 /// When `all_files` is true, it retrieves all tracked files from Git;
 /// otherwise, it gets only the staged files.
 pub fn run_workflow(todo_path: &Path, repo_path: &Path, all_files: bool) -> Result<(), String> {
+    // TODO delete this function
     // Open the Git repository.
     let repo = git_utils::open_repository(repo_path)
         .map_err(|e| format!("Failed to open Git repository: {}", e))?;
