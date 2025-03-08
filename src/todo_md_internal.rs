@@ -1,4 +1,5 @@
 use crate::todo_extractor::MarkedItem;
+use log::{debug, info};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -12,6 +13,7 @@ impl TodoCollection {
     /// Creates a new, empty TodoCollection.
     /// New Function.
     pub fn new() -> Self {
+        info!("Creating a new TodoCollection");
         TodoCollection {
             todos: HashMap::new(),
         }
@@ -21,6 +23,7 @@ impl TodoCollection {
     /// If the file already has TODO items, the new item is appended.
     /// New Function.
     pub fn add_item(&mut self, item: MarkedItem) {
+        info!("Adding item to collection: {:?}", item);
         self.todos
             .entry(item.file_path.clone())
             .or_default()
@@ -31,8 +34,10 @@ impl TodoCollection {
     /// For each file, new items are added if they are not already present.
     /// New Function.
     pub fn merge(&mut self, other: TodoCollection) {
+        info!("Merging another TodoCollection into this one");
         for (file, mut items) in other.todos {
-            let entry = self.todos.entry(file).or_default();
+            let entry = self.todos.entry(file.clone()).or_default();
+            debug!("Merging items for file: {:?}", file);
             // TODO this logic seams to be wrong, why only add new items if they are not already present?
             //     what about removing items that are not present in the new collection?
             //     given that this is divide by file we can just replace the entry for a file with the new one
@@ -48,6 +53,7 @@ impl TodoCollection {
     /// The sorting is done first by the file path, then by the line number.
     /// New Function.
     pub fn to_sorted_vec(&self) -> Vec<MarkedItem> {
+        info!("Converting TodoCollection to a sorted vector");
         let mut all_items: Vec<_> = self.todos.values().flat_map(|v| v.clone()).collect();
         all_items.sort_by(|a, b| {
             a.file_path
@@ -68,10 +74,27 @@ impl Default for TodoCollection {
 mod tests {
     use super::*;
     use crate::todo_extractor::MarkedItem;
+    use log::LevelFilter;
+    use std::io::Write;
     use std::path::PathBuf;
+    use std::sync::Once;
+
+    static INIT: Once = Once::new();
+
+    fn init_logger() {
+        INIT.call_once(|| {
+            env_logger::Builder::from_default_env()
+                .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
+                .filter_level(LevelFilter::Debug)
+                .is_test(true)
+                .try_init()
+                .ok();
+        });
+    }
 
     #[test]
     fn test_add_item() {
+        init_logger();
         let mut collection = TodoCollection::new();
         let item = MarkedItem {
             file_path: PathBuf::from("src/test.rs"),
@@ -88,6 +111,7 @@ mod tests {
     // Test that missing items from the new collection are added to the existing collection.
     #[test]
     fn test_merge_adds_missing_items() {
+        init_logger();
         let mut col1 = TodoCollection::new();
         let item1 = MarkedItem {
             file_path: PathBuf::from("src/foo.rs"),
@@ -116,6 +140,7 @@ mod tests {
     // Test that merging collections does not duplicate items when the same item exists.
     #[test]
     fn test_merge_no_duplicates() {
+        init_logger();
         let mut col1 = TodoCollection::new();
         let item = MarkedItem {
             file_path: PathBuf::from("src/bar.rs"),
@@ -138,6 +163,7 @@ mod tests {
     // Test that merging an empty collection leaves the existing collection unchanged.
     #[test]
     fn test_merge_keeps_existing_items_when_new_empty() {
+        init_logger();
         let mut col1 = TodoCollection::new();
         let item = MarkedItem {
             file_path: PathBuf::from("src/baz.rs"),
@@ -158,6 +184,7 @@ mod tests {
     // Test merging collections across different files.
     #[test]
     fn test_merge_multiple_files() {
+        init_logger();
         let mut col1 = TodoCollection::new();
         let item1 = MarkedItem {
             file_path: PathBuf::from("src/a.rs"),
@@ -190,6 +217,7 @@ mod tests {
     // Test that the sorted vector output is in the expected order across multiple files.
     #[test]
     fn test_merge_sorting_order() {
+        init_logger();
         let mut collection = TodoCollection::new();
         let item1 = MarkedItem {
             file_path: PathBuf::from("src/z.rs"),
@@ -221,6 +249,7 @@ mod tests {
 
     #[test]
     fn test_merge_collections() {
+        init_logger();
         let mut col1 = TodoCollection::new();
         let item1 = MarkedItem {
             file_path: PathBuf::from("src/foo.rs"),
@@ -257,6 +286,7 @@ mod tests {
 
     #[test]
     fn test_to_sorted_vec() {
+        init_logger();
         let mut collection = TodoCollection::new();
         let item1 = MarkedItem {
             file_path: PathBuf::from("src/z.rs"),
@@ -283,5 +313,138 @@ mod tests {
         assert_eq!(sorted[0], item2);
         assert_eq!(sorted[1], item3);
         assert_eq!(sorted[2], item1);
+    }
+
+    #[test]
+    fn test_merge_replaces_existing_items() {
+        init_logger();
+        let mut col1 = TodoCollection::new();
+        let item_old = MarkedItem {
+            file_path: PathBuf::from("src/foo.rs"),
+            line_number: 10,
+            message: "Fix bug".to_string(),
+        };
+        let item_stale = MarkedItem {
+            file_path: PathBuf::from("src/foo.rs"),
+            line_number: 15,
+            message: "Old note".to_string(),
+        };
+        col1.add_item(item_old);
+        col1.add_item(item_stale);
+
+        let mut col2 = TodoCollection::new();
+        let item_new = MarkedItem {
+            file_path: PathBuf::from("src/foo.rs"),
+            line_number: 20,
+            message: "Implement feature".to_string(),
+        };
+        col2.add_item(item_new.clone());
+
+        // Intended functionality:
+        // Replace the list for "src/foo.rs" with the new list from col2.
+        col1.merge(col2);
+
+        let foo_items = col1.todos.get(&PathBuf::from("src/foo.rs")).unwrap();
+        // We expect that the stale items have been removed and only the new one remains.
+        assert_eq!(
+            foo_items.len(),
+            1,
+            "Expected old items to be replaced by the new list"
+        );
+        assert_eq!(foo_items[0], item_new);
+    }
+
+    #[test]
+    fn test_merge_complex_replacement() {
+        init_logger();
+        let mut col1 = TodoCollection::new();
+        // File A: initially two items.
+        let a_item1 = MarkedItem {
+            file_path: PathBuf::from("src/a.rs"),
+            line_number: 5,
+            message: "A: initial task".to_string(),
+        };
+        let a_item2 = MarkedItem {
+            file_path: PathBuf::from("src/a.rs"),
+            line_number: 15,
+            message: "A: old task".to_string(),
+        };
+        col1.add_item(a_item1);
+        col1.add_item(a_item2);
+
+        // File B: initially one item.
+        let b_item1 = MarkedItem {
+            file_path: PathBuf::from("src/b.rs"),
+            line_number: 10,
+            message: "B: fix issue".to_string(),
+        };
+        col1.add_item(b_item1.clone());
+
+        // File C: exists only in col1.
+        let c_item1 = MarkedItem {
+            file_path: PathBuf::from("src/c.rs"),
+            line_number: 20,
+            message: "C: temporary note".to_string(),
+        };
+        col1.add_item(c_item1);
+
+        // Create col2 with updated items.
+        let mut col2 = TodoCollection::new();
+        // For File A, new list with one updated item.
+        let a_item_new = MarkedItem {
+            file_path: PathBuf::from("src/a.rs"),
+            line_number: 7,
+            message: "A: new task".to_string(),
+        };
+        col2.add_item(a_item_new.clone());
+
+        // For File B, new list with an additional item.
+        let b_item2 = MarkedItem {
+            file_path: PathBuf::from("src/b.rs"),
+            line_number: 12,
+            message: "B: additional improvement".to_string(),
+        };
+        // Note: Even though b_item1 is already in col1, intended behavior is to replace the list.
+        col2.add_item(b_item1.clone());
+        col2.add_item(b_item2.clone());
+
+        // For File D, a new file not in col1.
+        let d_item1 = MarkedItem {
+            file_path: PathBuf::from("src/d.rs"),
+            line_number: 1,
+            message: "D: start here".to_string(),
+        };
+        col2.add_item(d_item1.clone());
+
+        // Intended functionality:
+        // For files present in col2, replace the list in col1 with col2's list.
+        // Also, files in col1 not present in col2 (like File C) should be removed.
+        col1.merge(col2);
+
+        // File A should now have only the new item.
+        let a_items = col1.todos.get(&PathBuf::from("src/a.rs")).unwrap();
+        assert_eq!(a_items.len(), 1, "File A's items should have been replaced");
+        assert_eq!(a_items[0], a_item_new);
+
+        // File B should have exactly the two items from col2.
+        let b_items = col1.todos.get(&PathBuf::from("src/b.rs")).unwrap();
+        assert_eq!(
+            b_items.len(),
+            2,
+            "File B should have been replaced with two items"
+        );
+        assert!(b_items.contains(&b_item1));
+        assert!(b_items.contains(&b_item2));
+
+        // File D should be newly added.
+        let d_items = col1.todos.get(&PathBuf::from("src/d.rs")).unwrap();
+        assert_eq!(d_items.len(), 1);
+        assert_eq!(d_items[0], d_item1);
+
+        // File C should have been removed since it is not present in col2.
+        assert!(
+            !col1.todos.contains_key(&PathBuf::from("src/c.rs")),
+            "File C should have been removed"
+        );
     }
 }

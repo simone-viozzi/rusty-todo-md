@@ -1,5 +1,1 @@
-* [src/cli.rs:27](src/cli.rs#L27): remove this functionality, it's not needed, pre-commit will pass the list of files
-* [src/cli.rs:75](src/cli.rs#L75): delete this function
-* [src/cli.rs:87](src/cli.rs#L87): remove this functionality
-* [src/git_utils.rs:7](src/git_utils.rs#L7): schedule for removal!
-* [tests/utils.rs:8](tests/utils.rs#L8): schedule for removal!
+* [src/todo_md_internal.rs:41](src/todo_md_internal.rs#L41): this logic seams to be wrong, why only add new items if they are not already present? what about removing items that are not present in the new collection? given that this is divide by file we can just replace the entry for a file with the new one
