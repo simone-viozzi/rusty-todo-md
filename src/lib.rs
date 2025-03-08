@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod git_utils;
 pub mod logger;
 pub mod todo_extractor;
 pub mod todo_md;
