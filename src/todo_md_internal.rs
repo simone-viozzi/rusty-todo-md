@@ -85,11 +85,139 @@ mod tests {
         assert_eq!(items[0], item);
     }
 
-    // TODO add more tests for the merge of the collections
-    //     - test that items are added if they are not already present
-    //     - test that items are not duplicated
-    //     - test that items are not removed
-    //     - test that items are removed if they are not present in the new collection
+    // Test that missing items from the new collection are added to the existing collection.
+    #[test]
+    fn test_merge_adds_missing_items() {
+        let mut col1 = TodoCollection::new();
+        let item1 = MarkedItem {
+            file_path: PathBuf::from("src/foo.rs"),
+            line_number: 10,
+            message: "Fix bug".to_string(),
+        };
+        col1.add_item(item1.clone());
+
+        let mut col2 = TodoCollection::new();
+        let item2 = MarkedItem {
+            file_path: PathBuf::from("src/foo.rs"),
+            line_number: 20,
+            message: "Implement new feature".to_string(),
+        };
+        col2.add_item(item2.clone());
+
+        // Merge col2 into col1; expect both items to be present.
+        col1.merge(col2);
+
+        let foo_items = col1.todos.get(&PathBuf::from("src/foo.rs")).unwrap();
+        assert_eq!(foo_items.len(), 2, "Expected two items for src/foo.rs");
+        assert!(foo_items.contains(&item1));
+        assert!(foo_items.contains(&item2));
+    }
+
+    // Test that merging collections does not duplicate items when the same item exists.
+    #[test]
+    fn test_merge_no_duplicates() {
+        let mut col1 = TodoCollection::new();
+        let item = MarkedItem {
+            file_path: PathBuf::from("src/bar.rs"),
+            line_number: 15,
+            message: "Refactor code".to_string(),
+        };
+        col1.add_item(item.clone());
+
+        let mut col2 = TodoCollection::new();
+        // Add the same item in the second collection.
+        col2.add_item(item.clone());
+
+        col1.merge(col2);
+
+        let bar_items = col1.todos.get(&PathBuf::from("src/bar.rs")).unwrap();
+        assert_eq!(bar_items.len(), 1, "Expected no duplicates for src/bar.rs");
+        assert_eq!(bar_items[0], item);
+    }
+
+    // Test that merging an empty collection leaves the existing collection unchanged.
+    #[test]
+    fn test_merge_keeps_existing_items_when_new_empty() {
+        let mut col1 = TodoCollection::new();
+        let item = MarkedItem {
+            file_path: PathBuf::from("src/baz.rs"),
+            line_number: 25,
+            message: "Optimize performance".to_string(),
+        };
+        col1.add_item(item.clone());
+
+        let col2 = TodoCollection::new(); // empty collection
+
+        col1.merge(col2);
+
+        let baz_items = col1.todos.get(&PathBuf::from("src/baz.rs")).unwrap();
+        assert_eq!(baz_items.len(), 1, "Existing item should not be removed");
+        assert_eq!(baz_items[0], item);
+    }
+
+    // Test merging collections across different files.
+    #[test]
+    fn test_merge_multiple_files() {
+        let mut col1 = TodoCollection::new();
+        let item1 = MarkedItem {
+            file_path: PathBuf::from("src/a.rs"),
+            line_number: 5,
+            message: "Improve variable naming".to_string(),
+        };
+        col1.add_item(item1.clone());
+
+        let mut col2 = TodoCollection::new();
+        let item2 = MarkedItem {
+            file_path: PathBuf::from("src/b.rs"),
+            line_number: 10,
+            message: "Add unit tests".to_string(),
+        };
+        col2.add_item(item2.clone());
+
+        col1.merge(col2);
+
+        // Both files should be present with their respective items.
+        assert!(col1.todos.contains_key(&PathBuf::from("src/a.rs")));
+        assert!(col1.todos.contains_key(&PathBuf::from("src/b.rs")));
+        let a_items = col1.todos.get(&PathBuf::from("src/a.rs")).unwrap();
+        let b_items = col1.todos.get(&PathBuf::from("src/b.rs")).unwrap();
+        assert_eq!(a_items.len(), 1);
+        assert_eq!(b_items.len(), 1);
+        assert_eq!(a_items[0], item1);
+        assert_eq!(b_items[0], item2);
+    }
+
+    // Test that the sorted vector output is in the expected order across multiple files.
+    #[test]
+    fn test_merge_sorting_order() {
+        let mut collection = TodoCollection::new();
+        let item1 = MarkedItem {
+            file_path: PathBuf::from("src/z.rs"),
+            line_number: 50,
+            message: "Last item".to_string(),
+        };
+        let item2 = MarkedItem {
+            file_path: PathBuf::from("src/a.rs"),
+            line_number: 10,
+            message: "First item".to_string(),
+        };
+        let item3 = MarkedItem {
+            file_path: PathBuf::from("src/a.rs"),
+            line_number: 20,
+            message: "Second item".to_string(),
+        };
+        // Add items in non-sorted order.
+        collection.add_item(item1.clone());
+        collection.add_item(item3.clone());
+        collection.add_item(item2.clone());
+
+        let sorted = collection.to_sorted_vec();
+        // Expected order: items from src/a.rs (line 10, then 20) followed by src/z.rs.
+        assert_eq!(sorted.len(), 3);
+        assert_eq!(sorted[0], item2);
+        assert_eq!(sorted[1], item3);
+        assert_eq!(sorted[2], item1);
+    }
 
     #[test]
     fn test_merge_collections() {

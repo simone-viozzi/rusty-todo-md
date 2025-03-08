@@ -1,1 +1,2 @@
 * [src/cli.rs:82](src/cli.rs#L82): remove this functionality
+* [src/todo_md_internal.rs:36](src/todo_md_internal.rs#L36): this logic seams to be wrong, why only add new items if they are not already present? what about removing items that are not present in the new collection? given that this is divide by file we can just replace the entry for a file with the new one
