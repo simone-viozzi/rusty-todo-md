@@ -1,50 +1,49 @@
 # **Rusty TODO MD** — A Pre-Commit Hook for Managing TODOs
 
-Rusty TODO MD is a **pre-commit hook** designed to help you keep track of all your code's **TODO** comments by automatically extracting them and syncing them to a central **`TODO.md`** file. It uses custom parsers to accurately find and handle multi-line TODOs in supported languages, ensuring that TODO markers stay organized and visible.
+Rusty TODO MD is a **pre-commit hook** designed to help you manage and centralize all your code's **TODO** comments by automatically extracting them and synchronizing them into a single **`TODO.md`** file. With support for multiple languages—currently Python and Rust—Rusty TODO MD now organizes TODOs using a new sectioned format for enhanced readability and easier maintenance.
 
 ---
 
-## ✨ **Key Features**
+## ✨ Key Features
+
 1. **Automatic TODO Collection**  
-   By default, Rusty TODO MD scans only your **staged** files for `TODO` (or other markers like `FIXME`), then updates `TODO.md` with any new entries.
-   
-2. **Selective or Full-Project Scan**  
-   - **Selective Scan** (default): Only fetches changes from **staged** files.
-   - **Full-Project Scan**: Use the `--all-files` flag to scan the entire repository at once.
+   By default, Rusty TODO MD scans your **staged files** (or all tracked files using the `--all-files` flag) for markers like `TODO` and `FIXME`, and updates your `TODO.md` with any new entries.
+
+2. **Sectioned TODO.md Format**  
+   The `TODO.md` file is now organized into sections, with each section corresponding to a source file. Each section begins with a header (`## <file-path>`) followed by a list of extracted TODO items.
 
 3. **Multi-line TODO Support**  
-   - Properly merges **indented** lines under a single TODO block (e.g., continuing on new lines).
+   Handles multi-line and indented TODO comments, merging them into a single entry.
 
 4. **Sync Mechanism**  
-   - Entries in `TODO.md` reflect your code’s `TODO` lines (with file path and line number).  
-   - If a TODO is removed from the code, it will be removed from `TODO.md` in subsequent runs (assuming it's no longer present in newly staged or scanned files).
+   - Automatically merges new TODO entries with existing ones, using an internal representation.
+   - Removes entries when their corresponding TODOs are no longer present in the source code.
 
 5. **Language-Aware Parsing**  
-   Currently supports **Python** and **Rust**. JavaScript, TypeScript, and Go are partially supported or planned.
+   Supports precise parsing for **Python** and **Rust** out-of-the-box, with future plans for additional languages such as JavaScript, TypeScript, and Go.
 
-6. **Easy Integration with Pre-Commit**  
-   Just add a snippet to your `.pre-commit-config.yaml` to start tracking your TODOs effortlessly.
-
----
-
-## 🚀 **Objective**
-
-**Why use Rusty TODO MD?**  
-Keeping a scattered collection of `TODO` comments in code can quickly become unmanageable. Rusty TODO MD streamlines the process by **centralizing** all TODO notes into a single `TODO.md` file. This makes it easy for teams to monitor outstanding tasks, track them through commits, and keep documentation in sync with the actual codebase.
+6. **Seamless Pre-Commit Integration**  
+   Easily integrate Rusty TODO MD into your workflow by adding it to your `.pre-commit-config.yaml`.
 
 ---
 
-## ⚙️ **Installation & Setup**
+## 🚀 Objective
 
-### 1. **Install Pre-Commit**
-If you don’t already have [pre-commit](https://pre-commit.com/) installed:
+Scattered TODO comments can be hard to track and maintain. Rusty TODO MD centralizes these comments in a structured, sectioned `TODO.md` file—making it simpler to review outstanding tasks and keep your documentation in sync with your codebase.
+
+---
+
+## ⚙️ Installation & Setup
+
+### 1. Install Pre-Commit
+If you haven't already installed [pre-commit](https://pre-commit.com/):
 ```sh
 pip install pre-commit
 ```
-*(Or use your preferred package manager.)*
+*(Alternatively, use your preferred package manager.)*
 
-### 2. **Add Rusty TODO MD to `.pre-commit-config.yaml`**
-In your repository, create or update a `.pre-commit-config.yaml` file at the root:
+### 2. Configure Pre-Commit
+Add the following snippet to your `.pre-commit-config.yaml` file at the root of your repository:
 ```yaml
 repos:
   - repo: https://github.com/your-username/rusty-todo-md
@@ -52,81 +51,66 @@ repos:
     hooks:
       - id: rusty-todo-md
 ```
-Replace `rev` with the actual tag or commit hash you’d like to use.
+Replace `rev` with the desired tag or commit hash.
 
-### 3. **Install the Pre-Commit Hook**
-From your repository root:
+### 3. Install the Pre-Commit Hook
+Run the following command from your repository root:
 ```sh
 pre-commit install
 ```
-Now, whenever you `git commit`, Rusty TODO MD will run on staged files.
+Rusty TODO MD will now run on your staged files each time you commit.
 
 ---
 
-## 🧩 **Usage as a Pre-Commit Hook**
+## 🧩 CLI Usage (Optional)
 
-1. **Stage Your Changes**  
-   ```sh
-   git add <files...>
-   ```
-2. **Commit**  
-   ```sh
-   git commit -m "feat: add new feature"
-   ```
-3. **Observe TODO.md**  
-   - Any `TODO` or `FIXME` lines (in code comments) that were part of your **staged** changes will be extracted.
-   - Rusty TODO MD updates (or creates) the `TODO.md` file with the new entries.
-
-> **Tip**: If `TODO.md` changes were made during the pre-commit hook, you’ll need to re-stage `TODO.md` (if the hook is configured to fail on changes). This ensures your commit accurately captures the updated `TODO.md`.
-
----
-
-## 🖥️ **CLI Usage (Optional)**
-
-You can also run `rusty-todo-md` manually from the command line:
-
-```bash
+You can also run Rusty TODO MD manually:
+```sh
 rusty-todo-md --all-files
 ```
-- **`--all-files`**: Scans **all tracked files** in your repo instead of just staged ones, updating `TODO.md` accordingly.
+- **`--all-files`**: Scans all tracked files instead of just the staged ones.
 
-Or to specify a custom `TODO.md` location:
-```bash
+Or specify a custom location for your TODO file:
+```sh
 rusty-todo-md --todo-path docs/TODOS.md
 ```
 
 ---
 
-## 📝 **How It Works**
+## 📝 How It Works
 
 1. **File Discovery**  
-   - **Default**: Rusty TODO MD looks at the **staged files** in your Git index.  
-   - **`--all-files`**: Rusty TODO MD collects **all tracked files** from your repo.
+   - By default, scans the staged files in your Git index.
+   - With the `--all-files` flag, scans all tracked files in the repository.
 
 2. **Comment Extraction**  
-   - It parses each file’s **comments** (not code/string literals) and looks for **markers** (e.g., `TODO`, `FIXME`).
-   - Handles **multi-line** and **indented** comment structures, merging them into one block.
+   - Parses file comments (ignoring code or string literals) to extract markers like `TODO` and `FIXME`.
+   - Supports multi-line and indented comment structures.
 
-3. **Write/Sync `TODO.md`**  
-   - Each TODO is recorded in the format:  
+3. **Sectioned TODO.md Format**  
+   - Organizes extracted TODOs into sections based on the source file.
+   - Each section starts with a header (`## <file-path>`) followed by formatted entries:
      ```
-     * [path/to/file:line_number](path/to/file#Lline_number): TODO message
+     * [<file-path>:<line_number>](<file-path>#L<line_number>): TODO message
      ```
-   - If you remove a TODO from the source code, that entry disappears from `TODO.md` after the next run (provided you are scanning or staging those file changes).
+
+4. **Sync Mechanism**  
+   - Reads the existing `TODO.md` using the new parser.
+   - Merges new TODO entries with the existing ones using an internal representation.
+   - Writes the updated, sectioned list back to `TODO.md`.
 
 ---
 
-## 🔧 **Configuration**
+## 🔧 Configuration
 
-- **Markers**: By default, only `TODO` is searched. You can customize markers (like `FIXME`, `HACK`, etc.) by modifying the source or through future CLI options (work in progress).  
-- **File Extensions**: Rusty TODO MD currently includes specialized grammars for **Python** and **Rust**, with partial or upcoming support for JS, TS, and Go. Feel free to open a PR to add more languages.
+- **Markers**: Currently, the tool searches for `TODO` by default. You can customize markers (e.g., `FIXME`, `HACK`) in future configurations or CLI options.
+- **Language Support**: Rusty TODO MD provides built-in parsing for Python and Rust, with planned support for additional languages.
 
 ---
 
-## 📚 **Example**
+## 📚 Example
 
-### **Python**
-
+### Python Example
 ```python
 # TODO: Implement data validation
 def process_data(data):
@@ -136,15 +120,14 @@ def process_data(data):
     """
     pass
 ```
-
-**In `TODO.md`**:
+This produces a section in `TODO.md` like:
 ```
+## path/to/your_file.py
 * [path/to/your_file.py:2](path/to/your_file.py#L2): Implement data validation
 * [path/to/your_file.py:4](path/to/your_file.py#L4): Optimize this logic Possibly reduce nested loops
 ```
 
-### **Rust**
-
+### Rust Example
 ```rust
 // TODO: Refactor main function
 fn main() {
@@ -154,33 +137,32 @@ fn main() {
     */
 }
 ```
-
-**In `TODO.md`**:
+This produces a section in `TODO.md` like:
 ```
+## src/main.rs
 * [src/main.rs:2](src/main.rs#L2): Refactor main function
 * [src/main.rs:5](src/main.rs#L5): Add error handling Possibly a custom result type
 ```
 
 ---
 
-## 🤝 **Contributing**
+## 🤝 Contributing
 
-1. **Open an Issue** if you find a bug or want a new feature.
-2. **Submit a Pull Request** to add support for a new language, marker, or enhancement.
-
-We welcome all contributions, from docs to code changes!
-
----
-
-## ⚖️ **License**
-
-This project is licensed under the [MIT License](LICENSE). You’re free to use, modify, and distribute it, as long as the original license is included.
+Contributions are welcome!  
+- **Open an Issue** for bug reports or feature requests.
+- **Submit a Pull Request** with enhancements, additional language support, or configuration options.
 
 ---
 
-## ❤️ **Support**
+## ⚖️ License
 
-If you find Rusty TODO MD helpful, a ⭐️ on the repository is always appreciated! It helps others discover the project and shows your support.
+This project is licensed under the [MIT License](LICENSE). You are free to use, modify, and distribute the software as long as the original license is included.
+
+---
+
+## ❤️ Support
+
+If you find Rusty TODO MD helpful, please consider giving it a ⭐ on GitHub to help others discover the project.
 
 ---
 
