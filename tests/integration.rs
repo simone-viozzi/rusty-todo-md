@@ -1,16 +1,13 @@
-mod utils;
-
 mod integration_tests {
-    use super::*;
+    use git2::{Error as GitError, Repository};
     use log::LevelFilter;
-    use rusty_todo_md::cli::{run_cli_with_args, run_workflow};
-    use rusty_todo_md::git_utils;
-    use rusty_todo_md::git_utils::get_staged_files;
+    use rusty_todo_md::cli::run_cli_with_args;
+    use rusty_todo_md::git_utils::GitOpsTrait;
     use rusty_todo_md::logger;
-    use std::path::PathBuf;
+    use std::fs;
+    use std::path::{Path, PathBuf};
     use std::sync::Once;
-    use std::{env, fs};
-    use utils::TempGitRepo;
+    use tempfile::tempdir;
 
     static INIT: Once = Once::new();
 
@@ -25,167 +22,375 @@ mod integration_tests {
         });
     }
 
+    #[cfg(test)]
+    pub struct FakeGitOps {
+        pub _dummy_repo: Repository,
+        pub temp_dir: tempfile::TempDir,
+        pub staged_files: Vec<PathBuf>,
+        pub tracked_files: Vec<PathBuf>,
+        pub deleted_files: Vec<PathBuf>,
+    }
+
+    #[cfg(test)]
+    impl FakeGitOps {
+        pub fn new(
+            _dummy_repo: Repository,
+            temp_dir: tempfile::TempDir,
+            staged_files: Vec<PathBuf>,
+            tracked_files: Vec<PathBuf>,
+            deleted_files: Vec<PathBuf>,
+        ) -> Self {
+            FakeGitOps {
+                _dummy_repo,
+                temp_dir,
+                staged_files,
+                tracked_files,
+                deleted_files,
+            }
+        }
+    }
+
+    #[cfg(test)]
+    impl GitOpsTrait for FakeGitOps {
+        fn open_repository(&self, _repo_path: &Path) -> Result<Repository, GitError> {
+            // Open the repository using the stored temporary directory's path.
+            Repository::open(self.temp_dir.path())
+        }
+
+        fn get_staged_files(&self, _repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
+            Ok(self.staged_files.clone())
+        }
+
+        fn get_tracked_files(&self, _repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
+            Ok(self.tracked_files.clone())
+        }
+
+        fn get_deleted_files(&self, _repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
+            Ok(self.deleted_files.clone())
+        }
+    }
+
+    // Helper function to create a fake GitOps instance.
+    fn create_fake_git_ops() -> Result<FakeGitOps, GitError> {
+        // Create a temporary directory and initialize a dummy repository.
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir for fake repo");
+        let repo = Repository::init(temp_dir.path())?;
+        // For testing, we can ignore the repo contents.
+        // Set up predetermined fake outputs.
+        let staged_files = vec![PathBuf::from("file1.rs")];
+        let tracked_files = vec![PathBuf::from("file1.rs"), PathBuf::from("file2.rs")];
+        let deleted_files = vec![PathBuf::from("old_file.rs")];
+        Ok(FakeGitOps::new(
+            repo,
+            temp_dir,
+            staged_files,
+            tracked_files,
+            deleted_files,
+        ))
+    }
+
+    /// Helper to create a file in the provided directory.
+    fn create_test_file(dir: &Path, filename: &str, content: &str) -> PathBuf {
+        let file_path = dir.join(filename);
+        fs::write(&file_path, content).expect("Failed to write test file");
+        file_path
+    }
+
+    /// Test that running the CLI with a single file containing a TODO comment creates a proper TODO.md section.
     #[test]
-    #[ignore]
-    fn test_cli_integration_all_files() {
-        // Set up a temporary Git repository and change current directory to it.
-        let temp_repo = TempGitRepo::new();
-        let repo_path = temp_repo.repo_path.clone();
-        env::set_current_dir(&repo_path).expect("Failed to change directory");
+    fn test_process_files_list_single_run() {
+        init_logger();
+        log::info!("Starting test_process_files_list_single_run");
 
-        // Create a file with a TODO comment and commit it to simulate a tracked file.
-        temp_repo.create_file("file_all.rs", "// TODO: Implement feature X");
-        temp_repo.stage_file("file_all.rs");
-        temp_repo.commit("Add file_all.rs");
-
-        // Build CLI arguments for full-project scan.
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let repo_path = temp_dir.path();
         let todo_path = repo_path.join("TODO.md");
-        let args = vec![
-            "rusty-todo-md",
-            "--todo-path",
-            todo_path.to_str().unwrap(),
-            "--all-files",
-        ];
-        run_cli_with_args(args);
 
-        // Check that the TODO.md file contains the expected content.
-        let content = fs::read_to_string(&todo_path).unwrap();
+        // Create a test file with a TODO comment.
+        let file1 = create_test_file(repo_path, "file1.rs", "// TODO: Implement feature X");
+        log::debug!("Created test file: {:?}", file1);
+
+        // Build CLI arguments (only a list of files is supported now).
+        let args = vec![
+            "rusty-todo-md".to_string(),
+            "--todo-path".to_string(),
+            todo_path.to_str().unwrap().to_string(),
+            file1.to_str().unwrap().to_string(),
+        ];
+        log::debug!("CLI arguments: {:?}", args);
+
+        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+
+        // Run the CLI.
+        run_cli_with_args(args, &fake_git_ops);
+
+        // Verify that TODO.md has been created and contains the expected section and message.
+        let content = fs::read_to_string(&todo_path).expect("Failed to read TODO.md");
+        log::debug!("TODO.md content: {}", content);
         assert!(
-            content.contains("file_all.rs"),
-            "Expected TODO entry for file_all.rs"
+            content.contains("file1.rs"),
+            "Expected TODO entry for file1.rs"
         );
         assert!(
             content.contains("Implement feature X"),
-            "Expected TODO message in file_all.rs"
+            "Expected TODO message in file1.rs"
         );
     }
 
+    /// Test that if a file is updated (its TODO message changes), the TODO.md file is updated accordingly.
     #[test]
-    #[ignore]
-    fn test_cli_integration_staged() {
-        // Set up a temporary Git repository and change current directory to it.
-        let temp_repo = TempGitRepo::new();
-        let repo_path = temp_repo.repo_path.clone();
-        env::set_current_dir(&repo_path).expect("Failed to change directory");
+    fn test_update_todo_md_on_file_change() {
+        init_logger();
+        log::info!("Starting test_update_todo_md_on_file_change");
 
-        // Create a file with a TODO comment and stage it (simulate staged files).
-        temp_repo.create_file("file_staged.rs", "// TODO: Update documentation");
-        temp_repo.stage_file("file_staged.rs");
-
-        // Build CLI arguments for file list processing.
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let repo_path = temp_dir.path();
         let todo_path = repo_path.join("TODO.md");
+
+        // Create a file with an initial TODO comment.
+        let file1 = create_test_file(repo_path, "file1.rs", "// TODO: Initial implementation");
+        log::debug!("Created test file: {:?}", file1);
+
+        // Build arguments.
         let args = vec![
-            "rusty-todo-md",
-            "--todo-path",
-            todo_path.to_str().unwrap(),
-            "file_staged.rs",
+            "rusty-todo-md".to_string(),
+            "--todo-path".to_string(),
+            todo_path.to_str().unwrap().to_string(),
+            file1.to_str().unwrap().to_string(),
         ];
-        run_cli_with_args(args);
+        log::debug!("CLI arguments: {:?}", args);
 
-        // Check that the TODO.md file contains the expected content.
-        let content = fs::read_to_string(&todo_path).unwrap();
+        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+
+        // Run the CLI.
+        run_cli_with_args(args.clone(), &fake_git_ops);
+        let content_initial = fs::read_to_string(&todo_path).expect("Failed to read TODO.md");
+        log::debug!("Initial TODO.md content: {}", content_initial);
         assert!(
-            content.contains("file_staged.rs"),
-            "Expected TODO entry for file_staged.rs"
+            content_initial.contains("Initial implementation"),
+            "Expected initial TODO message"
+        );
+
+        // Update the file with a new TODO comment.
+        fs::write(&file1, "// TODO: Updated implementation").expect("Failed to update file");
+        log::debug!("Updated test file: {:?}", file1);
+
+        // Second run.
+        run_cli_with_args(args.clone(), &fake_git_ops);
+        let content_updated =
+            fs::read_to_string(&todo_path).expect("Failed to read TODO.md after update");
+        log::debug!("Updated TODO.md content: {}", content_updated);
+        assert!(
+            content_updated.contains("Updated implementation"),
+            "Expected updated TODO message"
         );
         assert!(
-            content.contains("Update documentation"),
-            "Expected TODO message in file_staged.rs"
-        );
-    }
-
-    #[test]
-    #[ignore]
-    fn test_get_staged_files() {
-        init_logger();
-        // Set up a temporary Git repository
-        let temp_repo = TempGitRepo::new();
-
-        // Create and stage test files
-        temp_repo.create_file("file1.txt", "TODO: Implement feature A");
-        temp_repo.stage_file("file1.txt");
-
-        temp_repo.create_file("file2.txt", "This is a test file");
-        temp_repo.stage_file("file2.txt");
-
-        // Call `get_staged_files` to retrieve staged files
-        let staged_files =
-            get_staged_files(&temp_repo.repo).expect("Failed to retrieve staged files");
-
-        // Verify that the staged files match the expected files
-        let expected_files: Vec<_> = vec!["file1.txt", "file2.txt"]
-            .into_iter()
-            .map(PathBuf::from)
-            .collect();
-
-        assert_eq!(staged_files, expected_files);
-    }
-
-    #[test]
-    #[ignore]
-    fn test_run_workflow() {
-        init_logger();
-        // Set up a temporary Git repository
-        let temp_repo = TempGitRepo::new();
-        let todo_path = temp_repo.repo_path.join("TODO.md");
-
-        // Create and stage a file with a TODO comment
-        temp_repo.create_file("file1.rs", "// TODO: Refactor this function");
-        temp_repo.stage_file("file1.rs");
-
-        // Debug: Verify the index state
-        let staged_files =
-            git_utils::get_staged_files(&temp_repo.repo).expect("Failed to retrieve staged files");
-        log::debug!("Staged files from index: {:?}", staged_files);
-
-        // Run the workflow
-        let result = run_workflow(&todo_path, &temp_repo.repo_path, false);
-
-        assert!(result.is_ok(), "Workflow failed with error: {:?}", result);
-
-        // Verify TODO.md exists
-        assert!(todo_path.exists(), "TODO.md should have been created");
-
-        // Verify TODO.md was updated
-        let content = fs::read_to_string(&todo_path).expect("Failed to read TODO.md");
-        log::debug!("TODO.md content:\n{}", content);
-        assert!(content.contains("file1.rs"), "Expected file1.rs in TODO.md");
-        assert!(
-            content.contains("Refactor this function"),
-            "Expected TODO comment in TODO.md"
+            !content_updated.contains("Initial implementation"),
+            "Old TODO message should be removed"
         );
     }
 
+    /// Test that if a file no longer contains a TODO comment, its section is removed from TODO.md.
     #[test]
-    #[ignore]
-    fn test_run_workflow_all_files() {
+    fn test_update_todo_md_on_file_removal() {
         init_logger();
-        // Set up a temporary Git repository using our test helper.
-        let temp_repo = TempGitRepo::new();
-        let todo_path = temp_repo.repo_path.join("TODO.md");
+        log::info!("Starting test_update_todo_md_on_file_removal");
 
-        // Create a new file with a TODO comment and commit it so that it is tracked.
-        temp_repo.create_file("file_all.rs", "// TODO: Implement all features");
-        temp_repo.stage_file("file_all.rs");
-        temp_repo.commit("Add file_all.rs");
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let repo_path = temp_dir.path();
+        let todo_path = repo_path.join("TODO.md");
 
-        // Run the workflow with the --all-files option enabled (i.e. all_files flag set to true).
-        let result = run_workflow(&todo_path, &temp_repo.repo_path, true);
-        assert!(result.is_ok(), "Workflow failed with error: {:?}", result);
+        // Create a file with a TODO comment.
+        let file1 = create_test_file(repo_path, "file1.rs", "// TODO: Remove this code");
+        log::debug!("Created test file: {:?}", file1);
 
-        // Verify that TODO.md has been created.
-        assert!(todo_path.exists(), "TODO.md should have been created");
+        // Build arguments.
+        let args = vec![
+            "rusty-todo-md".to_string(),
+            "--todo-path".to_string(),
+            todo_path.to_str().unwrap().to_string(),
+            file1.to_str().unwrap().to_string(),
+        ];
+        log::debug!("CLI arguments: {:?}", args);
 
-        // Read and verify that the content of TODO.md includes our file and TODO comment.
-        let content = std::fs::read_to_string(&todo_path).expect("Failed to read TODO.md");
-        log::debug!("TODO.md content:\n{}", content);
+        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+
+        // First run: file has a TODO.
+        run_cli_with_args(args.clone(), &fake_git_ops);
+        let content_initial = fs::read_to_string(&todo_path).expect("Failed to read TODO.md");
+        log::debug!("Initial TODO.md content: {}", content_initial);
         assert!(
-            content.contains("file_all.rs"),
-            "Expected file_all.rs in TODO.md"
+            content_initial.contains("Remove this code"),
+            "Expected TODO message initially"
+        );
+
+        // Update the file to remove the TODO comment.
+        fs::write(&file1, "// No TODO here anymore").expect("Failed to update file to remove TODO");
+        log::debug!("Updated test file: {:?}", file1);
+
+        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+
+        // Second run.
+        run_cli_with_args(args, &fake_git_ops);
+        let content_updated =
+            fs::read_to_string(&todo_path).expect("Failed to read updated TODO.md");
+        log::debug!("Updated TODO.md content: {}", content_updated);
+        // The section for file1 should now be removed.
+        assert!(
+            !content_updated.contains("file1.rs"),
+            "Section for file1.rs should be removed when no TODO is present"
         );
         assert!(
-            content.contains("Implement all features"),
-            "Expected TODO comment in TODO.md"
+            !content_updated.contains("Remove this code"),
+            "Old TODO message should be removed"
+        );
+    }
+
+    /// Test running the CLI multiple times on the same file, simulating real-world updates.
+    #[test]
+    fn test_multiple_runs_update() {
+        init_logger();
+        log::info!("Starting test_multiple_runs_update");
+
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let repo_path = temp_dir.path();
+        let todo_path = repo_path.join("TODO.md");
+
+        // Create a file with an initial TODO comment.
+        let file1 = create_test_file(repo_path, "file1.rs", "// TODO: First version");
+        log::debug!("Created test file: {:?}", file1);
+
+        let args = vec![
+            "rusty-todo-md".to_string(),
+            "--todo-path".to_string(),
+            todo_path.to_str().unwrap().to_string(),
+            file1.to_str().unwrap().to_string(),
+        ];
+        log::debug!("CLI arguments: {:?}", args);
+
+        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+
+        // Run 1: initial TODO.
+        run_cli_with_args(args.clone(), &fake_git_ops);
+        let content1 = fs::read_to_string(&todo_path).expect("Failed to read TODO.md after run 1");
+        log::debug!("TODO.md content after run 1: {}", content1);
+        assert!(
+            content1.contains("First version"),
+            "Expected first version of TODO"
+        );
+
+        // Run 2: update the TODO message.
+        fs::write(&file1, "// TODO: Second version")
+            .expect("Failed to update file with second version");
+        log::debug!("Updated test file: {:?}", file1);
+        run_cli_with_args(args.clone(), &fake_git_ops);
+        let content2 = fs::read_to_string(&todo_path).expect("Failed to read TODO.md after run 2");
+        log::debug!("TODO.md content after run 2: {}", content2);
+        assert!(
+            content2.contains("Second version"),
+            "Expected second version of TODO"
+        );
+        assert!(
+            !content2.contains("First version"),
+            "Old TODO should be removed"
+        );
+
+        // Run 3: remove the TODO comment altogether.
+        fs::write(&file1, "// No TODO now").expect("Failed to update file to remove TODO");
+        log::debug!("Updated test file: {:?}", file1);
+        run_cli_with_args(args, &fake_git_ops);
+        let content3 = fs::read_to_string(&todo_path).expect("Failed to read TODO.md after run 3");
+        log::debug!("TODO.md content after run 3: {}", content3);
+        assert!(
+            !content3.contains("file1.rs"),
+            "Section for file1.rs should be removed when no TODO exists"
+        );
+        assert!(
+            !content3.contains("Second version"),
+            "Previous TODO message should be removed"
+        );
+    }
+
+    /// Test handling multiple files simultaneously:
+    /// one file gets updated and the other removed.
+    #[test]
+    fn test_multiple_files_update() {
+        init_logger();
+        log::info!("Starting test_multiple_files_update");
+
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let repo_path = temp_dir.path();
+        let todo_path = repo_path.join("TODO.md");
+
+        // Create two test files with TODO comments.
+        let file1 = create_test_file(repo_path, "file1.rs", "// TODO: Feature A");
+        let file2 = create_test_file(repo_path, "file2.rs", "// TODO: Feature B");
+        log::debug!("Created test files: {:?}, {:?}", file1, file2);
+
+        let args = vec![
+            "rusty-todo-md".to_string(),
+            "--todo-path".to_string(),
+            todo_path.to_str().unwrap().to_string(),
+            file1.to_str().unwrap().to_string(),
+            file2.to_str().unwrap().to_string(),
+        ];
+        log::debug!("CLI arguments: {:?}", args);
+
+        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+
+        // Run 1: both files processed.
+        run_cli_with_args(args.clone(), &fake_git_ops);
+        let content_initial =
+            fs::read_to_string(&todo_path).expect("Failed to read initial TODO.md");
+        log::debug!("Initial TODO.md content:\n{}", content_initial);
+        assert!(
+            content_initial.contains("Feature A"),
+            "Expected Feature A in TODO.md"
+        );
+        assert!(
+            content_initial.contains("Feature B"),
+            "Expected Feature B in TODO.md"
+        );
+
+        // Update: change file1's TODO and remove file2's TODO.
+        fs::write(&file1, "// TODO: Updated Feature A").expect("Failed to update file1");
+        fs::write(&file2, "// No TODO in file2").expect("Failed to update file2");
+        log::debug!(
+            "Updated test files:\nfile1\n{:?}\nfile2\n{:?}",
+            file1,
+            file2
+        );
+
+        // Run 2: process updates.
+        run_cli_with_args(args, &fake_git_ops);
+        let content_updated =
+            fs::read_to_string(&todo_path).expect("Failed to read updated TODO.md");
+        log::debug!("Updated TODO.md content: {}", content_updated);
+
+        // Extract the section for file1
+        let file1_section = content_updated
+            .split("##")
+            .find(|section| section.contains("file1.rs"))
+            .unwrap_or("");
+
+        assert!(
+            file1_section.contains("Updated Feature A"),
+            "Expected updated Feature A"
+        );
+        // Check that the old line is not present (using a more precise pattern)
+        assert!(
+            !file1_section.contains("): Feature A"),
+            "Old Feature A should be removed"
+        );
+
+        // File2 should be removed because it no longer contains a TODO.
+        assert!(
+            !content_updated.contains("file2.rs"),
+            "Section for file2.rs should be removed"
+        );
+        assert!(
+            !content_updated.contains("Feature B"),
+            "Feature B should be removed"
         );
     }
 }

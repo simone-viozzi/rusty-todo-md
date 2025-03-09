@@ -59,6 +59,7 @@ pkgs.mkShell {
     pythonPackages.pathspec
     pythonPackages.tqdm
     pythonPackages.pytest
+    pythonPackages.wheel
     patchelf
     maturin
   ];

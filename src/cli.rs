@@ -1,11 +1,13 @@
-use crate::git_utils;
+use crate::git_utils::GitOps;
+use crate::git_utils::GitOpsTrait;
 use crate::todo_extractor;
 use crate::todo_md;
 use clap::{Arg, ArgAction, Command};
 use log::{error, info};
 use std::path::Path;
+use std::path::PathBuf;
 
-pub fn run_cli_with_args<I, T>(args: I)
+pub fn run_cli_with_args<I, T>(args: I, git_ops: &dyn GitOpsTrait)
 where
     I: IntoIterator<Item = T>,
     T: Into<std::ffi::OsString> + Clone,
@@ -24,13 +26,6 @@ where
                 .default_value("TODO.md"),
         )
         .arg(
-            // TODO remove this functionality, it's not needed, pre-commit will pass the list of files
-            Arg::new("all_files")
-                .long("all-files")
-                .help("Ignore staged files logic and scan all tracked files in the repository")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
             Arg::new("files")
                 .value_name("FILE")
                 .help("Optional list of files to process (passed by pre-commit)")
@@ -42,101 +37,64 @@ where
         .get_one::<String>("todo_path")
         .expect("TODO.md path should have a default value");
 
-    let all_files = *matches.get_one::<bool>("all_files").unwrap_or(&false);
-
-    let files: Vec<String> = matches
+    let files: Vec<PathBuf> = matches
         .get_many::<String>("files")
         .unwrap_or_default()
-        .map(|s| s.to_string())
+        .map(PathBuf::from)
         .collect();
 
-    if !files.is_empty() {
-        if let Err(e) = crate::cli::process_files_from_list(Path::new(todo_path), files) {
-            eprintln!("Error: {}", e);
+    let repo = match git_ops.open_repository(Path::new(".")) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Error opening repository: {}", e);
             std::process::exit(1);
         }
-        // this funcionaity is not needed, pre-commit will pass the list of files
-    } else if let Err(e) = crate::cli::run_workflow(Path::new(todo_path), Path::new("."), all_files)
-    {
-        eprintln!("Error: {}", e);
-        std::process::exit(1);
+    };
+
+    // Retrieve the list of deleted files from the repository.
+    let deleted_files = match git_ops.get_deleted_files(&repo) {
+        Ok(list) => list,
+        Err(e) => {
+            error!("Error retrieving deleted files: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    if !files.is_empty() || !deleted_files.is_empty() {
+        if let Err(e) =
+            crate::cli::process_files_from_list(Path::new(todo_path), files, deleted_files)
+        {
+            error!("Error: {}", e);
+            std::process::exit(1);
+        }
+    } else {
+        info!("No files provided, nothing to do.");
+        std::process::exit(0);
     }
 }
 
 pub fn run_cli() {
-    run_cli_with_args(std::env::args());
+    run_cli_with_args(std::env::args(), &GitOps);
 }
 
-/// Main workflow for scanning files and updating TODO.md.
-///
-/// When `all_files` is true, it retrieves all tracked files from Git;
-/// otherwise, it gets only the staged files.
-pub fn run_workflow(todo_path: &Path, repo_path: &Path, all_files: bool) -> Result<(), String> {
-    // TODO delete this function
-    // Open the Git repository.
-    let repo = git_utils::open_repository(repo_path)
-        .map_err(|e| format!("Failed to open Git repository: {}", e))?;
-
-    // Choose the appropriate file list based on the flag.
-    let file_paths = if all_files {
-        info!("Scanning all tracked files in repository: {:?}", repo_path);
-        git_utils::get_tracked_files(&repo)
-            .map_err(|e| format!("Failed to retrieve tracked files: {}", e))?
-    } else {
-        info!("Scanning staged files in repository: {:?}", repo_path);
-        // TODO remove this functionality
-        git_utils::get_staged_files(&repo)
-            .map_err(|e| format!("Failed to retrieve staged files: {}", e))?
-    };
-
-    if file_paths.is_empty() {
-        info!("No files found.");
-        return Ok(());
-    }
-
+pub fn process_files_from_list(
+    todo_path: &Path,
+    scanned_files: Vec<PathBuf>,
+    deleted_files: Vec<PathBuf>,
+) -> Result<(), String> {
     let mut new_todos = Vec::new();
-    // Process each file in the list.
-    for file in file_paths {
-        let absolute_path = repo_path.join(&file);
-        if let Ok(content) = std::fs::read_to_string(&absolute_path) {
-            // Extract TODO comments using the relative file path.
-            let todos = todo_extractor::extract_todos(&file, &content);
+    // Each file provided in the CLI is scanned.
+    for file in &scanned_files {
+        if let Ok(content) = std::fs::read_to_string(file) {
+            let todos = todo_extractor::extract_todos(file, &content);
             new_todos.extend(todos);
         } else {
             error!("Warning: Could not read file {:?}, skipping.", file);
         }
     }
 
-    if new_todos.is_empty() {
-        info!("No TODO comments found.");
-        return Ok(());
-    }
-
-    // Update the TODO.md file.
-    todo_md::sync_todo_file(todo_path, new_todos)
-        .map_err(|e| format!("Failed to update TODO.md: {}", e))?;
-    info!("TODO.md successfully updated.");
-    Ok(())
-}
-
-pub fn process_files_from_list(todo_path: &Path, files: Vec<String>) -> Result<(), String> {
-    let mut new_todos = Vec::new();
-    for file in files {
-        let path = Path::new(&file);
-        if let Ok(content) = std::fs::read_to_string(path) {
-            let todos = todo_extractor::extract_todos(path, &content);
-            new_todos.extend(todos);
-        } else {
-            error!("Warning: Could not read file {:?}, skipping.", path);
-        }
-    }
-
-    if new_todos.is_empty() {
-        info!("No TODO comments found in provided files.");
-        return Ok(());
-    }
-
-    todo_md::sync_todo_file(todo_path, new_todos)
+    // Pass the list of scanned files to sync_todo_file.
+    todo_md::sync_todo_file(todo_path, new_todos, scanned_files, deleted_files)
         .map_err(|e| format!("Failed to update TODO.md: {}", e))?;
     info!("TODO.md successfully updated.");
     Ok(())
