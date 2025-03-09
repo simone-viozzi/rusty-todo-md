@@ -1,3 +1,5 @@
+use crate::git_utils::GitOps;
+use crate::git_utils::GitOpsTrait;
 use crate::todo_extractor;
 use crate::todo_md;
 use clap::{Arg, ArgAction, Command};
@@ -5,7 +7,7 @@ use log::{error, info};
 use std::path::Path;
 use std::path::PathBuf;
 
-pub fn run_cli_with_args<I, T>(args: I)
+pub fn run_cli_with_args<I, T>(args: I, git_ops: &dyn GitOpsTrait)
 where
     I: IntoIterator<Item = T>,
     T: Into<std::ffi::OsString> + Clone,
@@ -41,7 +43,7 @@ where
         .map(PathBuf::from)
         .collect();
 
-    let repo = match crate::git_utils::open_repository(Path::new(".")) {
+    let repo = match git_ops.open_repository(Path::new(".")) {
         Ok(r) => r,
         Err(e) => {
             error!("Error opening repository: {}", e);
@@ -50,7 +52,7 @@ where
     };
 
     // Retrieve the list of deleted files from the repository.
-    let deleted_files = match crate::git_utils::get_deleted_files(&repo) {
+    let deleted_files = match git_ops.get_deleted_files(&repo) {
         Ok(list) => list,
         Err(e) => {
             error!("Error retrieving deleted files: {}", e);
@@ -72,25 +74,27 @@ where
 }
 
 pub fn run_cli() {
-    run_cli_with_args(std::env::args());
+    run_cli_with_args(std::env::args(), &GitOps);
 }
 
 pub fn process_files_from_list(
     todo_path: &Path,
-    files: Vec<PathBuf>,
+    scanned_files: Vec<PathBuf>,
     deleted_files: Vec<PathBuf>,
 ) -> Result<(), String> {
     let mut new_todos = Vec::new();
-    for file in files {
-        if let Ok(content) = std::fs::read_to_string(&file) {
-            let todos = todo_extractor::extract_todos(&file, &content);
+    // Each file provided in the CLI is scanned.
+    for file in &scanned_files {
+        if let Ok(content) = std::fs::read_to_string(file) {
+            let todos = todo_extractor::extract_todos(file, &content);
             new_todos.extend(todos);
         } else {
-            error!("Warning: Could not read file {:?}, skipping.", &file);
+            error!("Warning: Could not read file {:?}, skipping.", file);
         }
     }
 
-    todo_md::sync_todo_file(todo_path, new_todos, deleted_files)
+    // Pass the list of scanned files to sync_todo_file.
+    todo_md::sync_todo_file(todo_path, new_todos, scanned_files, deleted_files)
         .map_err(|e| format!("Failed to update TODO.md: {}", e))?;
     info!("TODO.md successfully updated.");
     Ok(())

@@ -37,10 +37,20 @@ impl TodoCollection {
     /// - For files present in the new collection, replace the old list with the new list.
     /// - For files in the old collection that are not in the new collection, keep them unchanged.
     /// - For files that are deleted (in `deleted_files`), remove them from the merged collection.
-    pub fn merge(&mut self, new: TodoCollection, deleted_files: Vec<PathBuf>) {
+    pub fn merge(
+        &mut self,
+        new: TodoCollection,
+        scanned_files: Vec<PathBuf>,
+        deleted_files: Vec<PathBuf>,
+    ) {
         info!("Merging new TodoCollection into existing one");
 
-        // Replace or add entries for files present in the new collection.
+        // For each file that was scanned, remove its previous entries.
+        for file in scanned_files {
+            self.todos.remove(&file);
+        }
+
+        // Insert new todos for files that were scanned.
         for (file, new_items) in new.todos {
             debug!("Updating todos for file: {:?}", file);
             self.todos.insert(file, new_items);
@@ -134,7 +144,7 @@ mod tests {
         col2.add_item(item2.clone());
 
         // Updated merge call with an empty deleted_files list.
-        col1.merge(col2, vec![]);
+        col1.merge(col2, vec![], vec![]);
 
         let foo_items = col1.todos.get(&PathBuf::from("src/foo.rs")).unwrap();
         assert_eq!(foo_items.len(), 2, "Expected two items for src/foo.rs");
@@ -158,7 +168,7 @@ mod tests {
         // Add the same item in the second collection.
         col2.add_item(item.clone());
 
-        col1.merge(col2, vec![]);
+        col1.merge(col2, vec![], vec![]);
 
         let bar_items = col1.todos.get(&PathBuf::from("src/bar.rs")).unwrap();
         assert_eq!(bar_items.len(), 1, "Expected no duplicates for src/bar.rs");
@@ -179,7 +189,7 @@ mod tests {
 
         let col2 = TodoCollection::new(); // empty collection
 
-        col1.merge(col2, vec![]);
+        col1.merge(col2, vec![], vec![]);
 
         let baz_items = col1.todos.get(&PathBuf::from("src/baz.rs")).unwrap();
         assert_eq!(baz_items.len(), 1, "Existing item should not be removed");
@@ -206,7 +216,7 @@ mod tests {
         };
         col2.add_item(item2.clone());
 
-        col1.merge(col2, vec![]);
+        col1.merge(col2, vec![], vec![]);
 
         // Both files should be present with their respective items.
         assert!(col1.todos.contains_key(&PathBuf::from("src/a.rs")));
@@ -278,7 +288,7 @@ mod tests {
         col2.add_item(item3.clone());
 
         // Merge col2 into col1
-        col1.merge(col2, vec![]);
+        col1.merge(col2, vec![], vec![]);
 
         // Expect col1 to contain both items for src/foo.rs and one for src/bar.rs.
         assert!(col1.todos.contains_key(&PathBuf::from("src/foo.rs")));
@@ -346,7 +356,7 @@ mod tests {
         col2.add_item(item_new.clone());
 
         // Updated merge call.
-        col1.merge(col2, vec![]);
+        col1.merge(col2, vec![], vec![]);
 
         let foo_items = col1.todos.get(&PathBuf::from("src/foo.rs")).unwrap();
         // We expect that the stale items have been replaced and only the new one remains.
@@ -424,7 +434,7 @@ mod tests {
         let deleted_files = vec![PathBuf::from("src/c.rs")];
 
         // Updated merge call with deleted_files.
-        col1.merge(col2, deleted_files);
+        col1.merge(col2, vec![], deleted_files);
 
         // File A should now have only the new item.
         let a_items = col1.todos.get(&PathBuf::from("src/a.rs")).unwrap();

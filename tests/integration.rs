@@ -1,6 +1,8 @@
 mod integration_tests {
+    use git2::{Error as GitError, Repository};
     use log::LevelFilter;
     use rusty_todo_md::cli::run_cli_with_args;
+    use rusty_todo_md::git_utils::GitOpsTrait;
     use rusty_todo_md::logger;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -18,6 +20,73 @@ mod integration_tests {
                 .try_init()
                 .ok();
         });
+    }
+
+    #[cfg(test)]
+    pub struct FakeGitOps {
+        pub _dummy_repo: Repository,
+        pub temp_dir: tempfile::TempDir,
+        pub staged_files: Vec<PathBuf>,
+        pub tracked_files: Vec<PathBuf>,
+        pub deleted_files: Vec<PathBuf>,
+    }
+
+    #[cfg(test)]
+    impl FakeGitOps {
+        pub fn new(
+            _dummy_repo: Repository,
+            temp_dir: tempfile::TempDir,
+            staged_files: Vec<PathBuf>,
+            tracked_files: Vec<PathBuf>,
+            deleted_files: Vec<PathBuf>,
+        ) -> Self {
+            FakeGitOps {
+                _dummy_repo,
+                temp_dir,
+                staged_files,
+                tracked_files,
+                deleted_files,
+            }
+        }
+    }
+
+    #[cfg(test)]
+    impl GitOpsTrait for FakeGitOps {
+        fn open_repository(&self, _repo_path: &Path) -> Result<Repository, GitError> {
+            // Open the repository using the stored temporary directory's path.
+            Repository::open(self.temp_dir.path())
+        }
+
+        fn get_staged_files(&self, _repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
+            Ok(self.staged_files.clone())
+        }
+
+        fn get_tracked_files(&self, _repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
+            Ok(self.tracked_files.clone())
+        }
+
+        fn get_deleted_files(&self, _repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
+            Ok(self.deleted_files.clone())
+        }
+    }
+
+    // Helper function to create a fake GitOps instance.
+    fn create_fake_git_ops() -> Result<FakeGitOps, GitError> {
+        // Create a temporary directory and initialize a dummy repository.
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir for fake repo");
+        let repo = Repository::init(temp_dir.path())?;
+        // For testing, we can ignore the repo contents.
+        // Set up predetermined fake outputs.
+        let staged_files = vec![PathBuf::from("file1.rs")];
+        let tracked_files = vec![PathBuf::from("file1.rs"), PathBuf::from("file2.rs")];
+        let deleted_files = vec![PathBuf::from("old_file.rs")];
+        Ok(FakeGitOps::new(
+            repo,
+            temp_dir,
+            staged_files,
+            tracked_files,
+            deleted_files,
+        ))
     }
 
     /// Helper to create a file in the provided directory.
@@ -50,8 +119,10 @@ mod integration_tests {
         ];
         log::debug!("CLI arguments: {:?}", args);
 
+        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+
         // Run the CLI.
-        run_cli_with_args(args);
+        run_cli_with_args(args, &fake_git_ops);
 
         // Verify that TODO.md has been created and contains the expected section and message.
         let content = fs::read_to_string(&todo_path).expect("Failed to read TODO.md");
@@ -89,8 +160,10 @@ mod integration_tests {
         ];
         log::debug!("CLI arguments: {:?}", args);
 
-        // First run.
-        run_cli_with_args(args.clone());
+        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+
+        // Run the CLI.
+        run_cli_with_args(args.clone(), &fake_git_ops);
         let content_initial = fs::read_to_string(&todo_path).expect("Failed to read TODO.md");
         log::debug!("Initial TODO.md content: {}", content_initial);
         assert!(
@@ -103,7 +176,7 @@ mod integration_tests {
         log::debug!("Updated test file: {:?}", file1);
 
         // Second run.
-        run_cli_with_args(args.clone());
+        run_cli_with_args(args.clone(), &fake_git_ops);
         let content_updated =
             fs::read_to_string(&todo_path).expect("Failed to read TODO.md after update");
         log::debug!("Updated TODO.md content: {}", content_updated);
@@ -140,8 +213,10 @@ mod integration_tests {
         ];
         log::debug!("CLI arguments: {:?}", args);
 
+        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+
         // First run: file has a TODO.
-        run_cli_with_args(args.clone());
+        run_cli_with_args(args.clone(), &fake_git_ops);
         let content_initial = fs::read_to_string(&todo_path).expect("Failed to read TODO.md");
         log::debug!("Initial TODO.md content: {}", content_initial);
         assert!(
@@ -153,8 +228,10 @@ mod integration_tests {
         fs::write(&file1, "// No TODO here anymore").expect("Failed to update file to remove TODO");
         log::debug!("Updated test file: {:?}", file1);
 
+        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+
         // Second run.
-        run_cli_with_args(args);
+        run_cli_with_args(args, &fake_git_ops);
         let content_updated =
             fs::read_to_string(&todo_path).expect("Failed to read updated TODO.md");
         log::debug!("Updated TODO.md content: {}", content_updated);
@@ -191,8 +268,10 @@ mod integration_tests {
         ];
         log::debug!("CLI arguments: {:?}", args);
 
+        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+
         // Run 1: initial TODO.
-        run_cli_with_args(args.clone());
+        run_cli_with_args(args.clone(), &fake_git_ops);
         let content1 = fs::read_to_string(&todo_path).expect("Failed to read TODO.md after run 1");
         log::debug!("TODO.md content after run 1: {}", content1);
         assert!(
@@ -204,7 +283,7 @@ mod integration_tests {
         fs::write(&file1, "// TODO: Second version")
             .expect("Failed to update file with second version");
         log::debug!("Updated test file: {:?}", file1);
-        run_cli_with_args(args.clone());
+        run_cli_with_args(args.clone(), &fake_git_ops);
         let content2 = fs::read_to_string(&todo_path).expect("Failed to read TODO.md after run 2");
         log::debug!("TODO.md content after run 2: {}", content2);
         assert!(
@@ -219,7 +298,7 @@ mod integration_tests {
         // Run 3: remove the TODO comment altogether.
         fs::write(&file1, "// No TODO now").expect("Failed to update file to remove TODO");
         log::debug!("Updated test file: {:?}", file1);
-        run_cli_with_args(args);
+        run_cli_with_args(args, &fake_git_ops);
         let content3 = fs::read_to_string(&todo_path).expect("Failed to read TODO.md after run 3");
         log::debug!("TODO.md content after run 3: {}", content3);
         assert!(
@@ -257,8 +336,10 @@ mod integration_tests {
         ];
         log::debug!("CLI arguments: {:?}", args);
 
+        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+
         // Run 1: both files processed.
-        run_cli_with_args(args.clone());
+        run_cli_with_args(args.clone(), &fake_git_ops);
         let content_initial =
             fs::read_to_string(&todo_path).expect("Failed to read initial TODO.md");
         log::debug!("Initial TODO.md content: {}", content_initial);
@@ -277,7 +358,7 @@ mod integration_tests {
         log::debug!("Updated test files: {:?}, {:?}", file1, file2);
 
         // Run 2: process updates.
-        run_cli_with_args(args);
+        run_cli_with_args(args, &fake_git_ops);
         let content_updated =
             fs::read_to_string(&todo_path).expect("Failed to read updated TODO.md");
         log::debug!("Updated TODO.md content: {}", content_updated);

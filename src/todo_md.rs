@@ -58,6 +58,7 @@ pub fn read_todo_file(todo_path: &Path) -> Vec<MarkedItem> {
 pub fn sync_todo_file(
     todo_path: &Path,
     new_todos: Vec<MarkedItem>,
+    scanned_files: Vec<PathBuf>,
     deleted_files: Vec<PathBuf>,
 ) -> Result<(), std::io::Error> {
     // Read existing TODO items from the file using the new parser.
@@ -75,8 +76,8 @@ pub fn sync_todo_file(
         new_collection.add_item(item);
     }
 
-    // Merge new TODO items into the existing collection.
-    existing_collection.merge(new_collection, deleted_files);
+    // Merge new TODO items into the existing collection, updating only scanned files.
+    existing_collection.merge(new_collection, scanned_files, deleted_files);
 
     // Convert the merged collection back into a sorted vector of MarkedItems.
     let merged_todos = existing_collection.to_sorted_vec();
@@ -153,7 +154,7 @@ mod tests {
             },
         ];
 
-        let _ = sync_todo_file(&todo_path, new_todos.clone(), vec![]);
+        let _ = sync_todo_file(&todo_path, new_todos.clone(), vec![], vec![]);
 
         let content = fs::read_to_string(&todo_path).unwrap();
         assert!(content.contains("src/main.rs:10"));
