@@ -342,7 +342,7 @@ mod integration_tests {
         run_cli_with_args(args.clone(), &fake_git_ops);
         let content_initial =
             fs::read_to_string(&todo_path).expect("Failed to read initial TODO.md");
-        log::debug!("Initial TODO.md content: {}", content_initial);
+        log::debug!("Initial TODO.md content:\n{}", content_initial);
         assert!(
             content_initial.contains("Feature A"),
             "Expected Feature A in TODO.md"
@@ -355,21 +355,34 @@ mod integration_tests {
         // Update: change file1's TODO and remove file2's TODO.
         fs::write(&file1, "// TODO: Updated Feature A").expect("Failed to update file1");
         fs::write(&file2, "// No TODO in file2").expect("Failed to update file2");
-        log::debug!("Updated test files: {:?}, {:?}", file1, file2);
+        log::debug!(
+            "Updated test files:\nfile1\n{:?}\nfile2\n{:?}",
+            file1,
+            file2
+        );
 
         // Run 2: process updates.
         run_cli_with_args(args, &fake_git_ops);
         let content_updated =
             fs::read_to_string(&todo_path).expect("Failed to read updated TODO.md");
         log::debug!("Updated TODO.md content: {}", content_updated);
+
+        // Extract the section for file1
+        let file1_section = content_updated
+            .split("##")
+            .find(|section| section.contains("file1.rs"))
+            .unwrap_or("");
+
         assert!(
-            content_updated.contains("Updated Feature A"),
+            file1_section.contains("Updated Feature A"),
             "Expected updated Feature A"
         );
+        // Check that the old line is not present (using a more precise pattern)
         assert!(
-            !content_updated.contains("Feature A"),
+            !file1_section.contains("): Feature A"),
             "Old Feature A should be removed"
         );
+
         // File2 should be removed because it no longer contains a TODO.
         assert!(
             !content_updated.contains("file2.rs"),
