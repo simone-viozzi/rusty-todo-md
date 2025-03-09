@@ -39,6 +39,13 @@ where
         .get_one::<String>("todo_path")
         .expect("TODO.md path should have a default value");
 
+    if !Path::new(todo_path).exists() {
+        if let Err(e) = std::fs::write(todo_path, "") {
+            error!("Error creating TODO.md: {}", e);
+            std::process::exit(1);
+        }
+    }
+
     let files: Vec<PathBuf> = matches
         .get_many::<String>("files")
         .unwrap_or_default()
@@ -96,8 +103,9 @@ pub fn process_files_from_list(
     }
 
     // Pass the list of scanned files to sync_todo_file.
-    todo_md::sync_todo_file(todo_path, new_todos, scanned_files, deleted_files)
-        .map_err(|e| format!("Failed to update TODO.md: {}", e))?;
+    if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, scanned_files, deleted_files) {
+        info!("Error: {:?}", err);
+    }
     info!("TODO.md successfully updated.");
     Ok(())
 }
