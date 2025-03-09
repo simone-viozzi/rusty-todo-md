@@ -10,8 +10,7 @@ pub struct TodoCollection {
 }
 
 impl TodoCollection {
-    /// Creates a new, empty TodoCollection.
-    /// New Function.
+    /// Creates and returns a new, empty TodoCollection instance.
     pub fn new() -> Self {
         info!("Creating a new TodoCollection");
         TodoCollection {
@@ -19,9 +18,8 @@ impl TodoCollection {
         }
     }
 
-    /// Adds a `MarkedItem` to the collection.
-    /// If the file already has TODO items, the new item is appended.
-    /// New Function.
+    /// Adds a MarkedItem to the collection. If the file already has associated TODO items,
+    /// the new item is appended to the existing list.
     pub fn add_item(&mut self, item: MarkedItem) {
         info!("Adding item to collection: {:?}", item);
         self.todos
@@ -30,13 +28,16 @@ impl TodoCollection {
             .push(item);
     }
 
-    /// Merges another `TodoCollection` (the new scan) into this one (the existing collection),
-    /// using `deleted_files` to remove todos for files that have been deleted.
+    /// Merges a new TodoCollection (representing the latest scan results) into the
+    /// existing collection, updating only those files that were scanned and removing
+    /// entries for deleted files.
     ///
     /// Merge Logic:
-    /// - For files present in the new collection, replace the old list with the new list.
-    /// - For files in the old collection that are not in the new collection, keep them unchanged.
-    /// - For files that are deleted (in `deleted_files`), remove them from the merged collection.
+    ///     For each file in the provided scanned_files, remove any existing TODO items.
+    ///     For each file in the new collection, insert the new TODO items (which replaces any previous
+    ///         entries for that file).
+    ///     For each file listed in deleted_files, remove its entries from the collection.
+    ///     Files not included in scanned_files remain unchanged.
     pub fn merge(
         &mut self,
         new: TodoCollection,
@@ -63,9 +64,8 @@ impl TodoCollection {
         }
     }
 
-    /// Returns a sorted vector of all `MarkedItem` entries.
-    /// The sorting is done first by the file path, then by the line number.
-    /// New Function.
+    /// Returns a vector containing all MarkedItem entries sorted first lexicographically by
+    /// file path and then in ascending order by line number.
     pub fn to_sorted_vec(&self) -> Vec<MarkedItem> {
         info!("Converting TodoCollection to a sorted vector");
         let mut all_items: Vec<_> = self.todos.values().flat_map(|v| v.clone()).collect();
@@ -460,6 +460,30 @@ mod tests {
         assert!(
             !col1.todos.contains_key(&PathBuf::from("src/c.rs")),
             "File C should have been removed"
+        );
+    }
+
+    #[test]
+    fn test_merge_scanned_file_removal() {
+        // Initialize a collection with a TODO for a file.
+        let mut original = TodoCollection::new();
+        let item = MarkedItem {
+            file_path: PathBuf::from("src/old.rs"),
+            line_number: 100,
+            message: "Obsolete TODO".to_string(),
+        };
+        original.add_item(item);
+
+        // Create an empty new collection (simulating that no new TODO was found for that file).
+        let new_collection = TodoCollection::new();
+
+        // Call merge with scanned_files containing "src/old.rs" and no deleted_files.
+        original.merge(new_collection, vec![PathBuf::from("src/old.rs")], vec![]);
+
+        // Assert that "src/old.rs" has been removed from the collection.
+        assert!(
+            !original.todos.contains_key(&PathBuf::from("src/old.rs")),
+            "Expected 'src/old.rs' to be removed when no new TODOs are provided."
         );
     }
 }
