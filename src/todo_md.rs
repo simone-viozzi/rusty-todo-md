@@ -34,7 +34,7 @@ impl From<io::Error> for TodoError {
 }
 
 pub fn validate_todo_file(todo_path: &std::path::Path) -> bool {
-    // Attempt to read the file content.
+    // TODO: add tests for this function
     match fs::read_to_string(todo_path) {
         Ok(content) => {
             if content.is_empty() {

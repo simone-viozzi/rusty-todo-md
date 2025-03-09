@@ -117,6 +117,8 @@ pub fn process_files_from_list(
     if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, scanned_files, deleted_files) {
         info!("There was an error updating TODO.md: {}", err);
 
+        // TODO add tests for this branch
+
         let all_files = match git_ops.get_tracked_files(&repo) {
             Ok(files) => files,
             Err(e) => {
