@@ -8,6 +8,8 @@ use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 
+use log::warn;
+
 #[derive(Debug)]
 pub enum TodoError {
     Io(io::Error),
@@ -31,34 +33,35 @@ impl From<io::Error> for TodoError {
     }
 }
 
-pub fn validate_todo_file(todo_path: &std::path::Path) -> Result<bool, TodoError> {
-    // Read the file content
-    let content = fs::read_to_string(todo_path)?;
-
-    if content.is_empty() {
-        info!("Empty TODO.md file");
-        return Ok(true);
-    }
-
-    // Expected patterns for a section header and a TODO item line
-    let section_re = Regex::new(r"^##\s+(.*)$").unwrap();
-    let todo_re = Regex::new(r"^\*\s+\[(.+):(\d+)\]\(.+#L\d+\):\s*(.+)$").unwrap();
-
-    // Check each non-empty line for a valid pattern
-    for (i, line) in content.lines().enumerate() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
+pub fn validate_todo_file(todo_path: &std::path::Path) -> bool {
+    // Attempt to read the file content.
+    match fs::read_to_string(todo_path) {
+        Ok(content) => {
+            if content.is_empty() {
+                info!("Empty TODO.md file");
+                return true;
+            }
+            // Expected patterns for a section header and a TODO item line.
+            let section_re = Regex::new(r"^##\s+(.*)$").unwrap();
+            let todo_re = Regex::new(r"^\*\s+\[(.+):(\d+)\]\(.+#L\d+\):\s*(.+)$").unwrap();
+            // Check each non‑empty line for a valid pattern.
+            for (i, line) in content.lines().enumerate() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                if !(section_re.is_match(line) || todo_re.is_match(line)) {
+                    warn!("Invalid format on line {}: {}", i + 1, line);
+                    return false;
+                }
+            }
+            true
         }
-        if !(section_re.is_match(line) || todo_re.is_match(line)) {
-            return Err(TodoError::Parse(format!(
-                "Invalid format on line {}: {}",
-                i + 1,
-                line
-            )));
+        Err(e) => {
+            warn!("Failed to read {}: {}", todo_path.display(), e);
+            false
         }
     }
-    Ok(true)
 }
 
 /// Reads the existing TODO.md file (in the new sectioned format) and returns a vector of `MarkedItem`s.
@@ -73,8 +76,9 @@ pub fn validate_todo_file(todo_path: &std::path::Path) -> Result<bool, TodoError
 /// This function uses regex to detect section headers to set the current file context, and then
 /// parses subsequent todo item lines accordingly.
 pub fn read_todo_file(todo_path: &Path) -> Result<Vec<MarkedItem>, TodoError> {
-    validate_todo_file(todo_path)
-        .map_err(|err| TodoError::Parse(format!("TODO.md validation failed: {}", err)))?;
+    if !validate_todo_file(todo_path) {
+        return Err(TodoError::Parse("TODO.md validation failed".to_string()));
+    }
 
     let content = fs::read_to_string(todo_path)?;
 
