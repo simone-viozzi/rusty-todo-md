@@ -1,8 +1,4 @@
 repos:
-  - repo: https://github.com/simone-viozzi/rusty-todo-md
-    rev: v0.2.0
-    hooks:
-      - id: rusty-todo-md
   - repo: local
     hooks:
       - id: rustfmt
@@ -19,3 +15,7 @@ repos:
         language: system
         pass_filenames: false
         types: [rust]
+  - repo: https://github.com/simone-viozzi/rusty-todo-md
+    rev: v0.2.0
+    hooks:
+      - id: rusty-todo-md
