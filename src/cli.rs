@@ -31,6 +31,8 @@ where
                 .help("Optional list of files to process (passed by pre-commit)")
                 .num_args(0..),
         )
+        // TODO add a flag to enable debug logging
+        // TODO add configuration to specify the Markers to search for
         .get_matches_from(args);
 
     let todo_path = matches

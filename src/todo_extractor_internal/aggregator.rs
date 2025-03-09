@@ -160,9 +160,9 @@ fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<Commen
                 file_content,
             ),
         ),
-        // Add new extensions and their corresponding parser calls here:
-        // "js" => Some(crate::languages::js::JsParser::parse_comments(file_content)),
-        // "ts" => Some(crate::languages::ts::TsParser::parse_comments(file_content)),
+        // TODO Add new extensions and their corresponding parser calls here:
+        //      "js" => Some(crate::languages::js::JsParser::parse_comments(file_content)),
+        //      "ts" => Some(crate::languages::ts::TsParser::parse_comments(file_content)),
         _ => None,
     }
 }
