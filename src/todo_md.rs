@@ -17,8 +17,16 @@ use std::path::PathBuf;
 /// This function uses regex to detect section headers to set the current file context, and then
 /// parses subsequent todo item lines accordingly.
 pub fn read_todo_file(todo_path: &Path) -> Vec<MarkedItem> {
+    // TODO edit this to return a dict of maked items,
+    //    where the key is the type of marker (TODO, FIXME, etc)
+    //    and the value is a list of MarkedItem
+
     let mut todos = Vec::new();
     let content = fs::read_to_string(todo_path).unwrap_or_default();
+
+    // TODO what happen here if the file is malformed?
+    //     is the file is malformed, we should raise an error
+    //     and rerun with --all-files to regenerate the file from scratch
 
     // Regex for matching a section header, e.g., "## src/cli.rs"
     let section_re = Regex::new(r"^##\s+(.*)$").unwrap();
