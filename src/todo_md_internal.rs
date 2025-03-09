@@ -3,6 +3,7 @@ use log::{debug, info};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+// TODO: generalize in maker collection
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TodoCollection {
     // Maps a file path to a list of TODO items found in that file.

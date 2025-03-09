@@ -28,6 +28,11 @@ pub fn read_todo_file(todo_path: &Path) -> Vec<MarkedItem> {
     //     is the file is malformed, we should raise an error
     //     and rerun with --all-files to regenerate the file from scratch
 
+    // TODO this will need to be a 3 way scan
+    //     1. scan for the markers (# TODO, # FIXME, etc)
+    //     2. scan for the file path (## src/main.rs)
+    //     3. scan for the marker line (* [src/main.rs:12](src/main.rs#L12): Refactor this function)
+
     // Regex for matching a section header, e.g., "## src/cli.rs"
     let section_re = Regex::new(r"^##\s+(.*)$").unwrap();
     // Regex for matching a TODO item line, e.g.,
