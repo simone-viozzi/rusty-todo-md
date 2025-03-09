@@ -1,1 +1,4 @@
-* [src/git_utils.rs:7](src/git_utils.rs#L7): schedule for removal!
+## src/cli.rs
+* [src/cli.rs:34](src/cli.rs#L34): add a flag to enable debug logging
+* [src/cli.rs:35](src/cli.rs#L35): add configuration to specify the Markers to search for
+
