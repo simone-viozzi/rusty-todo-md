@@ -1,9 +1,68 @@
 use crate::todo_extractor::MarkedItem;
 use crate::todo_md_internal::TodoCollection;
+use log::info;
 use regex::Regex;
+use std::fmt;
 use std::fs;
+use std::io;
 use std::path::Path;
 use std::path::PathBuf;
+
+use log::warn;
+
+#[derive(Debug)]
+pub enum TodoError {
+    Io(io::Error),
+    Parse(String),
+}
+
+impl fmt::Display for TodoError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TodoError::Io(e) => write!(f, "I/O error: {}", e),
+            TodoError::Parse(msg) => write!(f, "Parse error: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for TodoError {}
+
+impl From<io::Error> for TodoError {
+    fn from(e: io::Error) -> Self {
+        TodoError::Io(e)
+    }
+}
+
+pub fn validate_todo_file(todo_path: &std::path::Path) -> bool {
+    // TODO: add tests for this function
+    match fs::read_to_string(todo_path) {
+        Ok(content) => {
+            if content.is_empty() {
+                info!("Empty TODO.md file");
+                return true;
+            }
+            // Expected patterns for a section header and a TODO item line.
+            let section_re = Regex::new(r"^##\s+(.*)$").unwrap();
+            let todo_re = Regex::new(r"^\*\s+\[(.+):(\d+)\]\(.+#L\d+\):\s*(.+)$").unwrap();
+            // Check each non‑empty line for a valid pattern.
+            for (i, line) in content.lines().enumerate() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                if !(section_re.is_match(line) || todo_re.is_match(line)) {
+                    warn!("Invalid format on line {}: {}", i + 1, line);
+                    return false;
+                }
+            }
+            true
+        }
+        Err(e) => {
+            warn!("Failed to read {}: {}", todo_path.display(), e);
+            false
+        }
+    }
+}
 
 /// Reads the existing TODO.md file (in the new sectioned format) and returns a vector of `MarkedItem`s.
 ///
@@ -16,13 +75,14 @@ use std::path::PathBuf;
 ///
 /// This function uses regex to detect section headers to set the current file context, and then
 /// parses subsequent todo item lines accordingly.
-pub fn read_todo_file(todo_path: &Path) -> Vec<MarkedItem> {
-    // TODO edit this to return a dict of maked items,
-    //    where the key is the type of marker (TODO, FIXME, etc)
-    //    and the value is a list of MarkedItem
+pub fn read_todo_file(todo_path: &Path) -> Result<Vec<MarkedItem>, TodoError> {
+    if !validate_todo_file(todo_path) {
+        return Err(TodoError::Parse("TODO.md validation failed".to_string()));
+    }
+
+    let content = fs::read_to_string(todo_path)?;
 
     let mut todos = Vec::new();
-    let content = fs::read_to_string(todo_path).unwrap_or_default();
 
     // TODO what happen here if the file is malformed?
     //     is the file is malformed, we should raise an error
@@ -40,7 +100,6 @@ pub fn read_todo_file(todo_path: &Path) -> Vec<MarkedItem> {
     let todo_re = Regex::new(r"^\*\s+\[(.+):(\d+)\]\(.+#L\d+\):\s*(.+)$").unwrap();
 
     let mut current_file: Option<String> = None;
-
     for line in content.lines() {
         let line = line.trim();
         if line.is_empty() {
@@ -53,7 +112,6 @@ pub fn read_todo_file(todo_path: &Path) -> Vec<MarkedItem> {
         }
         // If the line matches a TODO item, parse it.
         if let Some(caps) = todo_re.captures(line) {
-            // Prefer the current file context if available.
             let file_path_str = current_file.clone().unwrap_or_else(|| caps[1].to_string());
             let file_path = PathBuf::from(file_path_str);
             let line_number = caps[2].parse::<usize>().unwrap_or(0);
@@ -65,7 +123,7 @@ pub fn read_todo_file(todo_path: &Path) -> Vec<MarkedItem> {
             });
         }
     }
-    todos
+    Ok(todos)
 }
 
 pub fn sync_todo_file(
@@ -73,9 +131,9 @@ pub fn sync_todo_file(
     new_todos: Vec<MarkedItem>,
     scanned_files: Vec<PathBuf>,
     deleted_files: Vec<PathBuf>,
-) -> Result<(), std::io::Error> {
+) -> Result<(), TodoError> {
     // Read existing TODO items from the file using the new parser.
-    let existing_todos = read_todo_file(todo_path);
+    let existing_todos = read_todo_file(todo_path)?;
 
     // Create a TodoCollection from the existing TODO items.
     let mut existing_collection = TodoCollection::new();
@@ -96,7 +154,8 @@ pub fn sync_todo_file(
     let merged_todos = existing_collection.to_sorted_vec();
 
     // Write the merged and sorted TODO items back to the TODO.md file in the new sectioned format.
-    write_todo_file(todo_path, &merged_todos)
+    write_todo_file(todo_path, &merged_todos)?;
+    Ok(())
 }
 
 /// Writes the given list of `TodoItem`s to the TODO.md file in markdown format.
@@ -154,6 +213,9 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let todo_path = temp_dir.path().join("TODO.md");
 
+        // create the empty TODO.md file
+        fs::write(&todo_path, "").unwrap();
+
         let new_todos = vec![
             MarkedItem {
                 file_path: PathBuf::from("src/main.rs"),
@@ -167,7 +229,9 @@ mod tests {
             },
         ];
 
-        let _ = sync_todo_file(&todo_path, new_todos.clone(), vec![], vec![]);
+        let res = sync_todo_file(&todo_path, new_todos.clone(), vec![], vec![]);
+
+        assert!(res.is_ok());
 
         let content = fs::read_to_string(&todo_path).unwrap();
         assert!(content.contains("src/main.rs:10"));
@@ -194,6 +258,9 @@ mod tests {
 
         // Read and parse the TODO.md file
         let todos = read_todo_file(&todo_path);
+
+        assert!(todos.is_ok());
+        let todos = todos.unwrap();
 
         assert_eq!(todos.len(), 2);
         assert_eq!(
