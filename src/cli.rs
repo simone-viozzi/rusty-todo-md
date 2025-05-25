@@ -85,7 +85,7 @@ where
     let marker_config = todo_extractor::MarkerConfig::normalized(markers);
 
     if !files.is_empty() || !deleted_files.is_empty() {
-        if let Err(e) = crate::cli::process_files_from_list(
+        if let Err(e) = process_files_from_list(
             Path::new(todo_path),
             files,
             deleted_files,

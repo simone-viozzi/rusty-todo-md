@@ -1,8 +1,9 @@
+mod utils;
+
 mod integration_tests {
-    use git2::{Error as GitError, Repository};
+    use crate::utils::{init_repo, FakeGitOps};
     use log::LevelFilter;
     use rusty_todo_md::cli::run_cli_with_args;
-    use rusty_todo_md::git_utils::GitOpsTrait;
     use rusty_todo_md::logger;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -20,73 +21,6 @@ mod integration_tests {
                 .try_init()
                 .ok();
         });
-    }
-
-    #[cfg(test)]
-    pub struct FakeGitOps {
-        pub _dummy_repo: Repository,
-        pub temp_dir: tempfile::TempDir,
-        pub staged_files: Vec<PathBuf>,
-        pub tracked_files: Vec<PathBuf>,
-        pub deleted_files: Vec<PathBuf>,
-    }
-
-    #[cfg(test)]
-    impl FakeGitOps {
-        pub fn new(
-            _dummy_repo: Repository,
-            temp_dir: tempfile::TempDir,
-            staged_files: Vec<PathBuf>,
-            tracked_files: Vec<PathBuf>,
-            deleted_files: Vec<PathBuf>,
-        ) -> Self {
-            FakeGitOps {
-                _dummy_repo,
-                temp_dir,
-                staged_files,
-                tracked_files,
-                deleted_files,
-            }
-        }
-    }
-
-    #[cfg(test)]
-    impl GitOpsTrait for FakeGitOps {
-        fn open_repository(&self, _repo_path: &Path) -> Result<Repository, GitError> {
-            // Open the repository using the stored temporary directory's path.
-            Repository::open(self.temp_dir.path())
-        }
-
-        fn get_staged_files(&self, _repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
-            Ok(self.staged_files.clone())
-        }
-
-        fn get_tracked_files(&self, _repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
-            Ok(self.tracked_files.clone())
-        }
-
-        fn get_deleted_files(&self, _repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
-            Ok(self.deleted_files.clone())
-        }
-    }
-
-    // Helper function to create a fake GitOps instance.
-    fn create_fake_git_ops() -> Result<FakeGitOps, GitError> {
-        // Create a temporary directory and initialize a dummy repository.
-        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir for fake repo");
-        let repo = Repository::init(temp_dir.path())?;
-        // For testing, we can ignore the repo contents.
-        // Set up predetermined fake outputs.
-        let staged_files = vec![PathBuf::from("file1.rs")];
-        let tracked_files = vec![PathBuf::from("file1.rs"), PathBuf::from("file2.rs")];
-        let deleted_files = vec![PathBuf::from("old_file.rs")];
-        Ok(FakeGitOps::new(
-            repo,
-            temp_dir,
-            staged_files,
-            tracked_files,
-            deleted_files,
-        ))
     }
 
     /// Helper to create a file in the provided directory.
@@ -119,7 +53,13 @@ mod integration_tests {
         ];
         log::debug!("CLI arguments: {:?}", args);
 
-        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+        // FakeGitOps setup inlined
+        let (temp_dir, repo) = init_repo().expect("Failed to init repo");
+        let staged_files = vec![file1.clone()];
+        let tracked_files = vec![];
+        let deleted_files = vec![];
+        let fake_git_ops =
+            FakeGitOps::new(repo, temp_dir, staged_files, tracked_files, deleted_files);
 
         // Run the CLI.
         run_cli_with_args(args, &fake_git_ops);
@@ -160,7 +100,13 @@ mod integration_tests {
         ];
         log::debug!("CLI arguments: {:?}", args);
 
-        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+        // FakeGitOps setup inlined
+        let (temp_dir, repo) = init_repo().expect("Failed to init repo");
+        let staged_files = vec![file1.clone()];
+        let tracked_files = vec![];
+        let deleted_files = vec![];
+        let fake_git_ops =
+            FakeGitOps::new(repo, temp_dir, staged_files, tracked_files, deleted_files);
 
         // Run the CLI.
         run_cli_with_args(args.clone(), &fake_git_ops);
@@ -213,7 +159,13 @@ mod integration_tests {
         ];
         log::debug!("CLI arguments: {:?}", args);
 
-        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+        // FakeGitOps setup inlined
+        let (temp_dir, repo) = init_repo().expect("Failed to init repo");
+        let staged_files = vec![file1.clone()];
+        let tracked_files = vec![];
+        let deleted_files = vec![];
+        let fake_git_ops =
+            FakeGitOps::new(repo, temp_dir, staged_files, tracked_files, deleted_files);
 
         // First run: file has a TODO.
         run_cli_with_args(args.clone(), &fake_git_ops);
@@ -227,8 +179,6 @@ mod integration_tests {
         // Update the file to remove the TODO comment.
         fs::write(&file1, "// No TODO here anymore").expect("Failed to update file to remove TODO");
         log::debug!("Updated test file: {:?}", file1);
-
-        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
 
         // Second run.
         run_cli_with_args(args, &fake_git_ops);
@@ -268,7 +218,13 @@ mod integration_tests {
         ];
         log::debug!("CLI arguments: {:?}", args);
 
-        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+        // FakeGitOps setup inlined
+        let (temp_dir, repo) = init_repo().expect("Failed to init repo");
+        let staged_files = vec![file1.clone()];
+        let tracked_files = vec![];
+        let deleted_files = vec![];
+        let fake_git_ops =
+            FakeGitOps::new(repo, temp_dir, staged_files, tracked_files, deleted_files);
 
         // Run 1: initial TODO.
         run_cli_with_args(args.clone(), &fake_git_ops);
@@ -336,7 +292,13 @@ mod integration_tests {
         ];
         log::debug!("CLI arguments: {:?}", args);
 
-        let fake_git_ops = create_fake_git_ops().expect("Failed to create fake GitOps");
+        // FakeGitOps setup inlined
+        let (temp_dir, repo) = init_repo().expect("Failed to init repo");
+        let staged_files = vec![file1.clone(), file2.clone()];
+        let tracked_files = vec![];
+        let deleted_files = vec![];
+        let fake_git_ops =
+            FakeGitOps::new(repo, temp_dir, staged_files, tracked_files, deleted_files);
 
         // Run 1: both files processed.
         run_cli_with_args(args.clone(), &fake_git_ops);
