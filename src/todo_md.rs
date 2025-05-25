@@ -42,7 +42,8 @@ pub fn validate_todo_file(todo_path: &std::path::Path) -> bool {
                 info!("Empty TODO.md file");
                 return true;
             }
-            // Expected patterns for a section header and a TODO item line.
+            // Expected patterns for a marker header, section header, and a TODO item line.
+            let marker_re = Regex::new(r"^#\s+\w+").unwrap();
             let section_re = Regex::new(r"^##\s+(.*)$").unwrap();
             let todo_re = Regex::new(r"^\*\s+\[(.+):(\d+)\]\(.+#L\d+\):\s*(.+)$").unwrap();
             // Check each non‑empty line for a valid pattern.
@@ -51,7 +52,10 @@ pub fn validate_todo_file(todo_path: &std::path::Path) -> bool {
                 if line.is_empty() {
                     continue;
                 }
-                if !(section_re.is_match(line) || todo_re.is_match(line)) {
+                if !(marker_re.is_match(line)
+                    || section_re.is_match(line)
+                    || todo_re.is_match(line))
+                {
                     warn!("Invalid format on line {}: {}", i + 1, line);
                     return false;
                 }
@@ -84,26 +88,19 @@ pub fn read_todo_file(todo_path: &Path) -> Result<Vec<MarkedItem>, TodoError> {
     let content = fs::read_to_string(todo_path)?;
 
     let mut todos = Vec::new();
-
-    // TODO what happen here if the file is malformed?
-    //     is the file is malformed, we should raise an error
-    //     and rerun with --all-files to regenerate the file from scratch
-
-    // TODO this will need to be a 3 way scan
-    //     1. scan for the markers (# TODO, # FIXME, etc)
-    //     2. scan for the file path (## src/main.rs)
-    //     3. scan for the marker line (* [src/main.rs:12](src/main.rs#L12): Refactor this function)
-
-    // Regex for matching a section header, e.g., "## src/cli.rs"
+    let marker_re = Regex::new(r"^#\s+(\w+)").unwrap();
     let section_re = Regex::new(r"^##\s+(.*)$").unwrap();
-    // Regex for matching a TODO item line, e.g.,
-    // "* [src/cli.rs:10](src/cli.rs#L10): add a new argument to specify what markers to look for"
     let todo_re = Regex::new(r"^\*\s+\[(.+):(\d+)\]\(.+#L\d+\):\s*(.+)$").unwrap();
-
     let mut current_file: Option<String> = None;
+    let mut current_marker: Option<String> = None;
     for line in content.lines() {
         let line = line.trim();
         if line.is_empty() {
+            continue;
+        }
+        // If the line is a marker header, update the current marker
+        if let Some(caps) = marker_re.captures(line) {
+            current_marker = Some(caps[1].to_string());
             continue;
         }
         // If the line is a section header, update the current file context.
@@ -117,10 +114,12 @@ pub fn read_todo_file(todo_path: &Path) -> Result<Vec<MarkedItem>, TodoError> {
             let file_path = PathBuf::from(file_path_str);
             let line_number = caps[2].parse::<usize>().unwrap_or(0);
             let message = caps[3].to_string();
+            let marker = current_marker.clone().unwrap_or_else(|| "TODO".to_string());
             todos.push(MarkedItem {
                 file_path,
                 line_number,
                 message,
+                marker,
             });
         }
     }
@@ -173,29 +172,11 @@ pub fn sync_todo_file(
 /// - [src/file2.rs:120](src/file2.rs#L120): Correct boundary condition
 ///
 pub fn write_todo_file(todo_path: &Path, todos: &[MarkedItem]) -> std::io::Result<()> {
-    // Guess marker set from the messages (fallback to TODO if unknown)
-    let mut all_markers = vec!["TODO".to_string()];
-    for item in todos {
-        // Try to extract the marker from the message (first word)
-        if let Some(marker) = item.message.split_whitespace().next() {
-            if !all_markers.contains(&marker.to_string()) {
-                all_markers.push(marker.to_string());
-            }
-        }
-    }
-
     // Group by marker, then by file using BTreeMap for sorted output
     let mut marker_map: BTreeMap<String, BTreeMap<PathBuf, Vec<&MarkedItem>>> = BTreeMap::new();
     for item in todos {
-        // Extract marker prefix (e.g., TODO, FIXME, HACK, etc.)
-        let marker = item
-            .message
-            .split_whitespace()
-            .next()
-            .unwrap_or("TODO")
-            .to_string();
         marker_map
-            .entry(marker)
+            .entry(item.marker.clone())
             .or_default()
             .entry(item.file_path.clone())
             .or_default()
@@ -251,11 +232,13 @@ mod tests {
                 file_path: PathBuf::from("src/main.rs"),
                 line_number: 10,
                 message: "Refactor this function".to_string(),
+                marker: "TODO".to_string(),
             },
             MarkedItem {
                 file_path: PathBuf::from("src/lib.rs"),
                 line_number: 5,
                 message: "Add error handling".to_string(),
+                marker: "TODO".to_string(),
             },
         ];
 
@@ -299,6 +282,7 @@ mod tests {
                 file_path: PathBuf::from("src/main.rs"),
                 line_number: 12,
                 message: "Refactor this function".to_string(),
+                marker: "TODO".to_string(),
             }
         );
         assert_eq!(
@@ -307,6 +291,7 @@ mod tests {
                 file_path: PathBuf::from("src/lib.rs"),
                 line_number: 5,
                 message: "Add error handling".to_string(),
+                marker: "TODO".to_string(),
             }
         );
     }
@@ -322,16 +307,19 @@ mod tests {
                 file_path: PathBuf::from("src/foo.rs"),
                 line_number: 20,
                 message: "Fix bug in foo".to_string(),
+                marker: "Fix".to_string(),
             },
             MarkedItem {
                 file_path: PathBuf::from("src/bar.rs"),
                 line_number: 10,
                 message: "Refactor bar".to_string(),
+                marker: "Refactor".to_string(),
             },
             MarkedItem {
                 file_path: PathBuf::from("src/foo.rs"),
                 line_number: 30,
                 message: "Add tests for foo".to_string(),
+                marker: "Add".to_string(),
             },
         ];
 

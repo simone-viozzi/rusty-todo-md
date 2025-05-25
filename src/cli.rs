@@ -82,7 +82,7 @@ where
         .get_many::<String>("marker")
         .map(|vals| vals.map(|s| s.to_string()).collect())
         .unwrap_or_else(|| vec!["TODO".to_string()]);
-    let marker_config = todo_extractor::MarkerConfig { markers };
+    let marker_config = todo_extractor::MarkerConfig::normalized(markers);
 
     if !files.is_empty() || !deleted_files.is_empty() {
         if let Err(e) = crate::cli::process_files_from_list(
