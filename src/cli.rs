@@ -27,13 +27,20 @@ where
                 .default_value("TODO.md"),
         )
         .arg(
+            Arg::new("marker")
+                .short('m')
+                .long("marker")
+                .value_name("KEYWORD")
+                .help("Specifies a marker/keyword to search for (e.g., TODO, FIXME, HACK). Can be used multiple times.")
+                .action(ArgAction::Append),
+        )
+        .arg(
             Arg::new("files")
                 .value_name("FILE")
                 .help("Optional list of files to process (passed by pre-commit)")
                 .num_args(0..),
         )
         // TODO add a flag to enable debug logging
-        // TODO add configuration to specify the Markers to search for
         .get_matches_from(args);
 
     let todo_path = matches
@@ -69,6 +76,12 @@ where
             std::process::exit(1);
         }
     };
+
+    // TODO now it's with _ because we don't use it yet
+    let _markers: Vec<String> = matches
+        .get_many::<String>("marker")
+        .map(|vals| vals.map(|s| s.to_string()).collect())
+        .unwrap_or_else(|| vec!["TODO".to_string()]);
 
     if !files.is_empty() || !deleted_files.is_empty() {
         if let Err(e) = crate::cli::process_files_from_list(
