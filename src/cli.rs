@@ -27,12 +27,12 @@ where
                 .default_value("TODO.md"),
         )
         .arg(
-            Arg::new("marker")
+            Arg::new("markers")
                 .short('m')
-                .long("marker")
-                .value_name("KEYWORD")
-                .help("Specifies a marker/keyword to search for (e.g., TODO, FIXME, HACK). Can be used multiple times.")
-                .action(ArgAction::Append),
+                .long("markers")
+                .value_name("KEYWORDS")
+                .help("Specifies one or more marker keywords to search for (e.g., TODO FIXME HACK). Usage: --markers TODO FIXME HACK")
+                .num_args(1..)
         )
         .arg(
             Arg::new("files")
@@ -79,7 +79,7 @@ where
 
     // Parse markers from CLI args (if any)
     let markers: Vec<String> = matches
-        .get_many::<String>("marker")
+        .get_many::<String>("markers")
         .map(|vals| vals.map(|s| s.to_string()).collect())
         .unwrap_or_else(|| vec!["TODO".to_string()]);
     let marker_config = todo_extractor::MarkerConfig::normalized(markers);

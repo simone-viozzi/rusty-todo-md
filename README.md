@@ -73,7 +73,7 @@ rusty-todo-md --all-files
 
 Example:
 ```sh
-rusty-todo-md --marker TODO --marker FIXME --marker HACK
+rusty-todo-md --markers TODO FIXME HACK
 ```
 
 Or specify a custom location for your TODO file:
