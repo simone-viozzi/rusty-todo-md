@@ -10,7 +10,7 @@ Rusty TODO MD is a **pre-commit hook** designed to help you manage and centraliz
    By default, Rusty TODO MD scans your **staged files** (or all tracked files using the `--all-files` flag) for markers like `TODO` and `FIXME`, and updates your `TODO.md` with any new entries.
 
 2. **Sectioned TODO.md Format**  
-   The `TODO.md` file is now organized into sections, with each section corresponding to a source file. Each section begins with a header (`## <file-path>`) followed by a list of extracted TODO items.
+   The `TODO.md` file is now organized into sections, grouped first by marker (e.g., `# TODO`, `# FIXME`), then by file. Each marker section begins with a header (`# <MARKER>`), each file with a sub-header (`## <file-path>`), followed by a list of extracted TODO items.
 
 3. **Multi-line TODO Support**  
    Handles multi-line and indented TODO comments, merging them into a single entry.
@@ -69,6 +69,12 @@ You can also run Rusty TODO MD manually:
 rusty-todo-md --all-files
 ```
 - **`--all-files`**: Scans all tracked files instead of just the staged ones.
+- **`--marker`/`-m`**: Specify one or more keywords to search for (e.g., TODO, FIXME, HACK). Can be used multiple times.
+
+Example:
+```sh
+rusty-todo-md --marker TODO --marker FIXME --marker HACK
+```
 
 Or specify a custom location for your TODO file:
 ```sh
@@ -88,8 +94,8 @@ rusty-todo-md --todo-path docs/TODOS.md
    - Supports multi-line and indented comment structures.
 
 3. **Sectioned TODO.md Format**  
-   - Organizes extracted TODOs into sections based on the source file.
-   - Each section starts with a header (`## <file-path>`) followed by formatted entries:
+   - Organizes extracted TODOs into sections grouped by marker and file.
+   - Each marker section starts with a header (`# <MARKER>`), each file with a sub-header (`## <file-path>`), followed by formatted entries:
      ```
      * [<file-path>:<line_number>](<file-path>#L<line_number>): TODO message
      ```
@@ -103,7 +109,7 @@ rusty-todo-md --todo-path docs/TODOS.md
 
 ## 🔧 Configuration
 
-- **Markers**: Currently, the tool searches for `TODO` by default. You can customize markers (e.g., `FIXME`, `HACK`) in future configurations or CLI options.
+- **Markers**: The tool searches for `TODO` by default. You can customize markers (e.g., `FIXME`, `HACK`) using the `--marker`/`-m` CLI argument. Multiple markers are supported and can be specified multiple times.
 - **Language Support**: Rusty TODO MD provides built-in parsing for Python and Rust, with planned support for additional languages.
 
 ---
@@ -122,8 +128,12 @@ def process_data(data):
 ```
 This produces a section in `TODO.md` like:
 ```
+# TODO
 ## path/to/your_file.py
 * [path/to/your_file.py:2](path/to/your_file.py#L2): Implement data validation
+
+# FIXME
+## path/to/your_file.py
 * [path/to/your_file.py:4](path/to/your_file.py#L4): Optimize this logic Possibly reduce nested loops
 ```
 
@@ -139,8 +149,12 @@ fn main() {
 ```
 This produces a section in `TODO.md` like:
 ```
+# TODO
 ## src/main.rs
 * [src/main.rs:2](src/main.rs#L2): Refactor main function
+
+# FIXME
+## src/main.rs
 * [src/main.rs:5](src/main.rs#L5): Add error handling Possibly a custom result type
 ```
 
