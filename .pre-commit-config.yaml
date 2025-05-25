@@ -16,6 +16,6 @@ repos:
         pass_filenames: false
         types: [rust]
   - repo: https://github.com/simone-viozzi/rusty-todo-md
-    rev: v1.0.0
+    rev: v1.1.0
     hooks:
       - id: rusty-todo-md
