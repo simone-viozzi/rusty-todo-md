@@ -493,6 +493,31 @@ let message = "TODO: This should not be detected";
     }
 
     #[test]
+    fn test_mixed_marker_configurations() {
+        // Test a file that mixes TODO and FIXME, with and without colons.
+        let src = r#"
+// TODO: Implement feature
+// FIXME Fix bug
+// TODO Add docs
+// FIXME: Refactor
+"#;
+        let config = MarkerConfig {
+            markers: vec![
+                "TODO:".to_string(),
+                "FIXME".to_string(),
+                "FIXME:".to_string(),
+                "TODO".to_string(),
+            ],
+        };
+        let items = extract_marked_items(Path::new("file.rs"), src, &config);
+        assert_eq!(items.len(), 4);
+        assert_eq!(items[0].message, "Implement feature");
+        assert_eq!(items[1].message, "Fix bug");
+        assert_eq!(items[2].message, "Add docs");
+        assert_eq!(items[3].message, "Refactor");
+    }
+
+    #[test]
     fn test_ignore_todo_not_at_beginning() {
         let src = r#"
 // This is a comment with a TODO: not at the beginning
