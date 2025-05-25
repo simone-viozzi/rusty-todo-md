@@ -13,11 +13,23 @@ pub struct MarkedItem {
     pub file_path: PathBuf,
     pub line_number: usize,
     pub message: String,
+    pub marker: String, // NEW: The marker (e.g., TODO, FIXME)
 }
 
 /// Configuration for comment markers.
 pub struct MarkerConfig {
     pub markers: Vec<String>,
+}
+
+impl MarkerConfig {
+    /// Normalize all markers: strip trailing colons and whitespace.
+    pub fn normalized(markers: Vec<String>) -> Self {
+        let markers = markers
+            .into_iter()
+            .map(|m| m.trim().trim_end_matches(':').trim().to_string())
+            .collect();
+        MarkerConfig { markers }
+    }
 }
 
 impl Default for MarkerConfig {
@@ -64,7 +76,7 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
                     //);
 
                     if let Some(comment) = extract_comment_from_pair(inner_pair) {
-                        debug!("Extracted comment: {:?}", comment);
+                        debug!("Extracted comment: {comment:?}",);
                         comments.push(comment);
                     } else {
                         //debug!("Skipped non-comment pair.");
@@ -73,7 +85,7 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
             }
         }
         Err(e) => {
-            error!("Parsing error: {:?}", e);
+            error!("Parsing error: {e:?}");
         }
     }
 
@@ -184,16 +196,13 @@ pub fn extract_marked_items(
         .unwrap_or("")
         .to_lowercase();
 
-    debug!("extract_marked_items: extension = '{}'", extension);
+    debug!("extract_marked_items: extension = '{extension}'");
 
     // Use the helper function to get the comment lines.
     let comment_lines = match get_parser_comments(extension.as_str(), file_content) {
         Some(lines) => lines,
         None => {
-            debug!(
-                "No recognized extension for file {:?}; returning empty list.",
-                path
-            );
+            debug!("No recognized extension for file {path:?}; returning empty list.",);
             vec![]
         }
     };
@@ -231,14 +240,15 @@ pub fn collect_marked_items_from_comment_lines(
     // First, flatten multi-line comments and strip language-specific markers.
     let stripped_lines = strip_and_flatten(lines);
     // Group the lines into blocks based on marker lines and their indented continuations.
-    let blocks = group_lines_into_blocks(stripped_lines, &config.markers);
+    let blocks = group_lines_into_blocks_with_marker(stripped_lines, &config.markers);
     // Convert each block into a MarkedItem.
     blocks
         .into_iter()
-        .map(|(line_number, block)| MarkedItem {
+        .map(|(line_number, marker, block)| MarkedItem {
             file_path: path.to_path_buf(),
             line_number,
             message: process_block_lines(&block, &config.markers),
+            marker,
         })
         .collect()
 }
@@ -256,46 +266,52 @@ fn strip_and_flatten(lines: &[CommentLine]) -> Vec<CommentLine> {
 
 /// Utility: Groups stripped comment lines into blocks. Each block is a tuple containing:
 /// - The line number where the block starts (i.e. the marker line)
+/// - The marker string that matched (always the base marker, no colon)
 /// - A vector of strings representing the block’s lines (with markers already stripped)
-fn group_lines_into_blocks(
+fn group_lines_into_blocks_with_marker(
     lines: Vec<CommentLine>,
     markers: &[String],
-) -> Vec<(usize, Vec<String>)> {
+) -> Vec<(usize, String, Vec<String>)> {
     let mut blocks = Vec::new();
-    let mut current_block: Option<(usize, Vec<String>)> = None;
+    let mut current_block: Option<(usize, String, Vec<String>)> = None;
 
     for cl in lines {
-        // Use the trimmed version for grouping.
         let trimmed = cl.text.trim().to_string();
-        if is_marker_line(&trimmed, markers) {
-            // If a block is in progress, finalize it.
+        // Try to match any marker at the start of the line.
+        // Accept if the marker is followed by nothing, a space, or a colon.
+        // Always store the base marker (no colon) in the result.
+        let matched_marker = markers.iter().find_map(|base| {
+            if let Some(rest) = trimmed.strip_prefix(base) {
+                if rest.is_empty() || rest.starts_with(' ') || rest.starts_with(':') {
+                    return Some(base.clone());
+                }
+            }
+            None
+        });
+        if let Some(marker) = matched_marker {
+            // If we were already collecting a block, push it before starting a new one.
             if let Some(block) = current_block.take() {
                 blocks.push(block);
             }
-            // Start a new block with this marker line.
-            current_block = Some((cl.line_number, vec![trimmed]));
-        } else if let Some((_, ref mut block_lines)) = current_block {
+            // Start a new block with the marker line.
+            current_block = Some((cl.line_number, marker, vec![trimmed]));
+        } else if let Some((_, _, ref mut block_lines)) = current_block {
             // If the line is indented, treat it as a continuation of the current block.
             if cl.text.starts_with(' ') || cl.text.starts_with('\t') {
                 block_lines.push(trimmed);
             } else {
-                // Otherwise, finalize the current block.
+                // If not indented, close the current block.
                 blocks.push(current_block.take().unwrap());
             }
         }
         // Lines that are not marker lines and not indented within a block are ignored.
     }
 
-    // Finalize any remaining block.
+    // Push any remaining block at the end.
     if let Some(block) = current_block {
         blocks.push(block);
     }
     blocks
-}
-
-/// Utility: Returns true if the given text starts with any of the marker strings.
-fn is_marker_line(text: &str, markers: &[String]) -> bool {
-    markers.iter().any(|marker| text.starts_with(marker))
 }
 
 /// Merges the given block lines into a single normalized message and removes the marker prefix.
@@ -353,6 +369,7 @@ mod aggregator_tests {
         };
         let todos = extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
+        assert_eq!(todos[0].marker, "TODO:");
     }
 
     #[test]
@@ -383,6 +400,7 @@ mod aggregator_tests {
             todos[0].message,
             "Fix bug Improve error handling Add logging"
         );
+        assert_eq!(todos[0].marker, "TODO:");
     }
 
     #[test]
@@ -490,6 +508,30 @@ let message = "TODO: This should not be detected";
         assert_eq!(todos[0].message, "todo1");
         assert_eq!(todos[1].line_number, 3);
         assert_eq!(todos[1].message, "todo2");
+    }
+
+    #[test]
+    fn test_mixed_marker_configurations() {
+        // Test a file that mixes TODO and FIXME, with and without colons.
+        let src = r#"
+// TODO: Implement feature
+// FIXME Fix bug
+// TODO Add docs
+// FIXME: Refactor
+"#;
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string(), "FIXME".to_string()],
+        };
+        let items = extract_marked_items(Path::new("file.rs"), src, &config);
+        assert_eq!(items.len(), 4);
+        assert_eq!(items[0].marker, "TODO");
+        assert_eq!(items[0].message, "Implement feature");
+        assert_eq!(items[1].marker, "FIXME");
+        assert_eq!(items[1].message, "Fix bug");
+        assert_eq!(items[2].marker, "TODO");
+        assert_eq!(items[2].message, "Add docs");
+        assert_eq!(items[3].marker, "FIXME");
+        assert_eq!(items[3].message, "Refactor");
     }
 
     #[test]

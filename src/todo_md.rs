@@ -2,6 +2,7 @@ use crate::todo_extractor::MarkedItem;
 use crate::todo_md_internal::TodoCollection;
 use log::info;
 use regex::Regex;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
 use std::io;
@@ -19,8 +20,8 @@ pub enum TodoError {
 impl fmt::Display for TodoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TodoError::Io(e) => write!(f, "I/O error: {}", e),
-            TodoError::Parse(msg) => write!(f, "Parse error: {}", msg),
+            TodoError::Io(e) => write!(f, "I/O error: {e}"),
+            TodoError::Parse(msg) => write!(f, "Parse error: {msg}"),
         }
     }
 }
@@ -41,7 +42,8 @@ pub fn validate_todo_file(todo_path: &std::path::Path) -> bool {
                 info!("Empty TODO.md file");
                 return true;
             }
-            // Expected patterns for a section header and a TODO item line.
+            // Expected patterns for a marker header, section header, and a TODO item line.
+            let marker_re = Regex::new(r"^#\s+\w+").unwrap();
             let section_re = Regex::new(r"^##\s+(.*)$").unwrap();
             let todo_re = Regex::new(r"^\*\s+\[(.+):(\d+)\]\(.+#L\d+\):\s*(.+)$").unwrap();
             // Check each non‑empty line for a valid pattern.
@@ -50,15 +52,26 @@ pub fn validate_todo_file(todo_path: &std::path::Path) -> bool {
                 if line.is_empty() {
                     continue;
                 }
-                if !(section_re.is_match(line) || todo_re.is_match(line)) {
-                    warn!("Invalid format on line {}: {}", i + 1, line);
+                if !(marker_re.is_match(line)
+                    || section_re.is_match(line)
+                    || todo_re.is_match(line))
+                {
+                    warn!(
+                        "Invalid format on line {line_num}: {line}",
+                        line_num = i + 1,
+                        line = line
+                    );
                     return false;
                 }
             }
             true
         }
         Err(e) => {
-            warn!("Failed to read {}: {}", todo_path.display(), e);
+            warn!(
+                "Failed to read {path}: {e}",
+                path = todo_path.display(),
+                e = e
+            );
             false
         }
     }
@@ -83,26 +96,19 @@ pub fn read_todo_file(todo_path: &Path) -> Result<Vec<MarkedItem>, TodoError> {
     let content = fs::read_to_string(todo_path)?;
 
     let mut todos = Vec::new();
-
-    // TODO what happen here if the file is malformed?
-    //     is the file is malformed, we should raise an error
-    //     and rerun with --all-files to regenerate the file from scratch
-
-    // TODO this will need to be a 3 way scan
-    //     1. scan for the markers (# TODO, # FIXME, etc)
-    //     2. scan for the file path (## src/main.rs)
-    //     3. scan for the marker line (* [src/main.rs:12](src/main.rs#L12): Refactor this function)
-
-    // Regex for matching a section header, e.g., "## src/cli.rs"
+    let marker_re = Regex::new(r"^#\s+(\w+)").unwrap();
     let section_re = Regex::new(r"^##\s+(.*)$").unwrap();
-    // Regex for matching a TODO item line, e.g.,
-    // "* [src/cli.rs:10](src/cli.rs#L10): add a new argument to specify what markers to look for"
     let todo_re = Regex::new(r"^\*\s+\[(.+):(\d+)\]\(.+#L\d+\):\s*(.+)$").unwrap();
-
     let mut current_file: Option<String> = None;
+    let mut current_marker: Option<String> = None;
     for line in content.lines() {
         let line = line.trim();
         if line.is_empty() {
+            continue;
+        }
+        // If the line is a marker header, update the current marker
+        if let Some(caps) = marker_re.captures(line) {
+            current_marker = Some(caps[1].to_string());
             continue;
         }
         // If the line is a section header, update the current file context.
@@ -116,10 +122,12 @@ pub fn read_todo_file(todo_path: &Path) -> Result<Vec<MarkedItem>, TodoError> {
             let file_path = PathBuf::from(file_path_str);
             let line_number = caps[2].parse::<usize>().unwrap_or(0);
             let message = caps[3].to_string();
+            let marker = current_marker.clone().unwrap_or_else(|| "TODO".to_string());
             todos.push(MarkedItem {
                 file_path,
                 line_number,
                 message,
+                marker,
             });
         }
     }
@@ -160,43 +168,52 @@ pub fn sync_todo_file(
 
 /// Writes the given list of `TodoItem`s to the TODO.md file in markdown format.
 ///
-/// # Arguments
-/// - `todo_path`: The path to the TODO.md file.
-/// - `todos`: A list of `TodoItem`s to write.
+/// The output format is grouped by marker (e.g., TODO, FIXME) as top-level headers,
+/// then by file as secondary headers, with each entry as a bullet:
+///
+/// # TODO
+/// ## src/file1.rs
+/// - [src/file1.rs:35](src/file1.rs#L35): Implement feature X
+///
+/// # FIXME
+/// ## src/file2.rs
+/// - [src/file2.rs:120](src/file2.rs#L120): Correct boundary condition
+///
 pub fn write_todo_file(todo_path: &Path, todos: &[MarkedItem]) -> std::io::Result<()> {
-    // Create a TodoCollection from the provided TODO items.
-    let mut collection = TodoCollection::new();
-    for todo in todos {
-        collection.add_item(todo.clone());
+    // Group by marker, then by file using BTreeMap for sorted output
+    let mut marker_map: BTreeMap<String, BTreeMap<PathBuf, Vec<&MarkedItem>>> = BTreeMap::new();
+    for item in todos {
+        marker_map
+            .entry(item.marker.clone())
+            .or_default()
+            .entry(item.file_path.clone())
+            .or_default()
+            .push(item);
     }
-
-    // Sort the file paths (keys) to ensure a consistent order.
-    let mut files: Vec<_> = collection.todos.keys().collect();
-    files.sort_by_key(|a| a.display().to_string());
 
     let mut content = String::new();
-    // For each file, write a markdown section header and its TODO items.
-    for file in files {
-        // Write a section header for the file.
-        content.push_str(&format!("## {}\n", file.display()));
-
-        // Retrieve and sort TODO items for the current file by line number.
-        let mut items = collection.todos.get(file).unwrap().clone();
-        items.sort_by_key(|item| item.line_number);
-        for item in items {
-            content.push_str(&format!(
-                "* [{}:{}]({}#L{}): {}\n",
-                item.file_path.display(),
-                item.line_number,
-                item.file_path.display(),
-                item.line_number,
-                item.message
-            ));
+    // Write each marker section
+    for (marker, files) in marker_map {
+        content.push_str(&format!("# {marker}\n"));
+        // Write each file section under the marker
+        for (file, items) in files {
+            content.push_str(&format!("## {file}\n", file = file.display()));
+            // Sort items by line number for consistency
+            let mut sorted_items = items.clone();
+            sorted_items.sort_by_key(|item| item.line_number);
+            for item in sorted_items {
+                content.push_str(&format!(
+                    "* [{file}:{line}]({file}#L{line}): {message}\n",
+                    file = item.file_path.display(),
+                    line = item.line_number,
+                    message = item.message
+                ));
+            }
+            // Add an extra newline between file sections
+            content.push('\n');
         }
-        // Add an extra newline between sections.
-        content.push('\n');
     }
-
+    // Write the final content to the TODO.md file
     fs::write(todo_path, content)
 }
 
@@ -221,11 +238,13 @@ mod tests {
                 file_path: PathBuf::from("src/main.rs"),
                 line_number: 10,
                 message: "Refactor this function".to_string(),
+                marker: "TODO".to_string(),
             },
             MarkedItem {
                 file_path: PathBuf::from("src/lib.rs"),
                 line_number: 5,
                 message: "Add error handling".to_string(),
+                marker: "TODO".to_string(),
             },
         ];
 
@@ -269,6 +288,7 @@ mod tests {
                 file_path: PathBuf::from("src/main.rs"),
                 line_number: 12,
                 message: "Refactor this function".to_string(),
+                marker: "TODO".to_string(),
             }
         );
         assert_eq!(
@@ -277,6 +297,7 @@ mod tests {
                 file_path: PathBuf::from("src/lib.rs"),
                 line_number: 5,
                 message: "Add error handling".to_string(),
+                marker: "TODO".to_string(),
             }
         );
     }
@@ -292,16 +313,19 @@ mod tests {
                 file_path: PathBuf::from("src/foo.rs"),
                 line_number: 20,
                 message: "Fix bug in foo".to_string(),
+                marker: "Fix".to_string(),
             },
             MarkedItem {
                 file_path: PathBuf::from("src/bar.rs"),
                 line_number: 10,
                 message: "Refactor bar".to_string(),
+                marker: "Refactor".to_string(),
             },
             MarkedItem {
                 file_path: PathBuf::from("src/foo.rs"),
                 line_number: 30,
                 message: "Add tests for foo".to_string(),
+                marker: "Add".to_string(),
             },
         ];
 
@@ -311,7 +335,14 @@ mod tests {
 
         let content = fs::read_to_string(&todo_path).unwrap();
 
-        // Verify that each file has its own section header.
+        // Check for marker header
+        assert!(content.contains("# Fix"), "Missing marker section header");
+        assert!(
+            content.contains("# Refactor"),
+            "Missing marker section header"
+        );
+        assert!(content.contains("# Add"), "Missing marker section header");
+        // Check for file headers
         assert!(
             content.contains("## src/bar.rs"),
             "Missing section for src/bar.rs"
@@ -321,7 +352,7 @@ mod tests {
             "Missing section for src/foo.rs"
         );
 
-        // Verify that the TODO items are correctly formatted.
+        // Check for correct TODO item formatting
         let expected_bar = "* [src/bar.rs:10](src/bar.rs#L10): Refactor bar";
         let expected_foo_20 = "* [src/foo.rs:20](src/foo.rs#L20): Fix bug in foo";
         let expected_foo_30 = "* [src/foo.rs:30](src/foo.rs#L30): Add tests for foo";
@@ -329,9 +360,13 @@ mod tests {
         assert!(content.contains(expected_foo_20));
         assert!(content.contains(expected_foo_30));
 
-        // Ensure that the sections appear in lexicographical order.
-        let bar_index = content.find("## src/bar.rs").unwrap();
-        let foo_index = content.find("## src/foo.rs").unwrap();
-        assert!(bar_index < foo_index, "Section ordering is incorrect");
+        // Check that marker sections appear in lexicographical order
+        let marker_fix_index = content.find("# Fix").unwrap_or(usize::MAX);
+        let marker_refactor_index = content.find("# Refactor").unwrap_or(usize::MAX);
+        let marker_add_index = content.find("# Add").unwrap_or(usize::MAX);
+        assert!(
+            marker_add_index < marker_fix_index && marker_fix_index < marker_refactor_index,
+            "Marker section ordering is incorrect"
+        );
     }
 }

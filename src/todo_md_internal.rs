@@ -22,7 +22,7 @@ impl TodoCollection {
     /// Adds a MarkedItem to the collection. If the file already has associated TODO items,
     /// the new item is appended to the existing list.
     pub fn add_item(&mut self, item: MarkedItem) {
-        info!("Adding item to collection: {:?}", item);
+        info!("Adding item to collection: {item:?}");
         self.todos
             .entry(item.file_path.clone())
             .or_default()
@@ -54,13 +54,13 @@ impl TodoCollection {
 
         // Insert new todos for files that were scanned.
         for (file, new_items) in new.todos {
-            debug!("Updating todos for file: {:?}", file);
+            debug!("Updating todos for file: {file:?}");
             self.todos.insert(file, new_items);
         }
 
         // Remove entries for files that have been deleted.
         for file in deleted_files {
-            debug!("Removing todos for deleted file: {:?}", file);
+            debug!("Removing todos for deleted file: {file:?}");
             self.todos.remove(&file);
         }
     }
@@ -99,7 +99,14 @@ mod tests {
     fn init_logger() {
         INIT.call_once(|| {
             env_logger::Builder::from_default_env()
-                .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
+                .format(|buf, record| {
+                    writeln!(
+                        buf,
+                        "{level}: {args}",
+                        level = record.level(),
+                        args = record.args()
+                    )
+                })
                 .filter_level(LevelFilter::Debug)
                 .is_test(true)
                 .try_init()
@@ -115,6 +122,7 @@ mod tests {
             file_path: PathBuf::from("src/test.rs"),
             line_number: 42,
             message: "Test TODO".to_string(),
+            marker: "TODO".to_string(),
         };
         collection.add_item(item.clone());
         assert!(collection.todos.contains_key(&PathBuf::from("src/test.rs")));
@@ -132,6 +140,7 @@ mod tests {
             file_path: PathBuf::from("src/foo.rs"),
             line_number: 10,
             message: "Fix bug".to_string(),
+            marker: "TODO".to_string(),
         };
         col1.add_item(item1.clone());
 
@@ -140,6 +149,7 @@ mod tests {
             file_path: PathBuf::from("src/foo.rs"),
             line_number: 20,
             message: "Implement new feature".to_string(),
+            marker: "TODO".to_string(),
         };
         col2.add_item(item1.clone());
         col2.add_item(item2.clone());
@@ -162,6 +172,7 @@ mod tests {
             file_path: PathBuf::from("src/bar.rs"),
             line_number: 15,
             message: "Refactor code".to_string(),
+            marker: "TODO".to_string(),
         };
         col1.add_item(item.clone());
 
@@ -185,6 +196,7 @@ mod tests {
             file_path: PathBuf::from("src/baz.rs"),
             line_number: 25,
             message: "Optimize performance".to_string(),
+            marker: "TODO".to_string(),
         };
         col1.add_item(item.clone());
 
@@ -206,6 +218,7 @@ mod tests {
             file_path: PathBuf::from("src/a.rs"),
             line_number: 5,
             message: "Improve variable naming".to_string(),
+            marker: "TODO".to_string(),
         };
         col1.add_item(item1.clone());
 
@@ -214,6 +227,7 @@ mod tests {
             file_path: PathBuf::from("src/b.rs"),
             line_number: 10,
             message: "Add unit tests".to_string(),
+            marker: "TODO".to_string(),
         };
         col2.add_item(item2.clone());
 
@@ -239,16 +253,19 @@ mod tests {
             file_path: PathBuf::from("src/z.rs"),
             line_number: 50,
             message: "Last item".to_string(),
+            marker: "TODO".to_string(),
         };
         let item2 = MarkedItem {
             file_path: PathBuf::from("src/a.rs"),
             line_number: 10,
             message: "First item".to_string(),
+            marker: "TODO".to_string(),
         };
         let item3 = MarkedItem {
             file_path: PathBuf::from("src/a.rs"),
             line_number: 20,
             message: "Second item".to_string(),
+            marker: "TODO".to_string(),
         };
         // Add items in non-sorted order.
         collection.add_item(item1.clone());
@@ -271,6 +288,7 @@ mod tests {
             file_path: PathBuf::from("src/foo.rs"),
             line_number: 10,
             message: "Fix bug".to_string(),
+            marker: "TODO".to_string(),
         };
         col1.add_item(item1.clone());
 
@@ -279,11 +297,13 @@ mod tests {
             file_path: PathBuf::from("src/bar.rs"),
             line_number: 20,
             message: "Implement feature".to_string(),
+            marker: "TODO".to_string(),
         };
         let item3 = MarkedItem {
             file_path: PathBuf::from("src/foo.rs"),
             line_number: 30,
             message: "Add tests".to_string(),
+            marker: "TODO".to_string(),
         };
         col2.add_item(item2.clone());
         col2.add_item(item3.clone());
@@ -291,7 +311,7 @@ mod tests {
         // Merge col2 into col1
         col1.merge(col2, vec![], vec![]);
 
-        // Expect col1 to contain both items for src/foo.rs and one for src/bar.rs.
+        // Expect col1 to contain both items for src/foo.rs and one for src_bar.rs.
         assert!(col1.todos.contains_key(&PathBuf::from("src/foo.rs")));
         assert!(col1.todos.contains_key(&PathBuf::from("src/bar.rs")));
         let foo_items = col1.todos.get(&PathBuf::from("src/foo.rs")).unwrap();
@@ -308,16 +328,19 @@ mod tests {
             file_path: PathBuf::from("src/z.rs"),
             line_number: 50,
             message: "Last item".to_string(),
+            marker: "TODO".to_string(),
         };
         let item2 = MarkedItem {
             file_path: PathBuf::from("src/a.rs"),
             line_number: 10,
             message: "First item".to_string(),
+            marker: "TODO".to_string(),
         };
         let item3 = MarkedItem {
             file_path: PathBuf::from("src/a.rs"),
             line_number: 20,
             message: "Second item".to_string(),
+            marker: "TODO".to_string(),
         };
         collection.add_item(item1.clone());
         collection.add_item(item2.clone());
@@ -339,11 +362,13 @@ mod tests {
             file_path: PathBuf::from("src/foo.rs"),
             line_number: 10,
             message: "Fix bug".to_string(),
+            marker: "TODO".to_string(),
         };
         let item_stale = MarkedItem {
             file_path: PathBuf::from("src/foo.rs"),
             line_number: 15,
             message: "Old note".to_string(),
+            marker: "TODO".to_string(),
         };
         col1.add_item(item_old);
         col1.add_item(item_stale);
@@ -353,6 +378,7 @@ mod tests {
             file_path: PathBuf::from("src/foo.rs"),
             line_number: 20,
             message: "Implement feature".to_string(),
+            marker: "TODO".to_string(),
         };
         col2.add_item(item_new.clone());
 
@@ -378,11 +404,13 @@ mod tests {
             file_path: PathBuf::from("src/a.rs"),
             line_number: 5,
             message: "A: initial task".to_string(),
+            marker: "TODO".to_string(),
         };
         let a_item2 = MarkedItem {
             file_path: PathBuf::from("src/a.rs"),
             line_number: 15,
             message: "A: old task".to_string(),
+            marker: "TODO".to_string(),
         };
         col1.add_item(a_item1);
         col1.add_item(a_item2);
@@ -392,6 +420,7 @@ mod tests {
             file_path: PathBuf::from("src/b.rs"),
             line_number: 10,
             message: "B: fix issue".to_string(),
+            marker: "TODO".to_string(),
         };
         col1.add_item(b_item1.clone());
 
@@ -400,6 +429,7 @@ mod tests {
             file_path: PathBuf::from("src/c.rs"),
             line_number: 20,
             message: "C: temporary note".to_string(),
+            marker: "TODO".to_string(),
         };
         col1.add_item(c_item1);
 
@@ -410,6 +440,7 @@ mod tests {
             file_path: PathBuf::from("src/a.rs"),
             line_number: 7,
             message: "A: new task".to_string(),
+            marker: "TODO".to_string(),
         };
         col2.add_item(a_item_new.clone());
 
@@ -418,6 +449,7 @@ mod tests {
             file_path: PathBuf::from("src/b.rs"),
             line_number: 12,
             message: "B: additional improvement".to_string(),
+            marker: "TODO".to_string(),
         };
         // Note: Even though b_item1 is already in col1, intended behavior is to replace the list.
         col2.add_item(b_item1.clone());
@@ -428,6 +460,7 @@ mod tests {
             file_path: PathBuf::from("src/d.rs"),
             line_number: 1,
             message: "D: start here".to_string(),
+            marker: "TODO".to_string(),
         };
         col2.add_item(d_item1.clone());
 
@@ -472,6 +505,7 @@ mod tests {
             file_path: PathBuf::from("src/old.rs"),
             line_number: 100,
             message: "Obsolete TODO".to_string(),
+            marker: "TODO".to_string(),
         };
         original.add_item(item);
 

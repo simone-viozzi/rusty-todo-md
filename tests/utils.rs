@@ -15,6 +15,7 @@ use tempfile::TempDir;
 /// - Creates an initial file, stages it, writes the tree, and commits
 ///
 /// The result is a repository with HEAD as a symbolic ref to "refs/heads/master".
+#[allow(dead_code)]
 pub fn init_repo() -> Result<(TempDir, Repository), GitError> {
     // 1. Create a temporary directory and initialize the repository.
     let temp_dir = TempDir::new().expect("failed to create temp dir");
@@ -59,4 +60,47 @@ pub fn init_repo() -> Result<(TempDir, Repository), GitError> {
     drop(tree);
     drop(head_ref);
     Ok((temp_dir, repo))
+}
+
+#[allow(dead_code)]
+pub struct FakeGitOps {
+    pub _dummy_repo: Repository,
+    pub temp_dir: tempfile::TempDir,
+    pub staged_files: Vec<std::path::PathBuf>,
+    pub tracked_files: Vec<std::path::PathBuf>,
+    pub deleted_files: Vec<std::path::PathBuf>,
+}
+
+#[allow(dead_code)]
+impl FakeGitOps {
+    pub fn new(
+        _dummy_repo: Repository,
+        temp_dir: tempfile::TempDir,
+        staged_files: Vec<std::path::PathBuf>,
+        tracked_files: Vec<std::path::PathBuf>,
+        deleted_files: Vec<std::path::PathBuf>,
+    ) -> Self {
+        FakeGitOps {
+            _dummy_repo,
+            temp_dir,
+            staged_files,
+            tracked_files,
+            deleted_files,
+        }
+    }
+}
+
+impl rusty_todo_md::git_utils::GitOpsTrait for FakeGitOps {
+    fn open_repository(&self, _repo_path: &std::path::Path) -> Result<Repository, GitError> {
+        Repository::open(self.temp_dir.path())
+    }
+    fn get_staged_files(&self, _repo: &Repository) -> Result<Vec<std::path::PathBuf>, GitError> {
+        Ok(self.staged_files.clone())
+    }
+    fn get_tracked_files(&self, _repo: &Repository) -> Result<Vec<std::path::PathBuf>, GitError> {
+        Ok(self.tracked_files.clone())
+    }
+    fn get_deleted_files(&self, _repo: &Repository) -> Result<Vec<std::path::PathBuf>, GitError> {
+        Ok(self.deleted_files.clone())
+    }
 }

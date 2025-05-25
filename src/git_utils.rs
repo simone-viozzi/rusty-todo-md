@@ -19,9 +19,9 @@ impl GitOpsTrait for GitOps {
     /// Opens the Git repository at the specified path.
     /// Returns an error if the specified path is not a Git repository.
     fn open_repository(&self, repo_path: &Path) -> Result<Repository, GitError> {
-        debug!("Opening repository at path: {:?}", repo_path);
+        debug!("Opening repository at path: {repo_path:?}",);
         let repo = Repository::open(repo_path)?;
-        info!("Successfully opened repository at path: {:?}", repo_path);
+        info!("Successfully opened repository at path: {repo_path:?}",);
         Ok(repo)
     }
 
@@ -45,7 +45,7 @@ impl GitOpsTrait for GitOps {
         diff.foreach(
             &mut |delta, _| {
                 if let Some(path) = delta.new_file().path() {
-                    debug!("Staged file added/modified: {:?}", path);
+                    debug!("Staged file added/modified: {path:?}",);
                     staged_files.push(path.to_path_buf());
                 }
                 true
@@ -54,7 +54,10 @@ impl GitOpsTrait for GitOps {
             None,
             None,
         )?;
-        info!("Found {} staged files", staged_files.len());
+        info!(
+            "Found {staged_files_len} staged files",
+            staged_files_len = staged_files.len()
+        );
         Ok(staged_files)
     }
 
@@ -72,12 +75,15 @@ impl GitOpsTrait for GitOps {
                 } else {
                     format!("{}/{}", root, entry.name().unwrap_or(""))
                 };
-                debug!("Tracked file: {:?}", path);
+                debug!("Tracked file: {path:?}",);
                 tracked_files.push(PathBuf::from(path));
             }
             TreeWalkResult::Ok
         })?;
-        info!("Found {} tracked files", tracked_files.len());
+        info!(
+            "Found {tracked_files_len} tracked files",
+            tracked_files_len = tracked_files.len()
+        );
         Ok(tracked_files)
     }
 
@@ -97,7 +103,7 @@ impl GitOpsTrait for GitOps {
             &mut |delta, _| {
                 if delta.status() == Delta::Deleted {
                     if let Some(path) = delta.old_file().path() {
-                        debug!("Deleted file: {:?}", path);
+                        debug!("Deleted file: {path:?}",);
                         deleted_files.push(path.to_path_buf());
                     }
                 }
@@ -107,7 +113,10 @@ impl GitOpsTrait for GitOps {
             None,
             None,
         )?;
-        info!("Found {} deleted files", deleted_files.len());
+        info!(
+            "Found {deleted_files_len} deleted files",
+            deleted_files_len = deleted_files.len()
+        );
         Ok(deleted_files)
     }
 }
