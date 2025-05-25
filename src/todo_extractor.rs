@@ -7,3 +7,11 @@ pub use crate::todo_extractor_internal::aggregator::{
 pub fn extract_todos(file_path: &Path, content: &str) -> Vec<MarkedItem> {
     extract_marked_items(file_path, content, &MarkerConfig::default())
 }
+
+pub fn extract_todos_with_config(
+    file_path: &Path,
+    content: &str,
+    config: &MarkerConfig,
+) -> Vec<MarkedItem> {
+    extract_marked_items(file_path, content, config)
+}
