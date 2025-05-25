@@ -22,7 +22,7 @@ impl TodoCollection {
     /// Adds a MarkedItem to the collection. If the file already has associated TODO items,
     /// the new item is appended to the existing list.
     pub fn add_item(&mut self, item: MarkedItem) {
-        info!("Adding item to collection: {:?}", item);
+        info!("Adding item to collection: {item:?}");
         self.todos
             .entry(item.file_path.clone())
             .or_default()
@@ -54,13 +54,13 @@ impl TodoCollection {
 
         // Insert new todos for files that were scanned.
         for (file, new_items) in new.todos {
-            debug!("Updating todos for file: {:?}", file);
+            debug!("Updating todos for file: {file:?}");
             self.todos.insert(file, new_items);
         }
 
         // Remove entries for files that have been deleted.
         for file in deleted_files {
-            debug!("Removing todos for deleted file: {:?}", file);
+            debug!("Removing todos for deleted file: {file:?}");
             self.todos.remove(&file);
         }
     }
@@ -99,7 +99,14 @@ mod tests {
     fn init_logger() {
         INIT.call_once(|| {
             env_logger::Builder::from_default_env()
-                .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
+                .format(|buf, record| {
+                    writeln!(
+                        buf,
+                        "{level}: {args}",
+                        level = record.level(),
+                        args = record.args()
+                    )
+                })
                 .filter_level(LevelFilter::Debug)
                 .is_test(true)
                 .try_init()
@@ -304,7 +311,7 @@ mod tests {
         // Merge col2 into col1
         col1.merge(col2, vec![], vec![]);
 
-        // Expect col1 to contain both items for src/foo.rs and one for src/bar.rs.
+        // Expect col1 to contain both items for src/foo.rs and one for src_bar.rs.
         assert!(col1.todos.contains_key(&PathBuf::from("src/foo.rs")));
         assert!(col1.todos.contains_key(&PathBuf::from("src/bar.rs")));
         let foo_items = col1.todos.get(&PathBuf::from("src/foo.rs")).unwrap();

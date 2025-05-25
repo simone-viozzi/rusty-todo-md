@@ -20,8 +20,8 @@ pub enum TodoError {
 impl fmt::Display for TodoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TodoError::Io(e) => write!(f, "I/O error: {}", e),
-            TodoError::Parse(msg) => write!(f, "Parse error: {}", msg),
+            TodoError::Io(e) => write!(f, "I/O error: {e}"),
+            TodoError::Parse(msg) => write!(f, "Parse error: {msg}"),
         }
     }
 }
@@ -56,14 +56,22 @@ pub fn validate_todo_file(todo_path: &std::path::Path) -> bool {
                     || section_re.is_match(line)
                     || todo_re.is_match(line))
                 {
-                    warn!("Invalid format on line {}: {}", i + 1, line);
+                    warn!(
+                        "Invalid format on line {line_num}: {line}",
+                        line_num = i + 1,
+                        line = line
+                    );
                     return false;
                 }
             }
             true
         }
         Err(e) => {
-            warn!("Failed to read {}: {}", todo_path.display(), e);
+            warn!(
+                "Failed to read {path}: {e}",
+                path = todo_path.display(),
+                e = e
+            );
             false
         }
     }
@@ -186,21 +194,19 @@ pub fn write_todo_file(todo_path: &Path, todos: &[MarkedItem]) -> std::io::Resul
     let mut content = String::new();
     // Write each marker section
     for (marker, files) in marker_map {
-        content.push_str(&format!("# {}\n", marker));
+        content.push_str(&format!("# {marker}\n"));
         // Write each file section under the marker
         for (file, items) in files {
-            content.push_str(&format!("## {}\n", file.display()));
+            content.push_str(&format!("## {file}\n", file = file.display()));
             // Sort items by line number for consistency
             let mut sorted_items = items.clone();
             sorted_items.sort_by_key(|item| item.line_number);
             for item in sorted_items {
                 content.push_str(&format!(
-                    "* [{}:{}]({}#L{}): {}\n",
-                    item.file_path.display(),
-                    item.line_number,
-                    item.file_path.display(),
-                    item.line_number,
-                    item.message
+                    "* [{file}:{line}]({file}#L{line}): {message}\n",
+                    file = item.file_path.display(),
+                    line = item.line_number,
+                    message = item.message
                 ));
             }
             // Add an extra newline between file sections

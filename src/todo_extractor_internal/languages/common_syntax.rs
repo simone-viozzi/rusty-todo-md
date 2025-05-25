@@ -32,7 +32,7 @@ pub fn strip_markers(text: &str) -> String {
     let trailing_markers = ["*/", "-->"];
     for marker in &trailing_markers {
         // First, check for a pattern where there's an extra space before the marker.
-        let pattern = format!(" {}", marker);
+        let pattern = format!(" {marker}");
         if result.ends_with(&pattern) {
             let new_len = result.len() - pattern.len();
             result.truncate(new_len);

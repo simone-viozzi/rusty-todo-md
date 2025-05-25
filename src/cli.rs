@@ -49,7 +49,7 @@ where
 
     if !Path::new(todo_path).exists() {
         if let Err(e) = std::fs::write(todo_path, "") {
-            error!("Error creating TODO.md: {}", e);
+            error!("Error creating TODO.md: {e}");
             std::process::exit(1);
         }
     }
@@ -63,7 +63,7 @@ where
     let repo = match git_ops.open_repository(Path::new(".")) {
         Ok(r) => r,
         Err(e) => {
-            error!("Error opening repository: {}", e);
+            error!("Error opening repository: {e}");
             std::process::exit(1);
         }
     };
@@ -72,7 +72,7 @@ where
     let deleted_files = match git_ops.get_deleted_files(&repo) {
         Ok(list) => list,
         Err(e) => {
-            error!("Error retrieving deleted files: {}", e);
+            error!("Error retrieving deleted files: {e}");
             std::process::exit(1);
         }
     };
@@ -93,7 +93,7 @@ where
             repo,
             &marker_config,
         ) {
-            error!("Error: {}", e);
+            error!("Error: {e}");
             std::process::exit(1);
         }
     } else {
@@ -116,7 +116,7 @@ fn extract_todos_from_files(
             let todos = todo_extractor::extract_todos_with_config(file, &content, marker_config);
             new_todos.extend(todos);
         } else {
-            error!("Warning: Could not read file {:?}, skipping.", file);
+            error!("Warning: Could not read file {file:?}, skipping.");
         }
     }
     new_todos
@@ -134,14 +134,14 @@ pub fn process_files_from_list(
 
     // Pass the list of scanned files to sync_todo_file.
     if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, scanned_files, deleted_files) {
-        info!("There was an error updating TODO.md: {}", err);
+        info!("There was an error updating TODO.md: {err}");
 
         // TODO add tests for this branch
 
         let all_files = match git_ops.get_tracked_files(&repo) {
             Ok(files) => files,
             Err(e) => {
-                error!("Error retrieving tracked files: {}", e);
+                error!("Error retrieving tracked files: {e}");
                 std::process::exit(1);
             }
         };
@@ -149,7 +149,7 @@ pub fn process_files_from_list(
         let new_todos = extract_todos_from_files(&all_files, marker_config);
 
         if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, all_files, vec![]) {
-            error!("Error updating TODO.md: {}", err);
+            error!("Error updating TODO.md: {err}");
             std::process::exit(1);
         }
     }

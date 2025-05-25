@@ -28,7 +28,7 @@ fn colored_level(level: Level, color_enabled: bool) -> String {
         // Format using the style's Display impl:
         // - `{}` outputs the escape code to set the style,
         // - `{:#}` outputs the reset code.
-        format!("{}{}{:#}", style, level_str, style)
+        format!("{style}{level_str}{style:#}")
     } else {
         level_str.to_string()
     }
@@ -53,7 +53,7 @@ pub fn format_logger(buf: &mut Formatter, record: &Record) -> std::io::Result<()
 
     // Build a plain-text file:line string (if available) that VSCode can detect.
     let file_line = match (record.file(), record.line()) {
-        (Some(file), Some(line)) => format!("{}:{}", file, line),
+        (Some(file), Some(line)) => format!("{file}:{line}"),
         _ => String::new(),
     };
 

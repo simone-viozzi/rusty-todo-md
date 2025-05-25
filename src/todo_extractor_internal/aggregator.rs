@@ -76,7 +76,7 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
                     //);
 
                     if let Some(comment) = extract_comment_from_pair(inner_pair) {
-                        debug!("Extracted comment: {:?}", comment);
+                        debug!("Extracted comment: {comment:?}",);
                         comments.push(comment);
                     } else {
                         //debug!("Skipped non-comment pair.");
@@ -85,7 +85,7 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
             }
         }
         Err(e) => {
-            error!("Parsing error: {:?}", e);
+            error!("Parsing error: {e:?}");
         }
     }
 
@@ -196,16 +196,13 @@ pub fn extract_marked_items(
         .unwrap_or("")
         .to_lowercase();
 
-    debug!("extract_marked_items: extension = '{}'", extension);
+    debug!("extract_marked_items: extension = '{extension}'");
 
     // Use the helper function to get the comment lines.
     let comment_lines = match get_parser_comments(extension.as_str(), file_content) {
         Some(lines) => lines,
         None => {
-            debug!(
-                "No recognized extension for file {:?}; returning empty list.",
-                path
-            );
+            debug!("No recognized extension for file {path:?}; returning empty list.",);
             vec![]
         }
     };
