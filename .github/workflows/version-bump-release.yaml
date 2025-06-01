@@ -31,7 +31,7 @@ jobs:
       - name: Set Up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.13"
 
       - name: Install Cargo Release
         run: cargo install cargo-release
