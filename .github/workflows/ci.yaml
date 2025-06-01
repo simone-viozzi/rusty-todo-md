@@ -38,3 +38,35 @@ jobs:
       # Step 5: Run tests
       - name: Run tests
         run: cargo test
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Check out the repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Rust toolchain (stable only for coverage)
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          profile: minimal
+          toolchain: stable
+
+      # Step 3: Install cargo-tarpaulin
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      # Step 4: Generate coverage report
+      - name: Generate coverage report
+        run: cargo tarpaulin --out Lcov --output-dir ./coverage
+
+      # Step 5: Upload coverage reports as artifacts
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-reports
+          path: coverage/
+          retention-days: 30
