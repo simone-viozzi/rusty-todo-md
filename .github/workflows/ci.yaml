@@ -42,7 +42,8 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
-    
+    permissions:
+      pull-requests: write
     steps:
       # Step 1: Check out the repository
       - name: Checkout code
@@ -70,3 +71,10 @@ jobs:
           name: coverage-reports
           path: coverage/
           retention-days: 30
+
+      # Step 6: Post coverage comment to PR
+      - name: Report LCOV
+        uses: jcs090218/lcov-reporter-action@v0.4.2
+        with:
+          lcov-file: ./coverage/lcov.info
+          github-token: ${{ secrets.GITHUB_TOKEN }}
