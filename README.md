@@ -114,6 +114,26 @@ rusty-todo-md --todo-path docs/TODOS.md
 
 ---
 
+## 📊 Test Coverage
+
+Rusty TODO MD maintains comprehensive test coverage to ensure reliability and code quality.
+
+### CI/CD Coverage
+
+- **Automated Coverage**: Every pull request automatically generates coverage reports
+- **Coverage Reports**: Available as downloadable artifacts from GitHub Actions
+- **Format**: Reports are generated in LCOV format for broad tool compatibility
+
+### VS Code Integration
+
+For the best local development experience:
+
+1. Install the [Coverage Gutters](https://marketplace.visualstudio.com/items?itemName=ryanluker.vscode-coverage-gutters) extension
+2. Run `cargo tarpaulin --out Lcov --output-dir ./coverage`
+3. Open your project in VS Code to see coverage highlights directly in your source files
+
+---
+
 ## 📚 Example
 
 ### Python Example
