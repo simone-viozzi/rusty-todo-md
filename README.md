@@ -1,6 +1,6 @@
 # **Rusty TODO MD** — A Pre-Commit Hook for Managing TODOs
 
-Rusty TODO MD is a **pre-commit hook** designed to help you manage and centralize all your code's **TODO** comments by automatically extracting them and synchronizing them into a single **`TODO.md`** file. With support for multiple languages—currently Python and Rust—Rusty TODO MD now organizes TODOs using a new sectioned format for enhanced readability and easier maintenance.
+Rusty TODO MD is a **pre-commit hook** designed to help you manage and centralize all your code's **TODO** comments by automatically extracting them and synchronizing them into a single **`TODO.md`** file. With support for multiple languages—currently **Python**, **Rust**, **JavaScript**, and **Go**—Rusty TODO MD now organizes TODOs using a new sectioned format for enhanced readability and easier maintenance.
 
 ---
 
@@ -20,7 +20,7 @@ Rusty TODO MD is a **pre-commit hook** designed to help you manage and centraliz
    - Removes entries when their corresponding TODOs are no longer present in the source code.
 
 5. **Language-Aware Parsing**  
-   Supports precise parsing for **Python** and **Rust** out-of-the-box, with future plans for additional languages such as JavaScript, TypeScript, and Go.
+   Supports precise parsing for **Python**, **Rust**, **JavaScript**, and **Go** out-of-the-box, with plans for additional languages such as TypeScript, PHP, and Java.
 
 6. **Seamless Pre-Commit Integration**  
    Easily integrate Rusty TODO MD into your workflow by adding it to your `.pre-commit-config.yaml`.
@@ -110,7 +110,7 @@ rusty-todo-md --todo-path docs/TODOS.md
 ## 🔧 Configuration
 
 - **Markers**: The tool searches for `TODO` by default. You can customize markers (e.g., `FIXME`, `HACK`) using the `--marker`/`-m` CLI argument. Multiple markers are supported and can be specified multiple times.
-- **Language Support**: Rusty TODO MD provides built-in parsing for Python and Rust, with planned support for additional languages.
+- **Language Support**: Rusty TODO MD provides built-in parsing for **Python** (`.py`), **Rust** (`.rs`), **JavaScript** (`.js`, `.jsx`), and **Go** (`.go`), with planned support for additional languages.
 
 ---
 
@@ -176,6 +176,46 @@ This produces a section in `TODO.md` like:
 # FIXME
 ## src/main.rs
 * [src/main.rs:5](src/main.rs#L5): Add error handling Possibly a custom result type
+```
+
+### JavaScript Example
+```javascript
+// TODO: Refactor this into separate modules
+function init() {
+  /* FIXME: Handle edge cases 
+     such as null responses */
+  fetchData();
+}
+```
+This produces a section in `TODO.md` like:
+```
+# TODO
+## src/app.js
+* [src/app.js:1](src/app.js#L1): Refactor this into separate modules
+
+# FIXME
+## src/app.js
+* [src/app.js:4](src/app.js#L4): Handle edge cases such as null responses
+```
+
+### Go Example
+```go
+// TODO: Add proper logging
+func main() {
+    /* FIXME: Implement proper error handling
+       across the entire application */
+    fmt.Println("Hello, World!")
+}
+```
+This produces a section in `TODO.md` like:
+```
+# TODO
+## main.go
+* [main.go:1](main.go#L1): Add proper logging
+
+# FIXME
+## main.go
+* [main.go:3](main.go#L3): Implement proper error handling across the entire application
 ```
 
 ---
