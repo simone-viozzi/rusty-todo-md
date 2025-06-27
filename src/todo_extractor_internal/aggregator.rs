@@ -172,9 +172,18 @@ fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<Commen
                 file_content,
             ),
         ),
+        "js" | "jsx" => Some(
+            crate::todo_extractor_internal::languages::js::JsParser::parse_comments(
+                file_content,
+            ),
+        ),
+        "go" => Some(
+            crate::todo_extractor_internal::languages::go::GoParser::parse_comments(
+                file_content,
+            ),
+        ),
         // TODO Add new extensions and their corresponding parser calls here:
-        //      "js" => Some(crate::languages::js::JsParser::parse_comments(file_content)),
-        //      "ts" => Some(crate::languages::ts::TsParser::parse_comments(file_content)),
+        //      "ts" | "tsx" => Some(crate::languages::ts::TsParser::parse_comments(file_content)),
         _ => None,
     }
 }
@@ -368,6 +377,42 @@ mod aggregator_tests {
             markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("file.rs"), src, &config);
+        assert_eq!(todos.len(), 1);
+        assert_eq!(todos[0].marker, "TODO:");
+    }
+
+    #[test]
+    fn test_valid_js_extension() {
+        init_logger();
+        let src = "// TODO: Implement feature X";
+        let config = MarkerConfig {
+            markers: vec!["TODO:".to_string()],
+        };
+        let todos = extract_marked_items(Path::new("file.js"), src, &config);
+        assert_eq!(todos.len(), 1);
+        assert_eq!(todos[0].marker, "TODO:");
+    }
+
+    #[test]
+    fn test_valid_jsx_extension() {
+        init_logger();
+        let src = "// TODO: Add prop validation";
+        let config = MarkerConfig {
+            markers: vec!["TODO:".to_string()],
+        };
+        let todos = extract_marked_items(Path::new("component.jsx"), src, &config);
+        assert_eq!(todos.len(), 1);
+        assert_eq!(todos[0].marker, "TODO:");
+    }
+
+    #[test]
+    fn test_valid_go_extension() {
+        init_logger();
+        let src = "// TODO: Implement feature X";
+        let config = MarkerConfig {
+            markers: vec!["TODO:".to_string()],
+        };
+        let todos = extract_marked_items(Path::new("main.go"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
