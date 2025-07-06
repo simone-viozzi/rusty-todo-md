@@ -48,7 +48,7 @@ x = "TODO: not a comment"
             markers: vec!["TODO:".to_string()],
         };
         let todos = extract_marked_items(Path::new("test.py"), src, &config);
-        println!("{:?}", todos);
+        println!("{todos:?}");
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].line_number, 2); // line is 1-based
         assert_eq!(todos[0].message, "do something");
@@ -72,7 +72,7 @@ def f():
         assert_eq!(todos.len(), 1);
         let item = &todos[0];
 
-        println!("{:?}", item);
+        println!("{item:?}");
 
         // The TODO appears on line 5, not 4.
         assert_eq!(item.line_number, 5);
@@ -129,7 +129,7 @@ def big_function():
         let todos = extract_marked_items(Path::new("multi_todos.py"), src, &config);
 
         // Print to see the aggregator's actual behavior
-        println!("Todos = {:#?}", todos);
+        println!("Todos = {todos:?}");
 
         assert_eq!(todos.len(), 2, "");
 

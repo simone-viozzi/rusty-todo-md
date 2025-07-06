@@ -1,0 +1,45 @@
+// ===============================
+// 🐹 Go Comment Parser
+// ===============================
+
+// A Go file consists of comments, code, and string literals.
+go_file = { SOI ~ (comment | str_literal | raw_string | any_non_comment)* ~ EOI }
+
+// ===============================
+// 📌 Comment Extraction
+// ===============================
+
+// Single-line comments: match '//' followed by any characters until newline.
+line_comment = @{
+    "//" ~ (!NEWLINE ~ ANY)*
+}
+
+// Block comments: match C-style block comments "/* ... */".
+block_comment = @{
+    "/*" ~ (!"*/" ~ ANY)* ~ "*/"
+}
+
+// General comment rule: captures both line comments and block comments.
+comment = { line_comment | block_comment }
+
+// ===============================
+// 🚫 Ignoring String Literals
+// ===============================
+
+// String literals: either double-quoted or single-quoted strings.
+str_literal = _{
+    "\"" ~ (!("\"" | "\\") ~ ANY | "\\" ~ ANY)* ~ "\"" |
+    "'" ~ (!("'" | "\\") ~ ANY | "\\" ~ ANY)* ~ "'"
+}
+
+// Raw string literals: backtick-delimited strings.
+raw_string = _{
+    "`" ~ (!"`" ~ ANY)* ~ "`"
+}
+
+// ===============================
+// ❌ Any Other Non-Comment Code
+// ===============================
+
+// Anything that is NOT a comment or a string literal.
+any_non_comment = { !(comment | str_literal | raw_string) ~ ANY }
