@@ -179,6 +179,8 @@ fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<Commen
             crate::todo_extractor_internal::languages::go::GoParser::parse_comments(file_content),
         ),
         // TODO Add new extensions and their corresponding parser calls here:
+        //      Currently supported extensions: "js", "jsx", "go", "py", "rs".
+        //      Example for adding a new extension:
         //      "ts" | "tsx" => Some(crate::languages::ts::TsParser::parse_comments(file_content)),
         _ => None,
     }
