@@ -32,8 +32,8 @@ pkgs.mkShell {
     pkgs.stdenv.cc.cc
     pkgs.openssl
     pkgs.zlib
-    pkgs.lldb.lib
-    pkgs.lldb.out
+    pkgs.lldb
+    #pkgs.lldb.out
   ];
 
   buildInputs = with pkgs; [
@@ -44,8 +44,6 @@ pkgs.mkShell {
     git
     pre-commit
     lldb
-    lldb.lib 
-    lldb.out
     llvmPackages.libllvm
     gcc
     zlib
@@ -92,7 +90,7 @@ pkgs.mkShell {
     mkdir -p "$LLDB_BIN_DIR"
 
     # Symlink liblldb.so from the lldb.lib output to the local directory
-    ln -sf "${pkgs.lldb.lib}/lib/liblldb.so" "$LLDB_BIN_DIR/liblldb.so"
+    ln -sf "${pkgs.lldb}/lib/liblldb.so" "$LLDB_BIN_DIR/liblldb.so"
 
     # Symlink lldb-server from the lldb.out output to the local directory
     ln -sf "${pkgs.lldb.out}/bin/lldb-server" "$LLDB_BIN_DIR/lldb-server"
