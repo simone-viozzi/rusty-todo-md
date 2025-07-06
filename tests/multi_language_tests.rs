@@ -17,16 +17,28 @@ mod multi_language_tests {
         fs::write(&rust_file, "// TODO: Implement Rust feature\nfn main() {}").unwrap();
 
         let js_file = repo_path.join("app.js");
-        fs::write(&js_file, "// TODO: Implement JS feature\nconsole.log('hello');").unwrap();
+        fs::write(
+            &js_file,
+            "// TODO: Implement JS feature\nconsole.log('hello');",
+        )
+        .unwrap();
 
         let jsx_file = repo_path.join("component.jsx");
-        fs::write(&jsx_file, "// TODO: Add prop validation\nconst App = () => <div>Hello</div>;").unwrap();
+        fs::write(
+            &jsx_file,
+            "// TODO: Add prop validation\nconst App = () => <div>Hello</div>;",
+        )
+        .unwrap();
 
         let go_file = repo_path.join("main.go");
         fs::write(&go_file, "// TODO: Implement Go feature\npackage main").unwrap();
 
         let python_file = repo_path.join("script.py");
-        fs::write(&python_file, "# TODO: Implement Python feature\nprint('hello')").unwrap();
+        fs::write(
+            &python_file,
+            "# TODO: Implement Python feature\nprint('hello')",
+        )
+        .unwrap();
 
         let args = vec![
             "rusty-todo-md",
@@ -42,8 +54,20 @@ mod multi_language_tests {
         let fake_git_ops = FakeGitOps::new(
             git2::Repository::init(repo_path).unwrap(),
             temp_dir,
-            vec![rust_file.clone(), js_file.clone(), jsx_file.clone(), go_file.clone(), python_file.clone()],
-            vec![rust_file.clone(), js_file.clone(), jsx_file.clone(), go_file.clone(), python_file.clone()],
+            vec![
+                rust_file.clone(),
+                js_file.clone(),
+                jsx_file.clone(),
+                go_file.clone(),
+                python_file.clone(),
+            ],
+            vec![
+                rust_file.clone(),
+                js_file.clone(),
+                jsx_file.clone(),
+                go_file.clone(),
+                python_file.clone(),
+            ],
             vec![],
         );
 

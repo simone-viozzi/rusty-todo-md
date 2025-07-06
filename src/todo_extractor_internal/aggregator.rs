@@ -173,14 +173,10 @@ fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<Commen
             ),
         ),
         "js" | "jsx" => Some(
-            crate::todo_extractor_internal::languages::js::JsParser::parse_comments(
-                file_content,
-            ),
+            crate::todo_extractor_internal::languages::js::JsParser::parse_comments(file_content),
         ),
         "go" => Some(
-            crate::todo_extractor_internal::languages::go::GoParser::parse_comments(
-                file_content,
-            ),
+            crate::todo_extractor_internal::languages::go::GoParser::parse_comments(file_content),
         ),
         // TODO Add new extensions and their corresponding parser calls here:
         //      "ts" | "tsx" => Some(crate::languages::ts::TsParser::parse_comments(file_content)),

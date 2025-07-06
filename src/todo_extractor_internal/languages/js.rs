@@ -71,7 +71,10 @@ function init() {
         let todos = extract_marked_items(Path::new("test.js"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].line_number, 2);
-        assert_eq!(todos[0].message, "Refactor this module Add better error handling");
+        assert_eq!(
+            todos[0].message,
+            "Refactor this module Add better error handling"
+        );
     }
 
     #[test]
@@ -165,6 +168,9 @@ function authenticate() {}
         };
         let todos = extract_marked_items(Path::new("auth.js"), src, &config);
         assert_eq!(todos.len(), 1);
-        assert_eq!(todos[0].message, "Implement authentication Add JWT token validation Handle token expiration");
+        assert_eq!(
+            todos[0].message,
+            "Implement authentication Add JWT token validation Handle token expiration"
+        );
     }
 }

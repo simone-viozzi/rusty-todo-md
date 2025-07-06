@@ -71,7 +71,10 @@ func process() error {
         let todos = extract_marked_items(Path::new("process.go"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].line_number, 2);
-        assert_eq!(todos[0].message, "Refactor this module Add better error handling");
+        assert_eq!(
+            todos[0].message,
+            "Refactor this module Add better error handling"
+        );
     }
 
     #[test]
@@ -131,7 +134,10 @@ import "fmt"
         let todos = extract_marked_items(Path::new("main.go"), src, &config);
         assert_eq!(todos.len(), 2);
         assert_eq!(todos[0].message, "Add package documentation");
-        assert_eq!(todos[1].message, "Implement proper error handling across the entire package");
+        assert_eq!(
+            todos[1].message,
+            "Implement proper error handling across the entire package"
+        );
     }
 
     #[test]
@@ -167,7 +173,10 @@ func authenticate() error { return nil }
         };
         let todos = extract_marked_items(Path::new("auth.go"), src, &config);
         assert_eq!(todos.len(), 1);
-        assert_eq!(todos[0].message, "Implement authentication Add JWT token validation Handle token expiration");
+        assert_eq!(
+            todos[0].message,
+            "Implement authentication Add JWT token validation Handle token expiration"
+        );
     }
 
     #[test]
@@ -186,7 +195,7 @@ func main() {}
         };
         let todos = extract_marked_items(Path::new("nested.go"), src, &config);
         // The parser should find at least one TODO
-        assert!(todos.len() >= 1);
+        assert!(!todos.is_empty());
         assert!(todos[0].message.contains("This is a complex task"));
     }
 }
