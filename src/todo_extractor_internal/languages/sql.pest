@@ -1,0 +1,19 @@
+// ===============================
+// 🗄 SQL Comment Parser
+// ===============================
+
+sql_file = { SOI ~ (comment | str_literal | any_non_comment)* ~ EOI }
+
+// Line comments starting with --
+line_comment = @{ "--" ~ (!NEWLINE ~ ANY)* }
+
+// Block comments delimited by /* */
+block_comment = @{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+
+comment = { line_comment | block_comment }
+
+str_literal = _{ "'" ~ (!("'" | "\\") ~ ANY | "\\" ~ ANY)* ~ "'" |
+                "\"" ~ (!("\"" | "\\") ~ ANY | "\\" ~ ANY)* ~ "\"" }
+
+any_non_comment = { !(comment | str_literal) ~ ANY }
+
