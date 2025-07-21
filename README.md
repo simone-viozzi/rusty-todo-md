@@ -46,7 +46,7 @@ pip install pre-commit
 Add the following snippet to your `.pre-commit-config.yaml` file at the root of your repository:
 ```yaml
 repos:
-  - repo: https://github.com/your-username/rusty-todo-md
+  - repo: https://github.com/simone-viozzi/rusty-todo-md
     rev: v0.1.8-alpha.11
     hooks:
       - id: rusty-todo-md
