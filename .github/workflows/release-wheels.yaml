@@ -1,0 +1,92 @@
+name: Release Wheels to PyPI
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build-wheels:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            platform: manylinux2014_x86_64
+          # Linux aarch64 (ARM64)
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            platform: manylinux2014_aarch64
+          # macOS universal2 (x86_64 + arm64)
+          - os: macos-14
+            target: universal2-apple-darwin
+            platform: macos
+          # Windows x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: win_amd64
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build and publish wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          command: publish
+          target: ${{ matrix.target }}
+          args: --non-interactive --skip-existing
+          manylinux: auto
+          rustup-components: rustfmt
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
+  smoke-test:
+    needs: build-wheels
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+
+    steps:
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Get release tag
+        id: get_tag
+        shell: bash
+        run: |
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Install wheel from PyPI
+        run: |
+          pip install rusty_todo_md==${{ steps.get_tag.outputs.tag }} --only-binary=:all:
+
+      - name: Test installation
+        run: |
+          rusty-todo-md --help
+
+      - name: Create test file and run extraction
+        shell: bash
+        run: |
+          echo "# TODO: This is a test comment" > test.py
+          rusty-todo-md test.py

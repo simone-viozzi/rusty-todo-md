@@ -57,10 +57,6 @@ jobs:
       - name: List built wheels
         run: ls -l target/wheels/
 
-      - name: Rename wheel file
-        run: |
-          mv target/wheels/*.whl target/wheels/rusty_todo_md-${{ steps.get_tag.outputs.tag }}.whl
-
       - name: Create Release and Upload Asset
         uses: softprops/action-gh-release@v2
         with:
@@ -70,6 +66,6 @@ jobs:
           draft: true
           prerelease: false
           files: |
-            target/wheels/rusty_todo_md-${{ steps.get_tag.outputs.tag }}.whl
+            target/wheels/*.whl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
