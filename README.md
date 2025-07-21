@@ -35,6 +35,42 @@ Scattered TODO comments can be hard to track and maintain. Rusty TODO MD central
 
 ## ⚙️ Installation & Setup
 
+### Option 1: PyPI Installation (Recommended)
+
+Install directly from PyPI using pip:
+```sh
+pip install rusty_todo_md
+```
+
+Then you can use it directly:
+```sh
+rusty-todo-md --help
+```
+
+### Option 2: Pre-Commit Hook Integration
+
+#### With PyPI (Recommended - No Rust toolchain required)
+Add the following to your `.pre-commit-config.yaml`:
+```yaml
+repos:
+  - repo: https://github.com/simone-viozzi/rusty-todo-md
+    rev: v1.1.0  # Use the latest version
+    hooks:
+      - id: rusty-todo-md
+        language: python
+        additional_dependencies: ["rusty_todo_md==1.1.0"]
+```
+
+#### With Git Repository
+Add the following snippet to your `.pre-commit-config.yaml` file at the root of your repository:
+```yaml
+repos:
+  - repo: https://github.com/simone-viozzi/rusty-todo-md
+    rev: v1.1.0  # Use the latest version
+    hooks:
+      - id: rusty-todo-md
+```
+
 ### 1. Install Pre-Commit
 If you haven't already installed [pre-commit](https://pre-commit.com/):
 ```sh
