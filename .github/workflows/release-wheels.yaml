@@ -18,13 +18,9 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             platform: manylinux2014_x86_64
-          # Linux aarch64 (ARM64)
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            platform: manylinux2014_aarch64
-          # macOS universal2 (x86_64 + arm64)
-          - os: macos-14
-            target: universal2-apple-darwin
+          # macOS Apple Silicon – later merged into a universal2 wheel
+          - os: macos-14       # arm64 runner
+            target: aarch64-apple-darwin
             platform: macos
           # Windows x86_64
           - os: windows-latest
@@ -40,7 +36,15 @@ jobs:
         with:
           python-version: '3.13'
 
+      # install BOTH macOS std‑libs so maturin can call `lipo`
       - name: Install Rust
+        if: startsWith(matrix.os, 'macos')
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Install Rust (Linux/Windows)
+        if: "!startsWith(matrix.os, 'macos')"
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -50,11 +54,17 @@ jobs:
         with:
           command: publish
           target: ${{ matrix.target }}
-          args: --non-interactive --skip-existing
+          # Produce a universal2 wheel when we are on macOS
+          args: --non-interactive --skip-existing ${{ startsWith(matrix.os, 'macos') && '--universal2' || '' }}
+          # Build OpenSSL from source so we don't need system headers
+          features: vendored-openssl
           manylinux: auto
           rustup-components: rustfmt
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+          # Make openssl‑sys use the vendored build
+          OPENSSL_NO_PKG_CONFIG: "1"
+          OPENSSL_STATIC: "1"
 
   smoke-test:
     needs: build-wheels
