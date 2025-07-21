@@ -11,7 +11,7 @@ pub fn strip_markers(text: &str) -> String {
 
     // Remove a leading marker if present.
     // The markers are checked after any initial indentation so that we preserve it.
-    let leading_markers = ["<!--", "///", "/*", "//", "#"];
+    let leading_markers = ["<!--", "///", "/*", "//", "#", "--"];
     if let Some(non_ws_idx) = result.find(|c: char| !c.is_whitespace()) {
         for marker in &leading_markers {
             if result[non_ws_idx..].starts_with(marker) {

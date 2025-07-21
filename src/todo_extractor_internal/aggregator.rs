@@ -172,11 +172,43 @@ fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<Commen
                 file_content,
             ),
         ),
-        "js" | "jsx" => Some(
+        "js" | "jsx" | "mjs" => Some(
+            crate::todo_extractor_internal::languages::js::JsParser::parse_comments(file_content),
+        ),
+        "ts" | "tsx" | "java" | "cpp" | "hpp" | "cc" | "hh" | "cs" | "swift" | "kt" | "kts"
+        | "json" => Some(
             crate::todo_extractor_internal::languages::js::JsParser::parse_comments(file_content),
         ),
         "go" => Some(
             crate::todo_extractor_internal::languages::go::GoParser::parse_comments(file_content),
+        ),
+        "sh" => Some(
+            crate::todo_extractor_internal::languages::shell::ShellParser::parse_comments(
+                file_content,
+            ),
+        ),
+        "yml" | "yaml" => Some(
+            crate::todo_extractor_internal::languages::yaml::YamlParser::parse_comments(
+                file_content,
+            ),
+        ),
+        "toml" => Some(
+            crate::todo_extractor_internal::languages::toml::TomlParser::parse_comments(
+                file_content,
+            ),
+        ),
+        "dockerfile" => Some(
+            crate::todo_extractor_internal::languages::dockerfile::DockerfileParser::parse_comments(
+                file_content,
+            ),
+        ),
+        "sql" => Some(
+            crate::todo_extractor_internal::languages::sql::SqlParser::parse_comments(file_content),
+        ),
+        "md" => Some(
+            crate::todo_extractor_internal::languages::markdown::MarkdownParser::parse_comments(
+                file_content,
+            ),
         ),
         // TODO Add new extensions and their corresponding parser calls here:
         //      Currently supported extensions: "js", "jsx", "go", "py", "rs".
@@ -203,10 +235,23 @@ pub fn extract_marked_items(
         .unwrap_or("")
         .to_lowercase();
 
-    debug!("extract_marked_items: extension = '{extension}'");
+    // Handle special filenames like Dockerfile which have no extension
+    let file_name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    let effective_ext = if extension.is_empty() && file_name == "dockerfile" {
+        "dockerfile"
+    } else {
+        extension.as_str()
+    };
+
+    debug!("extract_marked_items: extension = '{extension}', effective_ext = '{effective_ext}'");
 
     // Use the helper function to get the comment lines.
-    let comment_lines = match get_parser_comments(extension.as_str(), file_content) {
+    let comment_lines = match get_parser_comments(effective_ext, file_content) {
         Some(lines) => lines,
         None => {
             debug!("No recognized extension for file {path:?}; returning empty list.",);
@@ -716,5 +761,77 @@ fn some_function() {
 
         assert_eq!(todos[0].line_number, 2);
         assert_eq!(todos[0].message, "add a new argument to specify what markers to look for like --markers \"TODO, FIXME, HACK\"");
+    }
+
+    #[test]
+    fn test_valid_sh_extension() {
+        init_logger();
+        let src = "# TODO: setup\nexit";
+        let config = MarkerConfig {
+            markers: vec!["TODO:".to_string()],
+        };
+        let todos = extract_marked_items(Path::new("script.sh"), src, &config);
+        assert_eq!(todos.len(), 1);
+        assert_eq!(todos[0].marker, "TODO:");
+    }
+
+    #[test]
+    fn test_valid_yaml_extension() {
+        init_logger();
+        let src = "# TODO: conf\nkey: val";
+        let config = MarkerConfig {
+            markers: vec!["TODO:".to_string()],
+        };
+        let todos = extract_marked_items(Path::new("config.yaml"), src, &config);
+        assert_eq!(todos.len(), 1);
+        assert_eq!(todos[0].marker, "TODO:");
+    }
+
+    #[test]
+    fn test_valid_toml_extension() {
+        init_logger();
+        let src = "# TODO: fix\nkey=1";
+        let config = MarkerConfig {
+            markers: vec!["TODO:".to_string()],
+        };
+        let todos = extract_marked_items(Path::new("config.toml"), src, &config);
+        assert_eq!(todos.len(), 1);
+        assert_eq!(todos[0].marker, "TODO:");
+    }
+
+    #[test]
+    fn test_valid_sql_extension() {
+        init_logger();
+        let src = "-- TODO: q\nSELECT 1;";
+        let config = MarkerConfig {
+            markers: vec!["TODO:".to_string()],
+        };
+        let todos = extract_marked_items(Path::new("query.sql"), src, &config);
+        assert_eq!(todos.len(), 1);
+        assert_eq!(todos[0].marker, "TODO:");
+    }
+
+    #[test]
+    fn test_valid_markdown_extension() {
+        init_logger();
+        let src = "<!-- TODO: doc -->";
+        let config = MarkerConfig {
+            markers: vec!["TODO:".to_string()],
+        };
+        let todos = extract_marked_items(Path::new("README.md"), src, &config);
+        assert_eq!(todos.len(), 1);
+        assert_eq!(todos[0].marker, "TODO:");
+    }
+
+    #[test]
+    fn test_dockerfile_no_extension() {
+        init_logger();
+        let src = "# TODO: step\nFROM alpine";
+        let config = MarkerConfig {
+            markers: vec!["TODO:".to_string()],
+        };
+        let todos = extract_marked_items(Path::new("Dockerfile"), src, &config);
+        assert_eq!(todos.len(), 1);
+        assert_eq!(todos[0].marker, "TODO:");
     }
 }

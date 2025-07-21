@@ -1,0 +1,13 @@
+// ===============================
+// 📝 Markdown Comment Parser
+// ===============================
+
+// A Markdown file may contain HTML-style comments.
+markdown_file = { SOI ~ (comment | any_non_comment)* ~ EOI }
+
+// HTML comments
+comment = @{ "<!--" ~ (!"-->" ~ ANY)* ~ "-->" }
+
+// Everything else
+any_non_comment = { !(comment) ~ ANY }
+

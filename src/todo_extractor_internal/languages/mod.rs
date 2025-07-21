@@ -1,7 +1,13 @@
 pub mod common;
 pub mod common_syntax;
+pub mod dockerfile;
 pub mod go;
 pub mod js;
+pub mod markdown;
 pub mod python;
 pub mod rust;
+pub mod shell;
+pub mod sql;
+pub mod toml;
+pub mod yaml;
 // pub mod ts;
