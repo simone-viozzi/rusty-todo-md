@@ -9,20 +9,21 @@ permissions:
 
 jobs:
   build-wheels:
+    name: Build & publish wheels
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux x86_64
+          # Linux
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             platform: manylinux2014_x86_64
-          # macOS Apple Silicon – later merged into a universal2 wheel
-          - os: macos-14       # arm64 runner
-            target: aarch64-apple-darwin
+          # macOS universal2 (one wheel supporting arm64 + x86_64)
+          - os: macos-14
+            target: universal2-apple-darwin
             platform: macos
-          # Windows x86_64
+          # Windows
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             platform: win_amd64
@@ -31,49 +32,38 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python (builder)
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
-      # install BOTH macOS std‑libs so maturin can call `lipo`
       - name: Install Rust
-        if: startsWith(matrix.os, 'macos')
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
-
-      - name: Install Rust (Linux/Windows)
-        if: "!startsWith(matrix.os, 'macos')"
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Build and publish wheels
+      - name: Build & upload wheel to PyPI
         uses: PyO3/maturin-action@v1
         with:
           command: publish
           target: ${{ matrix.target }}
-          # Produce a universal2 wheel when we are on macOS
-          args: --non-interactive --skip-existing ${{ startsWith(matrix.os, 'macos') && '--universal2' || '' }}
-          # Build OpenSSL from source so we don't need system headers
+          args: --non-interactive --skip-existing
           features: vendored-openssl
           manylinux: auto
           rustup-components: rustfmt
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-          # Make openssl‑sys use the vendored build
-          OPENSSL_NO_PKG_CONFIG: "1"
-          OPENSSL_STATIC: "1"
+          OPENSSL_STATIC: "1" # static‑link the vendored OpenSSL
 
   smoke-test:
+    name: Smoke-test wheels
     needs: build-wheels
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-14, windows-latest]
-        python-version: ['3.10', '3.11', '3.12', '3.13']
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - name: Set up Python ${{ matrix.python-version }}
@@ -91,11 +81,10 @@ jobs:
         run: |
           pip install rusty_todo_md==${{ steps.get_tag.outputs.tag }} --only-binary=:all:
 
-      - name: Test installation
-        run: |
-          rusty-todo-md --help
+      - name: CLI invocation works
+        run: rusty-todo-md --help
 
-      - name: Create test file and run extraction
+      - name: End-to-end extraction test
         shell: bash
         run: |
           echo "# TODO: This is a test comment" > test.py
