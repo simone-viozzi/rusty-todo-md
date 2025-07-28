@@ -42,3 +42,8 @@ pre-release-hook = ["./bump-version.sh"]
 # Enable vendored OpenSSL for cross-compilation and manylinux builds
 vendored-openssl = ["git2/vendored-openssl"]
 
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
