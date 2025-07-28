@@ -42,7 +42,7 @@ jobs:
           cargo release
           ${{ github.event.inputs.bump_level }}
           --execute
-          --skip-publish
+          --no-publish
           --no-confirm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # push back to origin
