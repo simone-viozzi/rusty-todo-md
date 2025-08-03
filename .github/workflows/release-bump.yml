@@ -31,8 +31,7 @@ jobs:
         id: cache-cargo-release
         uses: actions/cache@v4
         with:
-          path: |
-            ${{ env.HOME }}/.cargo/bin/cargo-release
+          path: ${{ env.CARGO_HOME }}/bin/cargo-release
           # Stable primary key (bump the suffix if you ever need to bust the cache)
           key: cargo-release-${{ runner.os }}-v1
           # Fallback so future key bumps still reuse older archives
