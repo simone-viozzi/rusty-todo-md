@@ -44,7 +44,7 @@ jobs:
           out=$(cargo release ${{ github.event.inputs.bump_level }} --dry-run --no-confirm --no-publish --no-tag 2>&1)
           echo "Output: $out"
           next_version=$(printf '%s\n' "$out" \
-            | grep -Eo -- 'to [0-9]+\.[0-9]+\.[0-9]+.+$' \
+            | grep -Eo -- 'to [0-9]+\.[0-9]+\.[0-9]+.*$' \
             | awk '{print $2}' \
             | tail -n1)
           echo "Next version: $next_version"
