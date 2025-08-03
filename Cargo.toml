@@ -11,7 +11,11 @@ documentation = "https://github.com/simone-viozzi/rusty-todo-md"
 
 [dependencies]
 clap = { version = "4.5.27", features = ["derive"] }
-git2 = "0.20.0"
+git2 = { version = "0.20", default-features = false, features = [
+    "vendored-openssl",
+    "vendored-libgit2",
+] }
+openssl = { version = "0.10", features = ["vendored"] }
 regex = "1.11.1"
 anstyle = "1.0.10"
 chrono = "0.4.39"
@@ -37,10 +41,6 @@ tag-name = "{{version}}"
 push = true
 
 pre-release-hook = ["./bump-version.sh"]
-
-[features]
-# Enable vendored OpenSSL for cross-compilation and manylinux builds
-vendored-openssl = ["git2/vendored-openssl"]
 
 # The profile that 'dist' will build with
 [profile.dist]
