@@ -41,7 +41,9 @@ jobs:
       - name: Get Next Version
         id: get_version
         run: |
-          next_version=$(cargo release ${{ github.event.inputs.bump_level }} --dry-run --no-confirm --no-publish --no-tag 2>&1 \
+          out=$(cargo release ${{ github.event.inputs.bump_level }} --dry-run --no-confirm --no-publish --no-tag 2>&1)
+          echo "Output: $out"
+          next_version=$(printf '%s\n' "$out" \
             | grep -Eo -- 'to [0-9]+\.[0-9]+\.[0-9]+.+$' \
             | awk '{print $2}' \
             | tail -n1)
