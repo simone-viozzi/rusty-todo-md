@@ -27,7 +27,15 @@ jobs:
       - name: Set Up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache cargo-release binary
+        id: cache-cargo-release
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-release
+          key: cargo-release-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+
       - name: Install Cargo Release
+        if: steps.cache-cargo-release.outputs.cache-hit != 'true'
         run: cargo install cargo-release
 
       - name: Get Next Version
@@ -37,12 +45,14 @@ jobs:
             | grep -Eo -- 'to [0-9]+\.[0-9]+\.[0-9]+.+$' \
             | awk '{print $2}' \
             | tail -n1)
+          echo "Next version: $next_version"
           echo "NEXT_VERSION=$next_version" >> $GITHUB_ENV
 
       - name: Create Release Branch
         run: |
           git fetch origin main
           BRANCH="release/v${{ env.NEXT_VERSION }}"
+          echo "Creating branch $BRANCH"
           git checkout -b "$BRANCH" origin/main
           echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
 
