@@ -49,15 +49,22 @@ jobs:
       - name: Bump Version
         run: |
           cargo release ${{ github.event.inputs.bump_level }} --execute --no-confirm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
       
       - name: Create PR
         run: |
           gh pr create --base main \
             --head release/${{ env.NEXT_VERSION }} --title "Release ${{ env.NEXT_VERSION }}" --body "This PR releases version ${{ env.NEXT_VERSION }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Merge PR
         run: |
           gh pr merge --delete-branch --auto --body "Merged release ${{ env.NEXT_VERSION }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release and Upload Asset
         uses: softprops/action-gh-release@v2
