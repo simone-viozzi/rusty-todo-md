@@ -78,7 +78,7 @@ jobs:
 
       - name: Merge PR
         run: |
-          gh pr merge --delete-branch --auto --body "Merged release ${{ env.NEXT_VERSION }}"
+          gh pr merge --merge --delete-branch --auto --body "Merged release ${{ env.NEXT_VERSION }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
