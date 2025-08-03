@@ -31,8 +31,13 @@ jobs:
         id: cache-cargo-release
         uses: actions/cache@v4
         with:
-          path: ~/.cargo/bin/cargo-release
-          key: cargo-release-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          path: |
+            ${{ env.HOME }}/.cargo/bin/cargo-release
+          # Stable primary key (bump the suffix if you ever need to bust the cache)
+          key: cargo-release-${{ runner.os }}-v1
+          # Fallback so future key bumps still reuse older archives
+          restore-keys: |
+            cargo-release-${{ runner.os }}-
 
       - name: Install Cargo Release
         if: steps.cache-cargo-release.outputs.cache-hit != 'true'
