@@ -3,11 +3,10 @@ name: release
 on:
   workflow_dispatch:
     inputs:
-        bump_level:
-            description: 'Version bump level (major, minor, patch, release, rc, beta, alpha)'
-            required: true
-            default: 'minor'
-
+      bump_level:
+        description: "Version bump level (major, minor, patch, release, rc, beta, alpha)"
+        required: true
+        default: "minor"
 
 jobs:
   version_bump:
@@ -18,7 +17,7 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-      
+
       - name: Configure Git Identity
         run: |
           git config --global user.email "release-bot@example.com"
@@ -68,17 +67,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_TOKEN }}
-      
+
       - name: Create PR
         id: create_pr
         run: |
-          pr_json=$(gh pr create --base main \
-                  --head "$BRANCH" \
-                  --title "Release $NEXT_VERSION" \
-                  --body "This PR releases version $NEXT_VERSION" \
-                  --json number,url)
-          echo "$pr_json"
-          echo "PR_NUMBER=$(echo "$pr_json" | jq -r '.number')" >> "$GITHUB_ENV"
+          gh pr create --base main \
+                      --head "${{ env.BRANCH }}" \
+                      --title "Release ${{ env.NEXT_VERSION }}" \
+                      --body  "This PR releases version ${{ env.NEXT_VERSION }}"
+          # extract the PR number via `gh pr view`
+          PR_NUMBER=$(gh pr view "${{ env.BRANCH }}" --json number --jq '.number')
+          echo "PR_NUMBER=$PR_NUMBER" >> "$GITHUB_ENV"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     outputs:
@@ -279,7 +278,7 @@ jobs:
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: 'wheels-*/*'
+          subject-path: "wheels-*/*"
       - name: Create Release and Upload Asset
         uses: softprops/action-gh-release@v2
         with:
@@ -299,10 +298,10 @@ jobs:
           args: --non-interactive --skip-existing wheels-*/*
 
   merge_release_pr:
-    needs: [release]         
+    needs: [release]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4   
+      - uses: actions/checkout@v4
       - name: Merge the release PR
         run: |
           gh pr merge ${{ needs.version_bump.outputs.pr_number }} \
