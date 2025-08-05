@@ -268,7 +268,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [linux, musllinux, windows, macos, sdist]
+    needs: [linux, musllinux, windows, macos, sdist, version_bump]
     permissions:
       # Use to sign the release artifacts
       id-token: write
@@ -301,12 +301,14 @@ jobs:
           args: --non-interactive --skip-existing wheels-*/*
 
   merge_release_pr:
-    needs: [release]
+    needs: [release, version_bump]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Merge the release PR
         run: |
+          echo "Merging release PR #${{ needs.version_bump.outputs.pr_number }}"
+          echo "Next version: ${{ needs.version_bump.outputs.next_version }}"
           gh pr merge ${{ needs.version_bump.outputs.pr_number }} \
             --merge --delete-branch --admin \
             --body "Merged release ${{ needs.version_bump.outputs.next_version }}"
