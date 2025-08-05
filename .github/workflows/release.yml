@@ -51,15 +51,18 @@ jobs:
             | awk '{print $2}' \
             | tail -n1)
           echo "Next version: $next_version"
-          echo "NEXT_VERSION=$next_version" >> $GITHUB_ENV
+          echo "next_version=$next_version" >> "$GITHUB_OUTPUT"
+          echo "NEXT_VERSION=$next_version" >> "$GITHUB_ENV"
 
       - name: Create Release Branch
+        id: create_branch
         run: |
           git fetch origin main
-          BRANCH="release/v${{ env.NEXT_VERSION }}"
-          echo "Creating branch $BRANCH"
-          git checkout -b "$BRANCH" origin/main
-          echo "BRANCH=$BRANCH" >> "$GITHUB_ENV"
+          branch="release/v${{ steps.get_version.outputs.next_version }}"
+          echo "Creating branch $branch"
+          git checkout -b "$branch" origin/main
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "BRANCH=$branch" >> "$GITHUB_ENV"
 
       - name: Bump Version
         run: |
@@ -72,18 +75,18 @@ jobs:
         id: create_pr
         run: |
           gh pr create --base main \
-                      --head "${{ env.BRANCH }}" \
-                      --title "Release ${{ env.NEXT_VERSION }}" \
-                      --body  "This PR releases version ${{ env.NEXT_VERSION }}"
+                      --head "$BRANCH" \
+                      --title "Release $NEXT_VERSION" \
+                      --body  "This PR releases version $NEXT_VERSION"
           # extract the PR number via `gh pr view`
-          PR_NUMBER=$(gh pr view "${{ env.BRANCH }}" --json number --jq '.number')
-          echo "PR_NUMBER=$PR_NUMBER" >> "$GITHUB_ENV"
+          pr_number=$(gh pr view "$BRANCH" --json number --jq '.number')
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     outputs:
-      next_version: ${{ env.NEXT_VERSION }}
-      release_branch: ${{ env.BRANCH }}
-      pr_number: ${{ env.PR_NUMBER }}
+      next_version: ${{ steps.get_version.outputs.next_version }}
+      release_branch: ${{ steps.create_branch.outputs.branch }}
+      pr_number: ${{ steps.create_pr.outputs.pr_number }}
 
   linux:
     runs-on: ${{ matrix.platform.runner }}
