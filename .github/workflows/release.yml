@@ -301,6 +301,9 @@ jobs:
           args: --non-interactive --skip-existing wheels-*/*
 
   merge_release_pr:
+    permissions:
+      contents: write
+      pull-requests: write
     needs: [release, version_bump]
     runs-on: ubuntu-latest
     steps:
