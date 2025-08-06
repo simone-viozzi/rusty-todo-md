@@ -15,7 +15,7 @@ repos:
         language: system
         pass_filenames: false
         types: [rust]
-  - repo: https://github.com/simone-viozzi/rusty-todo-md
-    rev: v1.6.3
-    hooks:
-      - id: rusty-todo-md
+#  - repo: https://github.com/simone-viozzi/rusty-todo-md-pre-commit.git
+#    rev: v1.6.4
+#    hooks:
+#      - id: rusty-todo-md

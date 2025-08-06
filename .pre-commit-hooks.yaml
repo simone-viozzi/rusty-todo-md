@@ -1,7 +1,0 @@
-- id: rusty-todo-md
-  name: Rusty TODO Extractor
-  entry: rusty-todo-md
-  language: python
-  skip_install: true
-  types_or: [python, rust]
-  additional_dependencies: [ rusty_todo_md==1.1.0 ]
