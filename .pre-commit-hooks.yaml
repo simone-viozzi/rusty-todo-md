@@ -4,4 +4,4 @@
   language: python
   skip_install: true
   types_or: [python, rust]
-  additional_dependencies: [ rusty_todo_md==1.1.0 ]
+  additional_dependencies: [ rusty_todo_md==1.6.4 ]
