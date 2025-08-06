@@ -4,5 +4,3 @@
 version=$(grep '^version =' Cargo.toml | sed -E 's/version = "(.*)"/\1/')
 # Update pyproject.toml (Linux syntax; adjust for macOS if needed)
 sed -i -E "s/version = \".*\"/version = \"$version\"/" pyproject.toml
-sed -i -E "s/rusty_todo_md==[^] ]+/rusty_todo_md==$version/" .pre-commit-hooks.yaml
-git add .
