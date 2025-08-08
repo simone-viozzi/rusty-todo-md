@@ -13,20 +13,12 @@ jobs:
   trigger_pre_commit_update:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger mirror repository_dispatch
-        env:
-          GH_TOKEN: ${{ secrets.PRE_COMMIT_PAT }}
-        run: |
-          VERSION="${{ github.event.inputs.version }}"
-          if [ -n "$VERSION" ]; then
-            gh api repos/simone-viozzi/rusty-todo-md-pre-commit/dispatches \
-              --method POST \
-              --raw-field event_type=pypi_release \
-              --raw-field client_payload='{"version":"'"$VERSION"'"}'
-          else
-            gh api repos/simone-viozzi/rusty-todo-md-pre-commit/dispatches \
-              --method POST \
-              --raw-field event_type=pypi_release \
-              --raw-field client_payload='{}'
-          fi
+    - name: Trigger mirror via workflow_dispatch
+      env:
+        GH_TOKEN: ${{ secrets.PRE_COMMIT_PAT }}
+      run: |
+        gh workflow run main.yml \
+          -R simone-viozzi/rusty-todo-md-pre-commit \
+          --ref main \
+          -f version="${{ inputs.version }}"
 
