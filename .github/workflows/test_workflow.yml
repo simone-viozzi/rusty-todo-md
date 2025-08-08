@@ -1,0 +1,27 @@
+# .github/workflows/debug-precommit-dispatch.yml
+name: Debug Mirror Trigger
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to send to mirror (optional)"
+        required: false
+        default: ""
+
+jobs:
+  trigger_pre_commit_update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger mirror repository_dispatch
+        env:
+          GH_TOKEN: ${{ secrets.PRE_COMMIT_PAT }}  # classic PAT with repo access to mirror
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          PAYLOAD=$(jq -n --arg v "$VERSION" '{version:$v}')
+          echo "Sending payload: $PAYLOAD"
+
+          gh api repos/simone-viozzi/rusty-todo-md-pre-commit/dispatches \
+            -f event_type='pypi_release' \
+            -f client_payload="$PAYLOAD"
+          echo "Dispatched event to mirror repository."
