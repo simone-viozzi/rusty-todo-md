@@ -17,7 +17,7 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.PRE_COMMIT_PAT }}
       run: |
-        gh workflow run main.yml \
+        gh workflow run main.yaml \
           -R simone-viozzi/rusty-todo-md-pre-commit \
           --ref main \
           -f version="${{ inputs.version }}"
