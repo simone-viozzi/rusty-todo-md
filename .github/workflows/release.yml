@@ -321,16 +321,14 @@ jobs:
   trigger_pre_commit_update:
     runs-on: ubuntu-latest
     needs: merge_release_pr
-    
+
     steps:
       - name: Notify mirror (repository_dispatch)
         env:
-          GH_TOKEN: ${{ secrets.PRE_COMMIT_PAT }}  # classic PAT with repo access to the mirror
+          GH_TOKEN: ${{ secrets.PRE_COMMIT_PAT }} # classic PAT with repo access to the mirror
         run: |
           # Optional: pass the exact version so the mirror doesn't have to guess
           VERSION="${{ needs.version_bump.outputs.next_version }}"
           gh api repos/simone-viozzi/rusty-todo-md-pre-commit/dispatches \
             -f event_type='pypi_release' \
             -f client_payload="$(jq -n --arg v "$VERSION" '{version:$v}')"
-
-    
