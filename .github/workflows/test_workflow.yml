@@ -19,15 +19,14 @@ jobs:
         run: |
           VERSION="${{ github.event.inputs.version }}"
           if [ -n "$VERSION" ]; then
-            # Send {"version":"..."} as a JSON object (not a string)
             gh api repos/simone-viozzi/rusty-todo-md-pre-commit/dispatches \
               --method POST \
               --raw-field event_type=pypi_release \
-              --raw-field client_payload="{\"version\":\"$VERSION\"}"
+              --raw-field client_payload='{"version":"'"$VERSION"'"}'
           else
-            # Empty payload is {} (valid JSON object)
             gh api repos/simone-viozzi/rusty-todo-md-pre-commit/dispatches \
               --method POST \
               --raw-field event_type=pypi_release \
-              --raw-field client_payload="{}"
+              --raw-field client_payload='{}'
           fi
+
