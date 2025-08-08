@@ -18,11 +18,16 @@ jobs:
           GH_TOKEN: ${{ secrets.PRE_COMMIT_PAT }}
         run: |
           VERSION="${{ github.event.inputs.version }}"
-          jq -nc --arg v "$VERSION" '
-            {
-              event_type: "pypi_release",
-              client_payload: ( ($v|length) > 0 ? {version:$v} : {} )
-            }' \
-          | gh api repos/simone-viozzi/rusty-todo-md-pre-commit/dispatches \
+          if [ -n "$VERSION" ]; then
+            # Send {"version":"..."} as a JSON object (not a string)
+            gh api repos/simone-viozzi/rusty-todo-md-pre-commit/dispatches \
               --method POST \
-              --input -
+              --raw-field event_type=pypi_release \
+              --raw-field client_payload="{\"version\":\"$VERSION\"}"
+          else
+            # Empty payload is {} (valid JSON object)
+            gh api repos/simone-viozzi/rusty-todo-md-pre-commit/dispatches \
+              --method POST \
+              --raw-field event_type=pypi_release \
+              --raw-field client_payload="{}"
+          fi

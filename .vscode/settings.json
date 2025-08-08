@@ -16,5 +16,10 @@
     "lldb.adapterEnv": {
         "LLDB_DEBUGSERVER_PATH": "/home/simone/workspace/pre-commit-todo/lldb-bin/lldb-server"
     },
- 
+    "[github-actions-workflow]": {
+        "editor.defaultFormatter": "redhat.vscode-yaml"
+    },
+    "[yaml]": {
+        "editor.defaultFormatter": "redhat.vscode-yaml"
+    }
 }
