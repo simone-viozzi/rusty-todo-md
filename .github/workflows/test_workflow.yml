@@ -15,13 +15,14 @@ jobs:
     steps:
       - name: Trigger mirror repository_dispatch
         env:
-          GH_TOKEN: ${{ secrets.PRE_COMMIT_PAT }}  # classic PAT with repo access to mirror
+          GH_TOKEN: ${{ secrets.PRE_COMMIT_PAT }}
         run: |
           VERSION="${{ github.event.inputs.version }}"
-          PAYLOAD=$(jq -n --arg v "$VERSION" '{version:$v}')
-          echo "Sending payload: $PAYLOAD"
-
-          gh api repos/simone-viozzi/rusty-todo-md-pre-commit/dispatches \
-            -f event_type='pypi_release' \
-            -f client_payload="$PAYLOAD"
-          echo "Dispatched event to mirror repository."
+          jq -nc --arg v "$VERSION" '
+            {
+              event_type: "pypi_release",
+              client_payload: ( ($v|length) > 0 ? {version:$v} : {} )
+            }' \
+          | gh api repos/simone-viozzi/rusty-todo-md-pre-commit/dispatches \
+              --method POST \
+              --input -
