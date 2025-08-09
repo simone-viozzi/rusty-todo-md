@@ -101,7 +101,7 @@ mod multi_language_tests {
         let js_content = r#"
 // TODO: Refactor this function
 function init() {
-    /* FIXME: Handle edge cases 
+    /* FIXME: Handle edge cases
        such as null responses */
     fetchData();
 }
@@ -164,7 +164,7 @@ import "fmt"
 func main() {
     // Regular comment
     fmt.Println("Hello, World!")
-    
+
     /* TODO: Add configuration support */
 }
 "#;

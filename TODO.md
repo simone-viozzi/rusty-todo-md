@@ -8,4 +8,3 @@
 
 ## src/todo_md_internal.rs
 * [src/todo_md_internal.rs:6](src/todo_md_internal.rs#L6): generalize in maker collection
-

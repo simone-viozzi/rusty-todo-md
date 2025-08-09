@@ -16,4 +16,3 @@ str_literal = _{ "'" ~ (!("'" | "\\") ~ ANY | "\\" ~ ANY)* ~ "'" |
                 "\"" ~ (!("\"" | "\\") ~ ANY | "\\" ~ ANY)* ~ "\"" }
 
 any_non_comment = { !(comment | str_literal) ~ ANY }
-
