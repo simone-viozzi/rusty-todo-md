@@ -196,7 +196,8 @@ pub fn write_todo_file(todo_path: &Path, todos: &[MarkedItem]) -> std::io::Resul
     for (marker, files) in marker_map {
         content.push_str(&format!("# {marker}\n"));
         // Write each file section under the marker
-        for (file, items) in files {
+        let file_entries: Vec<_> = files.into_iter().collect();
+        for (i, (file, items)) in file_entries.iter().enumerate() {
             content.push_str(&format!("## {file}\n", file = file.display()));
             // Sort items by line number for consistency
             let mut sorted_items = items.clone();
@@ -209,19 +210,12 @@ pub fn write_todo_file(todo_path: &Path, todos: &[MarkedItem]) -> std::io::Resul
                     message = item.message
                 ));
             }
-            // Add an extra newline between file sections
-            content.push('\n');
+            // Add an extra newline between file sections (but not after the last one)
+            if i < file_entries.len() - 1 {
+                content.push('\n');
+            }
         }
     }
-
-    // Ensure content ends with exactly one newline for compatibility with end-of-file-fixer
-    let content = content.trim_end();
-    let content = if content.is_empty() {
-        String::new()
-    } else {
-        format!("{content}\n")
-    };
-
     // Write the final content to the TODO.md file
     fs::write(todo_path, content)
 }
@@ -266,6 +260,13 @@ mod tests {
         assert!(content.contains("Refactor this function"));
         assert!(content.contains("src/lib.rs:5"));
         assert!(content.contains("Add error handling"));
+
+        // Check that the file ends with exactly one newline (not two)
+        assert!(content.ends_with('\n'), "File should end with a newline");
+        assert!(
+            !content.ends_with("\n\n"),
+            "File should not end with double newlines"
+        );
     }
 
     #[test]
@@ -376,55 +377,6 @@ mod tests {
         assert!(
             marker_add_index < marker_fix_index && marker_fix_index < marker_refactor_index,
             "Marker section ordering is incorrect"
-        );
-    }
-
-    #[test]
-    fn test_write_todo_file_ends_with_single_newline() {
-        let temp_dir = tempdir().unwrap();
-        let todo_path = temp_dir.path().join("TODO.md");
-
-        // Create a simple TODO item
-        let items = vec![MarkedItem {
-            file_path: PathBuf::from("src/main.rs"),
-            line_number: 42,
-            message: "Fix this issue".to_string(),
-            marker: "TODO".to_string(),
-        }];
-
-        // Write the TODO items to file
-        let result = write_todo_file(&todo_path, &items);
-        assert!(result.is_ok());
-
-        // Read the file as bytes to check exact ending
-        let content_bytes = fs::read(&todo_path).unwrap();
-
-        // The file should end with exactly one newline (0x0A)
-        assert!(!content_bytes.is_empty(), "File should not be empty");
-        assert_eq!(
-            content_bytes[content_bytes.len() - 1],
-            b'\n',
-            "File should end with a newline"
-        );
-
-        // The file should NOT end with double newlines (0x0A 0x0A)
-        if content_bytes.len() >= 2 {
-            assert_ne!(
-                &content_bytes[content_bytes.len() - 2..],
-                b"\n\n",
-                "File should not end with double newlines"
-            );
-        }
-
-        // Also test with string content to ensure it's compatible with end-of-file-fixer
-        let content_string = fs::read_to_string(&todo_path).unwrap();
-        assert!(
-            content_string.ends_with('\n'),
-            "Content should end with newline"
-        );
-        assert!(
-            !content_string.ends_with("\n\n"),
-            "Content should not end with double newlines"
         );
     }
 }
