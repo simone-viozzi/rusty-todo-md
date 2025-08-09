@@ -335,4 +335,3 @@ jobs:
             -R simone-viozzi/rusty-todo-md-pre-commit \
             --ref main \
             -f version="${{ needs.version_bump.outputs.next_version }}"
-

@@ -10,4 +10,3 @@ comment = @{ "<!--" ~ (!"-->" ~ ANY)* ~ "-->" }
 
 // Everything else
 any_non_comment = { !(comment) ~ ANY }
-

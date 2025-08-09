@@ -122,7 +122,7 @@ fn example() {
             still part of second_todo
      */
     let y = 20;
-    
+
     // TODO: third_todo
     if x + y > 20 {
         // no todo
@@ -134,7 +134,7 @@ fn example() {
 }
 
 // Another function
-fn foo() { 
+fn foo() {
     // Another random comment
     // TODO: fourth_todo
     /* Some block comment with no TODO inside */

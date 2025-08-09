@@ -43,4 +43,3 @@ pre-release-hook = ["./bump-version.sh"]
 [profile.dist]
 inherits = "release"
 lto = "thin"
-

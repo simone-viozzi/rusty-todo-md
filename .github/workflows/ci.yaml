@@ -9,7 +9,7 @@ jobs:
   build:
     name: Rust CI
     runs-on: ubuntu-latest
-    
+
     if: ${{ !startsWith(github.head_ref, 'release') }}
 
     strategy:
