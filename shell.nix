@@ -104,7 +104,6 @@ pkgs.mkShell {
       patchelf --set-interpreter "$NIX_LD" "$HOME/.vscode/extensions/vadimcn.vscode-lldb-1.11.4/adapter/codelldb"
     else
       echo "codelldb adapter not found, skipping patch."
-      exit 1
     fi
 
   '';
