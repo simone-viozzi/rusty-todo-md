@@ -49,7 +49,7 @@ cat > sample.rs << 'EOF'
 fn main() {
     // FIXME: Handle error cases properly
     println!("Hello, world!");
-    
+
     /* TODO: Add logging functionality
        for better debugging */
 }
@@ -62,7 +62,7 @@ def main():
     FIXME: This function needs proper documentation
     """
     print("Python sample")
-    
+
     # HACK: Using hardcoded values for now
     return {"sample": "data"}
 EOF
