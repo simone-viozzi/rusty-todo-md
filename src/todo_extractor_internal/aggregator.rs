@@ -51,11 +51,6 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
     rule: R,
     file_content: &str,
 ) -> Vec<CommentLine> {
-    info!(
-        "Starting comment parsing. File length: {}",
-        file_content.len()
-    );
-
     let parse_result = P::parse(rule, file_content);
     let mut comments = Vec::new();
 
@@ -89,7 +84,6 @@ pub fn parse_comments<P: Parser<R>, R: pest::RuleType>(
         }
     }
 
-    info!("Extracted {} comments", comments.len());
     comments
 }
 
@@ -159,9 +153,19 @@ fn flatten_comment_lines(lines: &[CommentLine]) -> Vec<CommentLine> {
 ///
 /// - `extension`: The file extension (e.g., "py", "rs").
 /// - `file_content`: The source code text.
+/// - `file_path`: The path to the file being parsed.
 /// - Returns: An `Option<Vec<CommentLine>>` containing extracted comments if successful.
-fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<CommentLine>> {
-    match extension {
+fn get_parser_comments(
+    extension: &str,
+    file_content: &str,
+    file_path: &Path,
+) -> Option<Vec<CommentLine>> {
+    info!(
+        "Starting comment parsing for file: {:?}. File length: {}",
+        file_path,
+        file_content.len()
+    );
+    let result = match extension {
         "py" => Some(
             crate::todo_extractor_internal::languages::python::PythonParser::parse_comments(
                 file_content,
@@ -215,7 +219,26 @@ fn get_parser_comments(extension: &str, file_content: &str) -> Option<Vec<Commen
         //      Example for adding a new extension:
         //      "ts" | "tsx" => Some(crate::languages::ts::TsParser::parse_comments(file_content)),
         _ => None,
+    };
+
+    // Log the result
+    match &result {
+        Some(comments) => {
+            info!(
+                "Extracted {} comments from file: {:?}",
+                comments.len(),
+                file_path
+            );
+        }
+        None => {
+            debug!(
+                "No parser found for extension '{}' in file: {:?}",
+                extension, file_path
+            );
+        }
     }
+
+    result
 }
 
 /// Extracts marked items from the given file content based on its extension.
@@ -251,7 +274,7 @@ pub fn extract_marked_items(
     debug!("extract_marked_items: extension = '{extension}', effective_ext = '{effective_ext}'");
 
     // Use the helper function to get the comment lines.
-    let comment_lines = match get_parser_comments(effective_ext, file_content) {
+    let comment_lines = match get_parser_comments(effective_ext, file_content, path) {
         Some(lines) => lines,
         None => {
             debug!("No recognized extension for file {path:?}; returning empty list.",);
