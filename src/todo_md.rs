@@ -139,14 +139,23 @@ pub fn sync_todo_file(
     new_todos: Vec<MarkedItem>,
     scanned_files: Vec<PathBuf>,
     deleted_files: Vec<PathBuf>,
+    force: bool,
 ) -> Result<(), TodoError> {
-    // Read existing TODO items from the file using the new parser.
-    let existing_todos = read_todo_file(todo_path)?;
-
-    // Create a TodoCollection from the existing TODO items.
     let mut existing_collection = TodoCollection::new();
-    for item in existing_todos {
-        existing_collection.add_item(item);
+
+    if !force {
+        // Read existing TODO items from the file using the new parser.
+        match read_todo_file(todo_path) {
+            Ok(existing_todos) => {
+                // Create a TodoCollection from the existing TODO items.
+                for item in existing_todos {
+                    existing_collection.add_item(item);
+                }
+            }
+            Err(e) => {
+                warn!("Warning: Could not read existing TODO.md file: {e}. Proceeding with empty list.");
+            }
+        }
     }
 
     // Create a TodoCollection from the new TODO items.
@@ -251,7 +260,7 @@ mod tests {
             },
         ];
 
-        let res = sync_todo_file(&todo_path, new_todos.clone(), vec![], vec![]);
+        let res = sync_todo_file(&todo_path, new_todos.clone(), vec![], vec![], false);
 
         assert!(res.is_ok());
 

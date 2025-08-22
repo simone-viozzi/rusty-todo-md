@@ -133,7 +133,9 @@ pub fn process_files_from_list(
     let new_todos = extract_todos_from_files(&scanned_files, marker_config);
 
     // Pass the list of scanned files to sync_todo_file.
-    if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, scanned_files, deleted_files) {
+    if let Err(err) =
+        todo_md::sync_todo_file(todo_path, new_todos, scanned_files, deleted_files, false)
+    {
         info!("There was an error updating TODO.md: {err}");
 
         // TODO add tests for this branch
@@ -148,7 +150,7 @@ pub fn process_files_from_list(
 
         let new_todos = extract_todos_from_files(&all_files, marker_config);
 
-        if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, all_files, vec![]) {
+        if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, all_files, vec![], true) {
             error!("Error updating TODO.md: {err}");
             std::process::exit(1);
         }
