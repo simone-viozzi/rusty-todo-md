@@ -235,9 +235,24 @@ pub fn get_parser_for_extension(
 
 /// Extracts marked items using a provided parser function.
 ///
+/// **RECOMMENDED**: This is the preferred function for extracting marked items as it allows
+/// the caller to validate file extensions before reading file content, improving performance
+/// for large files with unsupported extensions.
+///
+/// # Usage
+/// ```rust,no_run
+/// use std::path::Path;
+///
+/// let path = Path::new("example.rs");
+/// if let Some(parser_fn) = get_parser_for_extension(&get_effective_extension(path)) {
+///     let content = std::fs::read_to_string(path).unwrap();
+///     let items = extract_marked_items_with_parser(path, &content, parser_fn, &config);
+/// }
+/// ```
+///
 /// - `path`: The path to the file.
 /// - `file_content`: The source code text.
-/// - `parser_fn`: The parser function to use for extracting comments.
+/// - `parser_fn`: The parser function to use for extracting comments (obtained from `get_parser_for_extension`).
 /// - `config`: The marker configuration.
 /// - Returns: A `Vec<MarkedItem>` containing extracted marked items.
 pub fn extract_marked_items_with_parser(
@@ -267,10 +282,18 @@ pub fn extract_marked_items_with_parser(
 
 /// Extracts marked items from the given file content based on its extension.
 ///
+/// **DEPRECATED**: This function performs file extension checking after receiving file content,
+/// which can be inefficient for large files with unsupported extensions. Use
+/// `extract_marked_items_with_parser` combined with `get_parser_for_extension` for better performance.
+///
 /// - `path`: The path to the file.
 /// - `file_content`: The source code text.
 /// - `config`: The marker configuration.
 /// - Returns: A `Vec<MarkedItem>` containing extracted marked items.
+#[deprecated(
+    since = "0.1.8",
+    note = "Use `extract_marked_items_with_parser` combined with `get_parser_for_extension` for better performance. This function checks file extension after reading content."
+)]
 pub fn extract_marked_items(
     path: &Path,
     file_content: &str,
@@ -422,6 +445,7 @@ fn process_block_lines(lines: &[String], markers: &[String]) -> String {
 }
 
 #[cfg(test)]
+#[allow(deprecated)] // Allow testing deprecated functions for backward compatibility
 mod aggregator_tests {
     use super::*;
     use crate::logger;
