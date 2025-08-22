@@ -155,7 +155,11 @@ fn flatten_comment_lines(lines: &[CommentLine]) -> Vec<CommentLine> {
 /// - `file_content`: The source code text.
 /// - `file_path`: The path to the file being parsed.
 /// - Returns: An `Option<Vec<CommentLine>>` containing extracted comments if successful.
-fn get_parser_comments(extension: &str, file_content: &str, file_path: &Path) -> Option<Vec<CommentLine>> {
+fn get_parser_comments(
+    extension: &str,
+    file_content: &str,
+    file_path: &Path,
+) -> Option<Vec<CommentLine>> {
     info!(
         "Starting comment parsing for file: {:?}. File length: {}",
         file_path,
@@ -220,10 +224,17 @@ fn get_parser_comments(extension: &str, file_content: &str, file_path: &Path) ->
     // Log the result
     match &result {
         Some(comments) => {
-            info!("Extracted {} comments from file: {:?}", comments.len(), file_path);
+            info!(
+                "Extracted {} comments from file: {:?}",
+                comments.len(),
+                file_path
+            );
         }
         None => {
-            debug!("No parser found for extension '{}' in file: {:?}", extension, file_path);
+            debug!(
+                "No parser found for extension '{}' in file: {:?}",
+                extension, file_path
+            );
         }
     }
 
