@@ -36,3 +36,6 @@ jobs:
 
       - name: Install Python tools
         run: pip install maturin pre-commit
+
+      - name: Install pre-commit hooks
+        run: pre-commit install
