@@ -39,3 +39,6 @@ jobs:
 
       - name: Install pre-commit hooks
         run: pre-commit install
+
+      - name: Install pre-commit hooks
+        run: pre-commit install-hooks
