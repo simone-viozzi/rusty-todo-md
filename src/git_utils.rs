@@ -10,6 +10,7 @@ pub trait GitOpsTrait {
     fn get_staged_files(&self, repo: &Repository) -> Result<Vec<PathBuf>, GitError>;
     fn get_tracked_files(&self, repo: &Repository) -> Result<Vec<PathBuf>, GitError>;
     fn get_deleted_files(&self, repo: &Repository) -> Result<Vec<PathBuf>, GitError>;
+    fn add_file_to_index(&self, repo: &Repository, file_path: &Path) -> Result<(), GitError>;
 }
 
 /// Real implementation that uses git2 directly.
@@ -118,5 +119,16 @@ impl GitOpsTrait for GitOps {
             deleted_files_len = deleted_files.len()
         );
         Ok(deleted_files)
+    }
+
+    /// Adds a file to the Git index (stages it for commit).
+    /// This is equivalent to running `git add <file_path>`.
+    fn add_file_to_index(&self, repo: &Repository, file_path: &Path) -> Result<(), GitError> {
+        debug!("Adding file to index: {file_path:?}");
+        let mut index = repo.index()?;
+        index.add_path(file_path)?;
+        index.write()?;
+        info!("Successfully added file to index: {file_path:?}");
+        Ok(())
     }
 }
