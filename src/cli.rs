@@ -112,8 +112,20 @@ fn extract_todos_from_files(
 ) -> Vec<todo_extractor::MarkedItem> {
     let mut new_todos = Vec::new();
     for file in files {
+        // Get effective extension and check if it's supported
+        let effective_ext = todo_extractor::get_effective_extension(file);
+        let parser_fn = match todo_extractor::get_parser_for_extension(&effective_ext, file) {
+            Some(parser) => parser,
+            None => {
+                // Skip unsupported file types without reading content
+                continue;
+            }
+        };
+
+        // Only read file content after confirming it's supported
         if let Ok(content) = std::fs::read_to_string(file) {
-            let todos = todo_extractor::extract_todos_with_config(file, &content, marker_config);
+            let todos =
+                todo_extractor::extract_todos_with_parser(file, &content, parser_fn, marker_config);
             new_todos.extend(todos);
         } else {
             error!("Warning: Could not read file {file:?}, skipping.");

@@ -149,84 +149,76 @@ fn flatten_comment_lines(lines: &[CommentLine]) -> Vec<CommentLine> {
     flattened
 }
 
-/// Returns the comment lines extracted by the appropriate parser based on the file extension.
+/// Determines the effective extension for a file, handling special cases like Dockerfile.
+///
+/// - `path`: The file path to analyze.
+/// - Returns: The effective extension as a string.
+pub fn get_effective_extension(path: &Path) -> String {
+    let extension = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    // Handle special filenames like Dockerfile which have no extension
+    let file_name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    if extension.is_empty() && file_name == "dockerfile" {
+        "dockerfile".to_string()
+    } else {
+        extension
+    }
+}
+
+
+/// Returns the appropriate parser function for a given file extension.
 ///
 /// - `extension`: The file extension (e.g., "py", "rs").
-/// - `file_content`: The source code text.
-/// - `file_path`: The path to the file being parsed.
-/// - Returns: An `Option<Vec<CommentLine>>` containing extracted comments if successful.
-fn get_parser_comments(
-    extension: &str,
-    file_content: &str,
+/// - Returns: An `Option` containing the parser function if supported.
+pub fn get_parser_for_extension(
+        extension: &str,
     file_path: &Path,
-) -> Option<Vec<CommentLine>> {
-    info!(
-        "Starting comment parsing for file: {:?}. File length: {}",
-        file_path,
-        file_content.len()
-    );
-    let result = match extension {
-        "py" => Some(
-            crate::todo_extractor_internal::languages::python::PythonParser::parse_comments(
-                file_content,
-            ),
-        ),
-        "rs" => Some(
-            crate::todo_extractor_internal::languages::rust::RustParser::parse_comments(
-                file_content,
-            ),
-        ),
-        "js" | "jsx" | "mjs" => Some(
-            crate::todo_extractor_internal::languages::js::JsParser::parse_comments(file_content),
-        ),
+) -> Option<fn(&str) -> Vec<CommentLine>> {
+
+    let result: Option<fn(&str) -> Vec<CommentLine>> = match extension {
+        "py" => {
+            Some(crate::todo_extractor_internal::languages::python::PythonParser::parse_comments)
+        },
+        "rs" => Some(crate::todo_extractor_internal::languages::rust::RustParser::parse_comments),
+        "js" | "jsx" | "mjs" => {
+            Some(crate::todo_extractor_internal::languages::js::JsParser::parse_comments)
+        }
         "ts" | "tsx" | "java" | "cpp" | "hpp" | "cc" | "hh" | "cs" | "swift" | "kt" | "kts"
-        | "json" => Some(
-            crate::todo_extractor_internal::languages::js::JsParser::parse_comments(file_content),
-        ),
-        "go" => Some(
-            crate::todo_extractor_internal::languages::go::GoParser::parse_comments(file_content),
-        ),
-        "sh" => Some(
-            crate::todo_extractor_internal::languages::shell::ShellParser::parse_comments(
-                file_content,
-            ),
-        ),
-        "yml" | "yaml" => Some(
-            crate::todo_extractor_internal::languages::yaml::YamlParser::parse_comments(
-                file_content,
-            ),
-        ),
-        "toml" => Some(
-            crate::todo_extractor_internal::languages::toml::TomlParser::parse_comments(
-                file_content,
-            ),
-        ),
+        | "json" => Some(crate::todo_extractor_internal::languages::js::JsParser::parse_comments),
+        "go" => Some(crate::todo_extractor_internal::languages::go::GoParser::parse_comments),
+        "sh" => Some(crate::todo_extractor_internal::languages::shell::ShellParser::parse_comments),
+        "yml" | "yaml" => {
+            Some(crate::todo_extractor_internal::languages::yaml::YamlParser::parse_comments)
+        }
+        "toml" => Some(crate::todo_extractor_internal::languages::toml::TomlParser::parse_comments),
         "dockerfile" => Some(
-            crate::todo_extractor_internal::languages::dockerfile::DockerfileParser::parse_comments(
-                file_content,
-            ),
+            crate::todo_extractor_internal::languages::dockerfile::DockerfileParser::parse_comments,
         ),
-        "sql" => Some(
-            crate::todo_extractor_internal::languages::sql::SqlParser::parse_comments(file_content),
-        ),
+        "sql" => Some(crate::todo_extractor_internal::languages::sql::SqlParser::parse_comments),
         "md" => Some(
-            crate::todo_extractor_internal::languages::markdown::MarkdownParser::parse_comments(
-                file_content,
-            ),
+            crate::todo_extractor_internal::languages::markdown::MarkdownParser::parse_comments,
         ),
         // TODO Add new extensions and their corresponding parser calls here:
         //      Currently supported extensions: "js", "jsx", "go", "py", "rs".
         //      Example for adding a new extension:
-        //      "ts" | "tsx" => Some(crate::languages::ts::TsParser::parse_comments(file_content)),
+        //      "ts" | "tsx" => Some(crate::languages::ts::TsParser::parse_comments),
         _ => None,
     };
 
     // Log the result
     match &result {
-        Some(comments) => {
+        Some(_) => {
             info!(
-                "Extracted {} comments from file: {:?}",
-                comments.len(),
+                "file {:?} have a valid parser",
                 file_path
             );
         }
@@ -241,6 +233,38 @@ fn get_parser_comments(
     result
 }
 
+/// Extracts marked items using a provided parser function.
+///
+/// - `path`: The path to the file.
+/// - `file_content`: The source code text.
+/// - `parser_fn`: The parser function to use for extracting comments.
+/// - `config`: The marker configuration.
+/// - Returns: A `Vec<MarkedItem>` containing extracted marked items.
+pub fn extract_marked_items_with_parser(
+    path: &Path,
+    file_content: &str,
+    parser_fn: fn(&str) -> Vec<CommentLine>,
+    config: &MarkerConfig,
+) -> Vec<MarkedItem> {
+    debug!("extract_marked_items_with_parser for file {path:?}");
+
+    let comment_lines = parser_fn(file_content);
+
+    debug!(
+        "extract_marked_items_with_parser: found {} comment lines from parser: {:?}",
+        comment_lines.len(),
+        comment_lines
+    );
+
+    // Continue with the existing logic to collect and merge marked items.
+    let marked_items = collect_marked_items_from_comment_lines(&comment_lines, config, path);
+    debug!(
+        "extract_marked_items_with_parser: found {} marked items total",
+        marked_items.len()
+    );
+    marked_items
+}
+
 /// Extracts marked items from the given file content based on its extension.
 ///
 /// - `path`: The path to the file.
@@ -252,30 +276,13 @@ pub fn extract_marked_items(
     file_content: &str,
     config: &MarkerConfig,
 ) -> Vec<MarkedItem> {
-    let extension = path
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_lowercase();
+    let effective_ext = get_effective_extension(path);
 
-    // Handle special filenames like Dockerfile which have no extension
-    let file_name = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_lowercase();
+    debug!("extract_marked_items: effective_ext = '{effective_ext}'");
 
-    let effective_ext = if extension.is_empty() && file_name == "dockerfile" {
-        "dockerfile"
-    } else {
-        extension.as_str()
-    };
-
-    debug!("extract_marked_items: extension = '{extension}', effective_ext = '{effective_ext}'");
-
-    // Use the helper function to get the comment lines.
-    let comment_lines = match get_parser_comments(effective_ext, file_content, path) {
-        Some(lines) => lines,
+    // Use the helper function to get the parser and parse comments.
+    let comment_lines = match get_parser_for_extension(&effective_ext, path) {
+        Some(parser_fn) => parser_fn(file_content),
         None => {
             debug!("No recognized extension for file {path:?}; returning empty list.",);
             vec![]
