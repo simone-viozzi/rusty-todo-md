@@ -237,18 +237,19 @@ pub fn get_parser_for_extension(
 /// # Usage
 /// ```rust,no_run
 /// use std::path::Path;
-/// use rusty_todo_md::todo_extractor::get_parser_for_extension;
-/// use rusty_todo_md::todo_extractor::get_effective_extension;
-/// use rusty_todo_md::todo_extractor::extract_marked_items_with_parser;
-/// use rusty_todo_md::MarkerConfig;
+/// use rusty_todo_md::todo_extractor::*;
 ///
 /// let config = MarkerConfig::default();
-///
 /// let path = Path::new("example.rs");
-/// if let Some(parser_fn) = get_parser_for_extension(&get_effective_extension(path)) {
 ///
-///     let content = std::fs::read_to_string(path).unwrap();
-///     let items = extract_marked_items_with_parser(path, &content, parser_fn, &config);
+/// // Use the high-level public API instead
+/// match pub_extract_marked_items_from_file(path, &config) {
+///     Ok(items) => {
+///         for item in items {
+///             println!("Found {}: {}", item.marker, item.message);
+///         }
+///     }
+///     Err(e) => eprintln!("Error: {}", e),
 /// }
 /// ```
 ///
@@ -291,6 +292,7 @@ pub fn extract_marked_items_from_file(
         Some(parser) => parser,
         None => {
             // Skip unsupported file types without reading content
+            info!("Skipping unsupported file type: {:?}", file);
             return Ok(Vec::new());
         }
     };

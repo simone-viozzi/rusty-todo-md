@@ -1,8 +1,8 @@
 use crate::{
     logger,
-    todo_extractor::{
+    todo_extractor::MarkedItem,
+    todo_extractor_internal::aggregator::{
         extract_marked_items_with_parser, get_effective_extension, get_parser_for_extension,
-        MarkedItem,
     },
     MarkerConfig,
 };
