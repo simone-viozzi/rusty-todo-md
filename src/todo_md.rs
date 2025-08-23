@@ -1,5 +1,5 @@
-use crate::todo_extractor::MarkedItem;
 use crate::todo_md_internal::TodoCollection;
+use crate::MarkedItem;
 use log::info;
 use regex::Regex;
 use std::collections::BTreeMap;
@@ -139,14 +139,23 @@ pub fn sync_todo_file(
     new_todos: Vec<MarkedItem>,
     scanned_files: Vec<PathBuf>,
     deleted_files: Vec<PathBuf>,
+    force: bool,
 ) -> Result<(), TodoError> {
-    // Read existing TODO items from the file using the new parser.
-    let existing_todos = read_todo_file(todo_path)?;
-
-    // Create a TodoCollection from the existing TODO items.
     let mut existing_collection = TodoCollection::new();
-    for item in existing_todos {
-        existing_collection.add_item(item);
+
+    if !force {
+        // Read existing TODO items from the file using the new parser.
+        match read_todo_file(todo_path) {
+            Ok(existing_todos) => {
+                // Create a TodoCollection from the existing TODO items.
+                for item in existing_todos {
+                    existing_collection.add_item(item);
+                }
+            }
+            Err(e) => {
+                warn!("Warning: Could not read existing TODO.md file: {e}. Proceeding with empty list.");
+            }
+        }
     }
 
     // Create a TodoCollection from the new TODO items.
@@ -223,13 +232,15 @@ pub fn write_todo_file(todo_path: &Path, todos: &[MarkedItem]) -> std::io::Resul
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::todo_extractor::MarkedItem;
+    use crate::test_utils::init_logger;
+    use crate::MarkedItem;
     use std::fs;
     use std::path::PathBuf;
     use tempfile::tempdir;
 
     #[test]
     fn test_sync_todo_file() {
+        init_logger();
         let temp_dir = tempdir().unwrap();
         let todo_path = temp_dir.path().join("TODO.md");
 
@@ -251,7 +262,7 @@ mod tests {
             },
         ];
 
-        let res = sync_todo_file(&todo_path, new_todos.clone(), vec![], vec![]);
+        let res = sync_todo_file(&todo_path, new_todos.clone(), vec![], vec![], false);
 
         assert!(res.is_ok());
 
@@ -271,6 +282,7 @@ mod tests {
 
     #[test]
     fn test_read_todo_file_with_markdown_parser() {
+        init_logger();
         let content = r#"
 ## src/main.rs
 * [src/main.rs:12](src/main.rs#L12): Refactor this function
@@ -314,6 +326,7 @@ mod tests {
 
     #[test]
     fn test_write_todo_file_sectioned() {
+        init_logger();
         let temp_dir = tempdir().unwrap();
         let todo_path = temp_dir.path().join("TODO.md");
 

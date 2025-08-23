@@ -18,24 +18,10 @@ impl CommentParser for GoParser {
 #[cfg(test)]
 mod go_tests {
     use super::*;
-    use crate::logger;
-    use crate::todo_extractor_internal::aggregator::{extract_marked_items, MarkerConfig};
-    use log::LevelFilter;
+    use crate::todo_extractor_internal::aggregator::MarkerConfig;
     use std::path::Path;
-    use std::sync::Once;
 
-    static INIT: Once = Once::new();
-
-    fn init_logger() {
-        INIT.call_once(|| {
-            env_logger::Builder::from_default_env()
-                .format(logger::format_logger)
-                .filter_level(LevelFilter::Debug)
-                .is_test(true)
-                .try_init()
-                .ok();
-        });
-    }
+    use crate::test_utils::{init_logger, test_extract_marked_items};
 
     #[test]
     fn test_go_single_line_comment() {
@@ -49,7 +35,7 @@ func main() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("main.go"), src, &config);
+        let todos = test_extract_marked_items(Path::new("main.go"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].line_number, 2);
         assert_eq!(todos[0].message, "Fix this function");
@@ -68,7 +54,7 @@ func process() error {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("process.go"), src, &config);
+        let todos = test_extract_marked_items(Path::new("process.go"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].line_number, 2);
         assert_eq!(
@@ -92,7 +78,7 @@ func foo() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string(), "FIXME:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("example.go"), src, &config);
+        let todos = test_extract_marked_items(Path::new("example.go"), src, &config);
         assert_eq!(todos.len(), 3);
         assert_eq!(todos[0].message, "Implement feature A");
         assert_eq!(todos[1].message, "Handle edge cases such as nil pointers");
@@ -111,7 +97,7 @@ const raw = `TODO: Raw string should be ignored`
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("strings.go"), src, &config);
+        let todos = test_extract_marked_items(Path::new("strings.go"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].message, "But this should be detected");
     }
@@ -131,7 +117,7 @@ import "fmt"
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string(), "FIXME:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("main.go"), src, &config);
+        let todos = test_extract_marked_items(Path::new("main.go"), src, &config);
         assert_eq!(todos.len(), 2);
         assert_eq!(todos[0].message, "Add package documentation");
         assert_eq!(
@@ -171,7 +157,7 @@ func authenticate() error { return nil }
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("auth.go"), src, &config);
+        let todos = test_extract_marked_items(Path::new("auth.go"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(
             todos[0].message,
@@ -193,7 +179,7 @@ func main() {}
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("nested.go"), src, &config);
+        let todos = test_extract_marked_items(Path::new("nested.go"), src, &config);
         // The parser should find at least one TODO
         assert!(!todos.is_empty());
         assert!(todos[0].message.contains("This is a complex task"));

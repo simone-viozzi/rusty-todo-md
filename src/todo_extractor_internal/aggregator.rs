@@ -13,7 +13,7 @@ pub struct MarkedItem {
     pub file_path: PathBuf,
     pub line_number: usize,
     pub message: String,
-    pub marker: String, // NEW: The marker (e.g., TODO, FIXME)
+    pub marker: String,
 }
 
 /// Configuration for comment markers.
@@ -149,109 +149,11 @@ fn flatten_comment_lines(lines: &[CommentLine]) -> Vec<CommentLine> {
     flattened
 }
 
-/// Returns the comment lines extracted by the appropriate parser based on the file extension.
+/// Determines the effective extension for a file, handling special cases like Dockerfile.
 ///
-/// - `extension`: The file extension (e.g., "py", "rs").
-/// - `file_content`: The source code text.
-/// - `file_path`: The path to the file being parsed.
-/// - Returns: An `Option<Vec<CommentLine>>` containing extracted comments if successful.
-fn get_parser_comments(
-    extension: &str,
-    file_content: &str,
-    file_path: &Path,
-) -> Option<Vec<CommentLine>> {
-    info!(
-        "Starting comment parsing for file: {:?}. File length: {}",
-        file_path,
-        file_content.len()
-    );
-    let result = match extension {
-        "py" => Some(
-            crate::todo_extractor_internal::languages::python::PythonParser::parse_comments(
-                file_content,
-            ),
-        ),
-        "rs" => Some(
-            crate::todo_extractor_internal::languages::rust::RustParser::parse_comments(
-                file_content,
-            ),
-        ),
-        "js" | "jsx" | "mjs" => Some(
-            crate::todo_extractor_internal::languages::js::JsParser::parse_comments(file_content),
-        ),
-        "ts" | "tsx" | "java" | "cpp" | "hpp" | "cc" | "hh" | "cs" | "swift" | "kt" | "kts"
-        | "json" => Some(
-            crate::todo_extractor_internal::languages::js::JsParser::parse_comments(file_content),
-        ),
-        "go" => Some(
-            crate::todo_extractor_internal::languages::go::GoParser::parse_comments(file_content),
-        ),
-        "sh" => Some(
-            crate::todo_extractor_internal::languages::shell::ShellParser::parse_comments(
-                file_content,
-            ),
-        ),
-        "yml" | "yaml" => Some(
-            crate::todo_extractor_internal::languages::yaml::YamlParser::parse_comments(
-                file_content,
-            ),
-        ),
-        "toml" => Some(
-            crate::todo_extractor_internal::languages::toml::TomlParser::parse_comments(
-                file_content,
-            ),
-        ),
-        "dockerfile" => Some(
-            crate::todo_extractor_internal::languages::dockerfile::DockerfileParser::parse_comments(
-                file_content,
-            ),
-        ),
-        "sql" => Some(
-            crate::todo_extractor_internal::languages::sql::SqlParser::parse_comments(file_content),
-        ),
-        "md" => Some(
-            crate::todo_extractor_internal::languages::markdown::MarkdownParser::parse_comments(
-                file_content,
-            ),
-        ),
-        // TODO Add new extensions and their corresponding parser calls here:
-        //      Currently supported extensions: "js", "jsx", "go", "py", "rs".
-        //      Example for adding a new extension:
-        //      "ts" | "tsx" => Some(crate::languages::ts::TsParser::parse_comments(file_content)),
-        _ => None,
-    };
-
-    // Log the result
-    match &result {
-        Some(comments) => {
-            info!(
-                "Extracted {} comments from file: {:?}",
-                comments.len(),
-                file_path
-            );
-        }
-        None => {
-            debug!(
-                "No parser found for extension '{}' in file: {:?}",
-                extension, file_path
-            );
-        }
-    }
-
-    result
-}
-
-/// Extracts marked items from the given file content based on its extension.
-///
-/// - `path`: The path to the file.
-/// - `file_content`: The source code text.
-/// - `config`: The marker configuration.
-/// - Returns: A `Vec<MarkedItem>` containing extracted marked items.
-pub fn extract_marked_items(
-    path: &Path,
-    file_content: &str,
-    config: &MarkerConfig,
-) -> Vec<MarkedItem> {
+/// - `path`: The file path to analyze.
+/// - Returns: The effective extension as a string.
+pub fn get_effective_extension(path: &Path) -> String {
     let extension = path
         .extension()
         .and_then(|s| s.to_str())
@@ -265,25 +167,80 @@ pub fn extract_marked_items(
         .unwrap_or("")
         .to_lowercase();
 
-    let effective_ext = if extension.is_empty() && file_name == "dockerfile" {
-        "dockerfile"
+    if extension.is_empty() && file_name == "dockerfile" {
+        "dockerfile".to_string()
     } else {
-        extension.as_str()
-    };
+        extension
+    }
+}
 
-    debug!("extract_marked_items: extension = '{extension}', effective_ext = '{effective_ext}'");
-
-    // Use the helper function to get the comment lines.
-    let comment_lines = match get_parser_comments(effective_ext, file_content, path) {
-        Some(lines) => lines,
-        None => {
-            debug!("No recognized extension for file {path:?}; returning empty list.",);
-            vec![]
+/// Returns the appropriate parser function for a given file extension.
+///
+/// - `extension`: The file extension (e.g., "py", "rs").
+/// - Returns: An `Option` containing the parser function if supported.
+pub fn get_parser_for_extension(
+    extension: &str,
+    file_path: &Path,
+) -> Option<fn(&str) -> Vec<CommentLine>> {
+    let result: Option<fn(&str) -> Vec<CommentLine>> = match extension {
+        "py" => {
+            Some(crate::todo_extractor_internal::languages::python::PythonParser::parse_comments)
         }
+        "rs" => Some(crate::todo_extractor_internal::languages::rust::RustParser::parse_comments),
+        "js" | "jsx" | "mjs" => {
+            Some(crate::todo_extractor_internal::languages::js::JsParser::parse_comments)
+        }
+        "ts" | "tsx" | "java" | "cpp" | "hpp" | "cc" | "hh" | "cs" | "swift" | "kt" | "kts"
+        | "json" => Some(crate::todo_extractor_internal::languages::js::JsParser::parse_comments),
+        "go" => Some(crate::todo_extractor_internal::languages::go::GoParser::parse_comments),
+        "sh" => Some(crate::todo_extractor_internal::languages::shell::ShellParser::parse_comments),
+        "yml" | "yaml" => {
+            Some(crate::todo_extractor_internal::languages::yaml::YamlParser::parse_comments)
+        }
+        "toml" => Some(crate::todo_extractor_internal::languages::toml::TomlParser::parse_comments),
+        "dockerfile" => Some(
+            crate::todo_extractor_internal::languages::dockerfile::DockerfileParser::parse_comments,
+        ),
+        "sql" => Some(crate::todo_extractor_internal::languages::sql::SqlParser::parse_comments),
+        "md" => Some(
+            crate::todo_extractor_internal::languages::markdown::MarkdownParser::parse_comments,
+        ),
+        // TODO Add new extensions and their corresponding parser calls here:
+        //      Currently supported extensions: "js", "jsx", "go", "py", "rs".
+        //      Example for adding a new extension:
+        //      "ts" | "tsx" => Some(crate::languages::ts::TsParser::parse_comments),
+        _ => None,
     };
+
+    // Log the result
+    match &result {
+        Some(_) => {
+            info!("file {:?} have a valid parser", file_path);
+        }
+        None => {
+            debug!(
+                "No parser found for extension '{}' in file: {:?}",
+                extension, file_path
+            );
+        }
+    }
+
+    result
+}
+
+/// Extracts marked items using a provided parser function.
+pub fn extract_marked_items_with_parser(
+    path: &Path,
+    file_content: &str,
+    parser_fn: fn(&str) -> Vec<CommentLine>,
+    config: &MarkerConfig,
+) -> Vec<MarkedItem> {
+    debug!("extract_marked_items_with_parser for file {path:?}");
+
+    let comment_lines = parser_fn(file_content);
 
     debug!(
-        "extract_marked_items: found {} comment lines from parser: {:?}",
+        "extract_marked_items_with_parser: found {} comment lines from parser: {:?}",
         comment_lines.len(),
         comment_lines
     );
@@ -291,10 +248,36 @@ pub fn extract_marked_items(
     // Continue with the existing logic to collect and merge marked items.
     let marked_items = collect_marked_items_from_comment_lines(&comment_lines, config, path);
     debug!(
-        "extract_marked_items: found {} marked items total",
+        "extract_marked_items_with_parser: found {} marked items total",
         marked_items.len()
     );
     marked_items
+}
+
+pub fn extract_marked_items_from_file(
+    file: &Path,
+    marker_config: &MarkerConfig,
+) -> Result<Vec<MarkedItem>, String> {
+    let effective_ext = get_effective_extension(file);
+    let parser_fn = match get_parser_for_extension(&effective_ext, file) {
+        Some(parser) => parser,
+        None => {
+            // Skip unsupported file types without reading content
+            info!("Skipping unsupported file type: {:?}", file);
+            return Ok(Vec::new());
+        }
+    };
+
+    match std::fs::read_to_string(file) {
+        Ok(content) => {
+            let todos = extract_marked_items_with_parser(file, &content, parser_fn, marker_config);
+            Ok(todos)
+        }
+        Err(e) => {
+            error!("Warning: Could not read file {file:?}, skipping. Error: {e}");
+            Err(format!("Could not read file {:?}: {}", file, e))
+        }
+    }
 }
 
 /// A single comment line with (line_number, entire_comment_text).
@@ -417,23 +400,7 @@ fn process_block_lines(lines: &[String], markers: &[String]) -> String {
 #[cfg(test)]
 mod aggregator_tests {
     use super::*;
-    use crate::logger;
-    use log::LevelFilter;
-    use std::path::Path;
-    use std::sync::Once;
-
-    static INIT: Once = Once::new();
-
-    fn init_logger() {
-        INIT.call_once(|| {
-            env_logger::Builder::from_default_env()
-                .format(logger::format_logger)
-                .filter_level(LevelFilter::Debug)
-                .is_test(true)
-                .try_init()
-                .ok();
-        });
-    }
+    use crate::test_utils::{init_logger, test_extract_marked_items};
 
     #[test]
     fn test_valid_rust_extension() {
@@ -442,7 +409,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -454,7 +421,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("file.js"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.js"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -466,7 +433,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("component.jsx"), src, &config);
+        let todos = test_extract_marked_items(Path::new("component.jsx"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -478,7 +445,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("main.go"), src, &config);
+        let todos = test_extract_marked_items(Path::new("main.go"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -490,7 +457,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("file.unknown"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.unknown"), src, &config);
         assert_eq!(todos.len(), 0);
     }
 
@@ -505,7 +472,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(
             todos[0].message,
@@ -524,7 +491,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].message, "Improve API"); // Does not merge second line
     }
@@ -539,7 +506,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].line_number, 3);
         assert_eq!(todos[0].message, "Implement caching");
@@ -552,7 +519,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 0);
     }
 
@@ -563,7 +530,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
 
         let output = format!("{} - {}", todos[0].line_number, todos[0].message);
         assert_eq!(output, "1 - Improve logging");
@@ -576,7 +543,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert!(todos.is_empty());
     }
 
@@ -595,7 +562,7 @@ let message = "TODO: This should not be detected";
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 0);
     }
 
@@ -609,7 +576,7 @@ let message = "TODO: This should not be detected";
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
 
         assert_eq!(todos.len(), 2);
 
@@ -633,7 +600,7 @@ let message = "TODO: This should not be detected";
         let config = MarkerConfig {
             markers: vec!["TODO".to_string(), "FIXME".to_string()],
         };
-        let items = extract_marked_items(Path::new("file.rs"), src, &config);
+        let items = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(items.len(), 4);
         assert_eq!(items[0].marker, "TODO");
         assert_eq!(items[0].message, "Implement feature");
@@ -654,7 +621,7 @@ fn main() {}
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(
             todos.len(),
             0,
@@ -671,7 +638,7 @@ fn main() {}
         let config = MarkerConfig {
             markers: vec!["FIXME".to_string()],
         };
-        let items = extract_marked_items(Path::new("file.rs"), src, &config);
+        let items = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].message, "Correct the error handling");
     }
@@ -685,7 +652,7 @@ fn main() {}
         let config = MarkerConfig {
             markers: vec!["FIXME".to_string()],
         };
-        let items = extract_marked_items(Path::new("file.rs"), src, &config);
+        let items = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].message, "Correct the error handling");
     }
@@ -704,7 +671,7 @@ fn main() {}
         let config = MarkerConfig {
             markers: vec!["TODO".to_string(), "FIXME".to_string()],
         };
-        let items = extract_marked_items(Path::new("file.rs"), src, &config);
+        let items = test_extract_marked_items(Path::new("file.rs"), src, &config);
 
         // We expect four items in order.
         assert_eq!(items.len(), 4);
@@ -743,7 +710,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO".to_string(), "FIXME".to_string()],
         };
-        let items = extract_marked_items(Path::new("file.rs"), src, &config);
+        let items = test_extract_marked_items(Path::new("file.rs"), src, &config);
 
         // We expect six separate marked items:
         // 1. "Implement feature A"
@@ -778,7 +745,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO".to_string()],
         };
-        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
 
         assert_eq!(todos.len(), 1);
 
@@ -793,7 +760,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("script.sh"), src, &config);
+        let todos = test_extract_marked_items(Path::new("script.sh"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -805,7 +772,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("config.yaml"), src, &config);
+        let todos = test_extract_marked_items(Path::new("config.yaml"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -817,7 +784,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("config.toml"), src, &config);
+        let todos = test_extract_marked_items(Path::new("config.toml"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -829,7 +796,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("query.sql"), src, &config);
+        let todos = test_extract_marked_items(Path::new("query.sql"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -841,7 +808,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("README.md"), src, &config);
+        let todos = test_extract_marked_items(Path::new("README.md"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -853,8 +820,115 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("Dockerfile"), src, &config);
+        let todos = test_extract_marked_items(Path::new("Dockerfile"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
+    }
+
+    #[test]
+    fn test_extract_marked_items_from_file_unsupported_extension() {
+        init_logger();
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
+
+        // Test with an unsupported file extension
+        let result = extract_marked_items_from_file(Path::new("file.unsupported"), &config);
+
+        // Should return Ok with empty Vec, not an error
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_extract_marked_items_from_file_nonexistent_file() {
+        init_logger();
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
+
+        // Test with a file that doesn't exist (supported extension but unreadable)
+        let result = extract_marked_items_from_file(Path::new("nonexistent_file.rs"), &config);
+
+        // Should return an error
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err();
+        assert!(error_msg.contains("Could not read file"));
+        assert!(error_msg.contains("nonexistent_file.rs"));
+    }
+
+    #[test]
+    fn test_extract_marked_items_from_file_permission_denied() {
+        init_logger();
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
+
+        test_permission_denied_unix(&config);
+        test_permission_denied_cross_platform(&config);
+    }
+
+    #[cfg(unix)]
+    fn test_permission_denied_unix(config: &MarkerConfig) {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+        use tempfile::Builder;
+
+        // Use tempfile with a supported extension for proper cleanup and unique paths
+        let temp_file = Builder::new()
+            .suffix(".rs")
+            .tempfile()
+            .expect("Failed to create temp file");
+        let temp_path = temp_file.path();
+
+        // Write test content
+        std::fs::write(temp_path, b"// TODO: test").expect("Failed to write test content");
+
+        // Remove read permissions
+        let metadata = fs::metadata(temp_path).expect("Failed to get metadata");
+        let mut permissions = metadata.permissions();
+        permissions.set_mode(0o000); // No permissions
+
+        if fs::set_permissions(temp_path, permissions).is_ok() {
+            let result = extract_marked_items_from_file(temp_path, config);
+
+            // Should return an error
+            assert!(result.is_err());
+            let error_msg = result.unwrap_err();
+            assert!(error_msg.contains("Could not read file"));
+
+            // Restore permissions for proper cleanup
+            let mut restore_permissions = fs::metadata(temp_path).unwrap().permissions();
+            restore_permissions.set_mode(0o644);
+            let _ = fs::set_permissions(temp_path, restore_permissions);
+        }
+        // tempfile automatically cleans up on drop
+    }
+
+    #[cfg(not(unix))]
+    fn test_permission_denied_unix(_config: &MarkerConfig) {
+        // Skip Unix-specific permission test on non-Unix platforms
+    }
+
+    fn test_permission_denied_cross_platform(config: &MarkerConfig) {
+        use std::fs;
+        use tempfile::TempDir;
+
+        // Create a temporary directory
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let dir_path = temp_dir.path();
+
+        // Create a path that looks like a .rs file but is actually a directory
+        let fake_file_path = dir_path.join("test.rs");
+        fs::create_dir_all(&fake_file_path).expect("Failed to create directory");
+
+        let result = extract_marked_items_from_file(&fake_file_path, config);
+
+        // Should return an error because we're trying to read a directory as a file
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err();
+        assert!(error_msg.contains("Could not read file"));
+
+        // TempDir automatically cleans up on drop
     }
 }

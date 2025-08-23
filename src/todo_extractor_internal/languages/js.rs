@@ -18,24 +18,10 @@ impl CommentParser for JsParser {
 #[cfg(test)]
 mod js_tests {
     use super::*;
-    use crate::logger;
-    use crate::todo_extractor_internal::aggregator::{extract_marked_items, MarkerConfig};
-    use log::LevelFilter;
+    use crate::todo_extractor_internal::aggregator::MarkerConfig;
     use std::path::Path;
-    use std::sync::Once;
 
-    static INIT: Once = Once::new();
-
-    fn init_logger() {
-        INIT.call_once(|| {
-            env_logger::Builder::from_default_env()
-                .format(logger::format_logger)
-                .filter_level(LevelFilter::Debug)
-                .is_test(true)
-                .try_init()
-                .ok();
-        });
-    }
+    use crate::test_utils::{init_logger, test_extract_marked_items};
 
     #[test]
     fn test_js_single_line_comment() {
@@ -49,7 +35,7 @@ function init() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("test.js"), src, &config);
+        let todos = test_extract_marked_items(Path::new("test.js"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].line_number, 2);
         assert_eq!(todos[0].message, "Fix this function");
@@ -68,7 +54,7 @@ function init() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("test.js"), src, &config);
+        let todos = test_extract_marked_items(Path::new("test.js"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].line_number, 2);
         assert_eq!(
@@ -92,7 +78,7 @@ function foo() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string(), "FIXME:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("test.js"), src, &config);
+        let todos = test_extract_marked_items(Path::new("test.js"), src, &config);
         assert_eq!(todos.len(), 3);
         assert_eq!(todos[0].message, "Implement feature A");
         assert_eq!(todos[1].message, "Handle edge cases such as null responses");
@@ -111,7 +97,7 @@ const template = `TODO: Or this ${variable}`;
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string(), "FIXME:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("test.js"), src, &config);
+        let todos = test_extract_marked_items(Path::new("test.js"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].message, "But this should be detected");
     }
@@ -129,7 +115,7 @@ const Component = () => {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string(), "FIXME:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("component.jsx"), src, &config);
+        let todos = test_extract_marked_items(Path::new("component.jsx"), src, &config);
         assert_eq!(todos.len(), 2);
         assert_eq!(todos[0].message, "Add prop validation");
         assert_eq!(todos[1].message, "Handle loading state");
@@ -166,7 +152,7 @@ function authenticate() {}
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("auth.js"), src, &config);
+        let todos = test_extract_marked_items(Path::new("auth.js"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(
             todos[0].message,

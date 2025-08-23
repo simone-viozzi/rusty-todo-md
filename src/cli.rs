@@ -1,7 +1,7 @@
 use crate::git_utils::GitOps;
 use crate::git_utils::GitOpsTrait;
-use crate::todo_extractor;
 use crate::todo_md;
+use crate::{extract_marked_items_from_file, MarkedItem, MarkerConfig};
 use clap::{Arg, ArgAction, Command};
 use git2::Repository;
 use log::{error, info};
@@ -82,7 +82,7 @@ where
         .get_many::<String>("markers")
         .map(|vals| vals.map(|s| s.to_string()).collect())
         .unwrap_or_else(|| vec!["TODO".to_string()]);
-    let marker_config = todo_extractor::MarkerConfig::normalized(markers);
+    let marker_config = MarkerConfig::normalized(markers);
 
     if !files.is_empty() || !deleted_files.is_empty() {
         if let Err(e) = process_files_from_list(
@@ -106,17 +106,12 @@ pub fn run_cli() {
     run_cli_with_args(std::env::args(), &GitOps);
 }
 
-fn extract_todos_from_files(
-    files: &Vec<PathBuf>,
-    marker_config: &todo_extractor::MarkerConfig,
-) -> Vec<todo_extractor::MarkedItem> {
+fn extract_todos_from_files(files: &Vec<PathBuf>, marker_config: &MarkerConfig) -> Vec<MarkedItem> {
     let mut new_todos = Vec::new();
     for file in files {
-        if let Ok(content) = std::fs::read_to_string(file) {
-            let todos = todo_extractor::extract_todos_with_config(file, &content, marker_config);
-            new_todos.extend(todos);
-        } else {
-            error!("Warning: Could not read file {file:?}, skipping.");
+        match extract_marked_items_from_file(file, marker_config) {
+            Ok(mut todos) => new_todos.append(&mut todos),
+            Err(e) => error!("Error processing file {:?}: {}", file, e),
         }
     }
     new_todos
@@ -128,12 +123,14 @@ pub fn process_files_from_list(
     deleted_files: Vec<PathBuf>,
     git_ops: &dyn GitOpsTrait,
     repo: Repository,
-    marker_config: &todo_extractor::MarkerConfig,
+    marker_config: &MarkerConfig,
 ) -> Result<(), String> {
     let new_todos = extract_todos_from_files(&scanned_files, marker_config);
 
     // Pass the list of scanned files to sync_todo_file.
-    if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, scanned_files, deleted_files) {
+    if let Err(err) =
+        todo_md::sync_todo_file(todo_path, new_todos, scanned_files, deleted_files, false)
+    {
         info!("There was an error updating TODO.md: {err}");
 
         // TODO add tests for this branch
@@ -148,7 +145,7 @@ pub fn process_files_from_list(
 
         let new_todos = extract_todos_from_files(&all_files, marker_config);
 
-        if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, all_files, vec![]) {
+        if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, all_files, vec![], true) {
             error!("Error updating TODO.md: {err}");
             std::process::exit(1);
         }
