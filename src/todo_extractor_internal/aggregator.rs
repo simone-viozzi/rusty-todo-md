@@ -13,7 +13,7 @@ pub struct MarkedItem {
     pub file_path: PathBuf,
     pub line_number: usize,
     pub message: String,
-    pub marker: String, // NEW: The marker (e.g., TODO, FIXME)
+    pub marker: String,
 }
 
 /// Configuration for comment markers.
@@ -229,35 +229,6 @@ pub fn get_parser_for_extension(
 }
 
 /// Extracts marked items using a provided parser function.
-///
-/// **RECOMMENDED**: This is the preferred function for extracting marked items as it allows
-/// the caller to validate file extensions before reading file content, improving performance
-/// for large files with unsupported extensions.
-///
-/// # Usage
-/// ```rust,no_run
-/// use std::path::Path;
-/// use rusty_todo_md::todo_extractor::*;
-///
-/// let config = MarkerConfig::default();
-/// let path = Path::new("example.rs");
-///
-/// // Use the high-level public API instead
-/// match pub_extract_marked_items_from_file(path, &config) {
-///     Ok(items) => {
-///         for item in items {
-///             println!("Found {}: {}", item.marker, item.message);
-///         }
-///     }
-///     Err(e) => eprintln!("Error: {}", e),
-/// }
-/// ```
-///
-/// - `path`: The path to the file.
-/// - `file_content`: The source code text.
-/// - `parser_fn`: The parser function to use for extracting comments (obtained from `get_parser_for_extension`).
-/// - `config`: The marker configuration.
-/// - Returns: A `Vec<MarkedItem>` containing extracted marked items.
 pub fn extract_marked_items_with_parser(
     path: &Path,
     file_content: &str,
