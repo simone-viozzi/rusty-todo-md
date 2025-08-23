@@ -240,12 +240,13 @@ pub fn get_parser_for_extension(
 /// use rusty_todo_md::todo_extractor::get_parser_for_extension;
 /// use rusty_todo_md::todo_extractor::get_effective_extension;
 /// use rusty_todo_md::todo_extractor::extract_marked_items_with_parser;
+/// use rusty_todo_md::MarkerConfig;
 ///
-///
+/// let config = MarkerConfig::default();
 ///
 /// let path = Path::new("example.rs");
 /// if let Some(parser_fn) = get_parser_for_extension(&get_effective_extension(path)) {
-///     config = MarkerConfig::default();
+///
 ///     let content = std::fs::read_to_string(path).unwrap();
 ///     let items = extract_marked_items_with_parser(path, &content, parser_fn, &config);
 /// }
