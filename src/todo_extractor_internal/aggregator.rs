@@ -426,20 +426,7 @@ fn process_block_lines(lines: &[String], markers: &[String]) -> String {
 #[cfg(test)]
 mod aggregator_tests {
     use super::*;
-    use crate::test_utils::init_logger;
-
-    /// Helper function to extract marked items using the new optimized API
-    fn extract_marked_items_for_test(
-        path: &Path,
-        content: &str,
-        config: &MarkerConfig,
-    ) -> Vec<MarkedItem> {
-        let effective_ext = get_effective_extension(path);
-        match get_parser_for_extension(&effective_ext, path) {
-            Some(parser_fn) => extract_marked_items_with_parser(path, content, parser_fn, config),
-            None => vec![],
-        }
-    }
+    use crate::test_utils::{init_logger, test_extract_marked_items};
 
     #[test]
     fn test_valid_rust_extension() {
@@ -448,7 +435,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -460,7 +447,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("file.js"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.js"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -472,7 +459,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("component.jsx"), src, &config);
+        let todos = test_extract_marked_items(Path::new("component.jsx"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -484,7 +471,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("main.go"), src, &config);
+        let todos = test_extract_marked_items(Path::new("main.go"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -496,7 +483,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("file.unknown"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.unknown"), src, &config);
         assert_eq!(todos.len(), 0);
     }
 
@@ -511,7 +498,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(
             todos[0].message,
@@ -530,7 +517,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].message, "Improve API"); // Does not merge second line
     }
@@ -545,7 +532,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].line_number, 3);
         assert_eq!(todos[0].message, "Implement caching");
@@ -558,7 +545,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 0);
     }
 
@@ -569,7 +556,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
 
         let output = format!("{} - {}", todos[0].line_number, todos[0].message);
         assert_eq!(output, "1 - Improve logging");
@@ -582,7 +569,7 @@ mod aggregator_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert!(todos.is_empty());
     }
 
@@ -601,7 +588,7 @@ let message = "TODO: This should not be detected";
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(todos.len(), 0);
     }
 
@@ -615,7 +602,7 @@ let message = "TODO: This should not be detected";
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
 
         assert_eq!(todos.len(), 2);
 
@@ -639,7 +626,7 @@ let message = "TODO: This should not be detected";
         let config = MarkerConfig {
             markers: vec!["TODO".to_string(), "FIXME".to_string()],
         };
-        let items = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let items = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(items.len(), 4);
         assert_eq!(items[0].marker, "TODO");
         assert_eq!(items[0].message, "Implement feature");
@@ -660,7 +647,7 @@ fn main() {}
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(
             todos.len(),
             0,
@@ -677,7 +664,7 @@ fn main() {}
         let config = MarkerConfig {
             markers: vec!["FIXME".to_string()],
         };
-        let items = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let items = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].message, "Correct the error handling");
     }
@@ -691,7 +678,7 @@ fn main() {}
         let config = MarkerConfig {
             markers: vec!["FIXME".to_string()],
         };
-        let items = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let items = test_extract_marked_items(Path::new("file.rs"), src, &config);
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].message, "Correct the error handling");
     }
@@ -710,7 +697,7 @@ fn main() {}
         let config = MarkerConfig {
             markers: vec!["TODO".to_string(), "FIXME".to_string()],
         };
-        let items = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let items = test_extract_marked_items(Path::new("file.rs"), src, &config);
 
         // We expect four items in order.
         assert_eq!(items.len(), 4);
@@ -749,7 +736,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO".to_string(), "FIXME".to_string()],
         };
-        let items = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let items = test_extract_marked_items(Path::new("file.rs"), src, &config);
 
         // We expect six separate marked items:
         // 1. "Implement feature A"
@@ -784,7 +771,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("file.rs"), src, &config);
+        let todos = test_extract_marked_items(Path::new("file.rs"), src, &config);
 
         assert_eq!(todos.len(), 1);
 
@@ -799,7 +786,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("script.sh"), src, &config);
+        let todos = test_extract_marked_items(Path::new("script.sh"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -811,7 +798,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("config.yaml"), src, &config);
+        let todos = test_extract_marked_items(Path::new("config.yaml"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -823,7 +810,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("config.toml"), src, &config);
+        let todos = test_extract_marked_items(Path::new("config.toml"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -835,7 +822,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("query.sql"), src, &config);
+        let todos = test_extract_marked_items(Path::new("query.sql"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -847,7 +834,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("README.md"), src, &config);
+        let todos = test_extract_marked_items(Path::new("README.md"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
@@ -859,7 +846,7 @@ fn some_function() {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items_for_test(Path::new("Dockerfile"), src, &config);
+        let todos = test_extract_marked_items(Path::new("Dockerfile"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
