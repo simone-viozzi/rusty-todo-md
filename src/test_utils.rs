@@ -28,7 +28,7 @@ pub(crate) fn test_extract_marked_items(
     marker_config: &MarkerConfig,
 ) -> Vec<MarkedItem> {
     let effective_ext = get_effective_extension(file);
-    let parser_fn = match get_parser_for_extension(&effective_ext) {
+    let parser_fn = match get_parser_for_extension(&effective_ext, file) {
         Some(parser) => parser,
         None => {
             // Skip unsupported file types without reading content
