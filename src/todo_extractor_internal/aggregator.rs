@@ -824,4 +824,105 @@ fn some_function() {
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].marker, "TODO:");
     }
+
+    #[test]
+    fn test_extract_marked_items_from_file_unsupported_extension() {
+        init_logger();
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
+
+        // Test with an unsupported file extension
+        let result = extract_marked_items_from_file(Path::new("file.unsupported"), &config);
+
+        // Should return Ok with empty Vec, not an error
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_extract_marked_items_from_file_nonexistent_file() {
+        init_logger();
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
+
+        // Test with a file that doesn't exist (supported extension but unreadable)
+        let result = extract_marked_items_from_file(Path::new("nonexistent_file.rs"), &config);
+
+        // Should return an error
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err();
+        assert!(error_msg.contains("Could not read file"));
+        assert!(error_msg.contains("nonexistent_file.rs"));
+    }
+
+    #[test]
+    fn test_extract_marked_items_from_file_permission_denied() {
+        init_logger();
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
+
+        // Create a temporary file in a more controlled way
+        // This test demonstrates the error path without relying on Unix-specific permissions
+        #[cfg(unix)]
+        {
+            use std::fs::{self, File};
+            use std::io::Write;
+            use std::os::unix::fs::PermissionsExt;
+
+            let temp_file = "/tmp/test_unreadable_file.rs";
+
+            // Create the file first
+            if let Ok(mut file) = File::create(temp_file) {
+                let _ = file.write_all(b"// TODO: test");
+                drop(file);
+
+                // Try to remove read permissions
+                if let Ok(metadata) = fs::metadata(temp_file) {
+                    let mut permissions = metadata.permissions();
+                    permissions.set_mode(0o000); // No permissions
+
+                    if fs::set_permissions(temp_file, permissions).is_ok() {
+                        let result = extract_marked_items_from_file(Path::new(temp_file), &config);
+
+                        // Should return an error
+                        assert!(result.is_err());
+                        let error_msg = result.unwrap_err();
+                        assert!(error_msg.contains("Could not read file"));
+
+                        // Clean up: restore permissions and remove file
+                        let mut restore_permissions =
+                            fs::metadata(temp_file).unwrap().permissions();
+                        restore_permissions.set_mode(0o644);
+                        let _ = fs::set_permissions(temp_file, restore_permissions);
+                        let _ = fs::remove_file(temp_file);
+                    } else {
+                        // If we can't set permissions, just clean up and skip this test
+                        let _ = fs::remove_file(temp_file);
+                    }
+                }
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            // Alternative test for non-Unix systems or when permission manipulation fails:
+            // Test with a directory path instead of a file (which should cause a read error)
+            use std::fs;
+            let temp_dir = "/tmp/test_directory_not_file";
+            if fs::create_dir_all(temp_dir).is_ok() {
+                let result = extract_marked_items_from_file(Path::new(temp_dir), &config);
+
+                // Should return an error because we're trying to read a directory as a file
+                assert!(result.is_err());
+                let error_msg = result.unwrap_err();
+                assert!(error_msg.contains("Could not read file"));
+
+                // Clean up
+                let _ = fs::remove_dir_all(temp_dir);
+            }
+        }
+    }
 }
