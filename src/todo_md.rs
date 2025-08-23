@@ -1,5 +1,5 @@
-use crate::todo_extractor::MarkedItem;
 use crate::todo_md_internal::TodoCollection;
+use crate::MarkedItem;
 use log::info;
 use regex::Regex;
 use std::collections::BTreeMap;
@@ -233,7 +233,7 @@ pub fn write_todo_file(todo_path: &Path, todos: &[MarkedItem]) -> std::io::Resul
 mod tests {
     use super::*;
     use crate::test_utils::init_logger;
-    use crate::todo_extractor::MarkedItem;
+    use crate::MarkedItem;
     use std::fs;
     use std::path::PathBuf;
     use tempfile::tempdir;

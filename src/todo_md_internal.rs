@@ -1,4 +1,4 @@
-use crate::todo_extractor::MarkedItem;
+use crate::MarkedItem;
 use log::{debug, info};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -89,7 +89,7 @@ impl Default for TodoCollection {
 mod tests {
     use super::*;
     use crate::test_utils::init_logger;
-    use crate::todo_extractor::MarkedItem;
+    use crate::MarkedItem;
     use std::path::PathBuf;
 
     #[test]
