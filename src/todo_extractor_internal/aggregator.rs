@@ -864,65 +864,71 @@ fn some_function() {
             markers: vec!["TODO".to_string()],
         };
 
-        // Create a temporary file in a more controlled way
-        // This test demonstrates the error path without relying on Unix-specific permissions
-        #[cfg(unix)]
-        {
-            use std::fs::{self, File};
-            use std::io::Write;
-            use std::os::unix::fs::PermissionsExt;
+        test_permission_denied_unix(&config);
+        test_permission_denied_cross_platform(&config);
+    }
 
-            let temp_file = "/tmp/test_unreadable_file.rs";
+    #[cfg(unix)]
+    fn test_permission_denied_unix(config: &MarkerConfig) {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+        use tempfile::Builder;
 
-            // Create the file first
-            if let Ok(mut file) = File::create(temp_file) {
-                let _ = file.write_all(b"// TODO: test");
-                drop(file);
+        // Use tempfile with a supported extension for proper cleanup and unique paths
+        let temp_file = Builder::new()
+            .suffix(".rs")
+            .tempfile()
+            .expect("Failed to create temp file");
+        let temp_path = temp_file.path();
 
-                // Try to remove read permissions
-                if let Ok(metadata) = fs::metadata(temp_file) {
-                    let mut permissions = metadata.permissions();
-                    permissions.set_mode(0o000); // No permissions
+        // Write test content
+        std::fs::write(temp_path, b"// TODO: test").expect("Failed to write test content");
 
-                    if fs::set_permissions(temp_file, permissions).is_ok() {
-                        let result = extract_marked_items_from_file(Path::new(temp_file), &config);
+        // Remove read permissions
+        let metadata = fs::metadata(temp_path).expect("Failed to get metadata");
+        let mut permissions = metadata.permissions();
+        permissions.set_mode(0o000); // No permissions
 
-                        // Should return an error
-                        assert!(result.is_err());
-                        let error_msg = result.unwrap_err();
-                        assert!(error_msg.contains("Could not read file"));
+        if fs::set_permissions(temp_path, permissions).is_ok() {
+            let result = extract_marked_items_from_file(temp_path, config);
 
-                        // Clean up: restore permissions and remove file
-                        let mut restore_permissions =
-                            fs::metadata(temp_file).unwrap().permissions();
-                        restore_permissions.set_mode(0o644);
-                        let _ = fs::set_permissions(temp_file, restore_permissions);
-                        let _ = fs::remove_file(temp_file);
-                    } else {
-                        // If we can't set permissions, just clean up and skip this test
-                        let _ = fs::remove_file(temp_file);
-                    }
-                }
-            }
+            // Should return an error
+            assert!(result.is_err());
+            let error_msg = result.unwrap_err();
+            assert!(error_msg.contains("Could not read file"));
+
+            // Restore permissions for proper cleanup
+            let mut restore_permissions = fs::metadata(temp_path).unwrap().permissions();
+            restore_permissions.set_mode(0o644);
+            let _ = fs::set_permissions(temp_path, restore_permissions);
         }
+        // tempfile automatically cleans up on drop
+    }
 
-        #[cfg(not(unix))]
-        {
-            // Alternative test for non-Unix systems or when permission manipulation fails:
-            // Test with a directory path instead of a file (which should cause a read error)
-            use std::fs;
-            let temp_dir = "/tmp/test_directory_not_file";
-            if fs::create_dir_all(temp_dir).is_ok() {
-                let result = extract_marked_items_from_file(Path::new(temp_dir), &config);
+    #[cfg(not(unix))]
+    fn test_permission_denied_unix(_config: &MarkerConfig) {
+        // Skip Unix-specific permission test on non-Unix platforms
+    }
 
-                // Should return an error because we're trying to read a directory as a file
-                assert!(result.is_err());
-                let error_msg = result.unwrap_err();
-                assert!(error_msg.contains("Could not read file"));
+    fn test_permission_denied_cross_platform(config: &MarkerConfig) {
+        use std::fs;
+        use tempfile::TempDir;
 
-                // Clean up
-                let _ = fs::remove_dir_all(temp_dir);
-            }
-        }
+        // Create a temporary directory
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let dir_path = temp_dir.path();
+
+        // Create a path that looks like a .rs file but is actually a directory
+        let fake_file_path = dir_path.join("test.rs");
+        fs::create_dir_all(&fake_file_path).expect("Failed to create directory");
+
+        let result = extract_marked_items_from_file(&fake_file_path, config);
+
+        // Should return an error because we're trying to read a directory as a file
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err();
+        assert!(error_msg.contains("Could not read file"));
+
+        // TempDir automatically cleans up on drop
     }
 }
