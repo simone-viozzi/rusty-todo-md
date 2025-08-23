@@ -170,11 +170,25 @@ pub fn process_files_from_list(
         let todo_content_after = std::fs::read_to_string(todo_path).ok();
         if todo_content_before != todo_content_after {
             info!("TODO file was modified, staging it for commit");
-            if let Err(e) = git_ops.add_file_to_index(&repo, todo_path) {
+
+            // Convert todo_path to absolute path, then to relative path from repo root
+            let repo_workdir = repo
+                .workdir()
+                .ok_or("Repository has no working directory")?;
+            let absolute_todo_path = if todo_path.is_absolute() {
+                todo_path.to_path_buf()
+            } else {
+                repo_workdir.join(todo_path)
+            };
+            let relative_todo_path = absolute_todo_path
+                .strip_prefix(repo_workdir)
+                .map_err(|_| "TODO path is not within repository")?;
+
+            if let Err(e) = git_ops.add_file_to_index(&repo, relative_todo_path) {
                 error!("Warning: Failed to add TODO file to git index: {e}");
                 // Don't fail the entire operation just because we couldn't stage the file
             } else {
-                info!("Successfully staged TODO file: {todo_path:?}");
+                info!("Successfully staged TODO file: {relative_todo_path:?}");
             }
         } else {
             info!("TODO file was not modified, skipping auto-add");
