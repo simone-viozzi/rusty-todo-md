@@ -88,31 +88,9 @@ impl Default for TodoCollection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::init_logger;
     use crate::todo_extractor::MarkedItem;
-    use log::LevelFilter;
-    use std::io::Write;
     use std::path::PathBuf;
-    use std::sync::Once;
-
-    static INIT: Once = Once::new();
-
-    fn init_logger() {
-        INIT.call_once(|| {
-            env_logger::Builder::from_default_env()
-                .format(|buf, record| {
-                    writeln!(
-                        buf,
-                        "{level}: {args}",
-                        level = record.level(),
-                        args = record.args()
-                    )
-                })
-                .filter_level(LevelFilter::Debug)
-                .is_test(true)
-                .try_init()
-                .ok();
-        });
-    }
 
     #[test]
     fn test_add_item() {

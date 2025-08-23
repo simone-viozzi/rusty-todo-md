@@ -232,6 +232,7 @@ pub fn write_todo_file(todo_path: &Path, todos: &[MarkedItem]) -> std::io::Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::init_logger;
     use crate::todo_extractor::MarkedItem;
     use std::fs;
     use std::path::PathBuf;
@@ -239,6 +240,7 @@ mod tests {
 
     #[test]
     fn test_sync_todo_file() {
+        init_logger();
         let temp_dir = tempdir().unwrap();
         let todo_path = temp_dir.path().join("TODO.md");
 
@@ -280,6 +282,7 @@ mod tests {
 
     #[test]
     fn test_read_todo_file_with_markdown_parser() {
+        init_logger();
         let content = r#"
 ## src/main.rs
 * [src/main.rs:12](src/main.rs#L12): Refactor this function
@@ -323,6 +326,7 @@ mod tests {
 
     #[test]
     fn test_write_todo_file_sectioned() {
+        init_logger();
         let temp_dir = tempdir().unwrap();
         let todo_path = temp_dir.path().join("TODO.md");
 

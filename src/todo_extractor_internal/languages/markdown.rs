@@ -17,24 +17,10 @@ impl CommentParser for MarkdownParser {
 
 #[cfg(test)]
 mod markdown_tests {
-    use crate::logger;
-    use crate::todo_extractor_internal::aggregator::{extract_marked_items, MarkerConfig};
-    use log::LevelFilter;
+    use crate::todo_extractor_internal::aggregator::MarkerConfig;
     use std::path::Path;
-    use std::sync::Once;
 
-    static INIT: Once = Once::new();
-
-    fn init_logger() {
-        INIT.call_once(|| {
-            env_logger::Builder::from_default_env()
-                .format(logger::format_logger)
-                .filter_level(LevelFilter::Debug)
-                .is_test(true)
-                .try_init()
-                .ok();
-        });
-    }
+    use crate::test_utils::{init_logger, test_extract_marked_items};
 
     #[test]
     fn test_markdown_html_comment() {
@@ -43,7 +29,7 @@ mod markdown_tests {
         let config = MarkerConfig {
             markers: vec!["TODO:".to_string()],
         };
-        let todos = extract_marked_items(Path::new("README.md"), src, &config);
+        let todos = test_extract_marked_items(Path::new("README.md"), src, &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].message, "document");
     }
