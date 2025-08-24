@@ -139,22 +139,21 @@ pub fn sync_todo_file(
     new_todos: Vec<MarkedItem>,
     scanned_files: Vec<PathBuf>,
     deleted_files: Vec<PathBuf>,
-    force: bool,
 ) -> Result<(), TodoError> {
+    // TODO maybe simplify the logic of this function
+
     let mut existing_collection = TodoCollection::new();
 
-    if !force {
-        // Read existing TODO items from the file using the new parser.
-        match read_todo_file(todo_path) {
-            Ok(existing_todos) => {
-                // Create a TodoCollection from the existing TODO items.
-                for item in existing_todos {
-                    existing_collection.add_item(item);
-                }
+    match read_todo_file(todo_path) {
+        Ok(existing_todos) => {
+            // Create a TodoCollection from the existing TODO items.
+            for item in existing_todos {
+                existing_collection.add_item(item);
             }
-            Err(e) => {
-                warn!("Warning: Could not read existing TODO.md file: {e}. Proceeding with empty list.");
-            }
+        }
+        Err(e) => {
+            // Propagate the error to trigger fallback mechanism in CLI
+            return Err(e);
         }
     }
 
@@ -171,7 +170,7 @@ pub fn sync_todo_file(
     let merged_todos = existing_collection.to_sorted_vec();
 
     // Write the merged and sorted TODO items back to the TODO.md file in the new sectioned format.
-    write_todo_file(todo_path, &merged_todos)?;
+    write_todo_file(todo_path, merged_todos)?;
     Ok(())
 }
 
@@ -188,9 +187,9 @@ pub fn sync_todo_file(
 /// ## src/file2.rs
 /// - [src/file2.rs:120](src/file2.rs#L120): Correct boundary condition
 ///
-pub fn write_todo_file(todo_path: &Path, todos: &[MarkedItem]) -> std::io::Result<()> {
+pub fn write_todo_file(todo_path: &Path, todos: Vec<MarkedItem>) -> std::io::Result<()> {
     // Group by marker, then by file using BTreeMap for sorted output
-    let mut marker_map: BTreeMap<String, BTreeMap<PathBuf, Vec<&MarkedItem>>> = BTreeMap::new();
+    let mut marker_map: BTreeMap<String, BTreeMap<PathBuf, Vec<MarkedItem>>> = BTreeMap::new();
     for item in todos {
         marker_map
             .entry(item.marker.clone())
@@ -211,7 +210,7 @@ pub fn write_todo_file(todo_path: &Path, todos: &[MarkedItem]) -> std::io::Resul
             // Sort items by line number for consistency
             let mut sorted_items = items.clone();
             sorted_items.sort_by_key(|item| item.line_number);
-            for item in sorted_items {
+            for item in sorted_items.iter() {
                 content.push_str(&format!(
                     "* [{file}:{line}]({file}#L{line}): {message}\n",
                     file = item.file_path.display(),
@@ -262,7 +261,7 @@ mod tests {
             },
         ];
 
-        let res = sync_todo_file(&todo_path, new_todos.clone(), vec![], vec![], false);
+        let res = sync_todo_file(&todo_path, new_todos.clone(), vec![], vec![]);
 
         assert!(res.is_ok());
 
@@ -353,7 +352,7 @@ mod tests {
         ];
 
         // Write the TODO items using the new sectioned format.
-        let result = write_todo_file(&todo_path, &items);
+        let result = write_todo_file(&todo_path, items);
         assert!(result.is_ok());
 
         let content = fs::read_to_string(&todo_path).unwrap();

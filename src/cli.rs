@@ -173,12 +173,12 @@ pub fn process_files_from_list(
     validate_no_empty_todos(&new_todos)?;
 
     // Pass the list of scanned files to sync_todo_file.
-    if let Err(err) =
-        todo_md::sync_todo_file(todo_path, new_todos, scanned_files, deleted_files, false)
-    {
+    if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, scanned_files, deleted_files) {
         info!("There was an error updating TODO.md: {err}");
 
-        // TODO add tests for this branch
+        // This branch is tested by test_sync_todo_file_fallback_mechanism.
+        // It does not show in code coverage because it is an integration test
+        // that calls the binary, not a unit test that calls this function directly.
 
         let all_files = match git_ops.get_tracked_files(&repo) {
             Ok(files) => files,
@@ -190,7 +190,7 @@ pub fn process_files_from_list(
 
         let new_todos = extract_todos_from_files(&all_files, marker_config);
 
-        if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, all_files, vec![], true) {
+        if let Err(err) = todo_md::write_todo_file(todo_path, new_todos) {
             error!("Error updating TODO.md: {err}");
             std::process::exit(1);
         }
@@ -198,6 +198,8 @@ pub fn process_files_from_list(
     info!("TODO.md successfully updated.");
 
     // If auto_add is enabled, check if the TODO file was modified and stage it
+    // TODO simplify this, maybe move to git_utils and maybe do not check if content changed
+    //      but just try to add it and ignore errors in case it was not modified
     if auto_add {
         let todo_content_after = std::fs::read_to_string(todo_path).ok();
         if todo_content_before != todo_content_after {
