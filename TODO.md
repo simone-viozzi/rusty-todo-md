@@ -1,6 +1,6 @@
 # TODO
 ## .github/workflows/release.yml
-* [.github/workflows/release.yml:403](.github/workflows/release.yml#L403): This is a smoke test
+* [.github/workflows/release.yml:414](.github/workflows/release.yml#L414): This is a smoke test
 
 ## src/cli.rs
 * [src/cli.rs:50](src/cli.rs#L50): add a flag to enable debug logging
