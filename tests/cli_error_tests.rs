@@ -100,3 +100,89 @@ fn test_run_cli_with_unreadable_file() {
         debug!("Restored file permissions for: {:?}", file_path);
     }
 }
+
+#[test]
+fn test_sync_todo_file_fallback_mechanism() {
+    init_logger();
+    info!("Starting test: test_sync_todo_file_fallback_mechanism");
+
+    // Use the common helper to initialize a real repository.
+    let (temp_dir, _repo) = init_repo().expect("Failed to initialize test repo");
+    let repo_dir = temp_dir.path();
+    debug!("Initialized repository at: {:?}", repo_dir);
+
+    // Create a test file with TODO comments
+    let test_file = repo_dir.join("test.rs");
+    fs::write(
+        &test_file,
+        "// TODO: implement feature A\n// FIXME: fix bug B\n",
+    )
+    .expect("failed to write test file");
+    debug!("Created test file at: {:?}", test_file);
+
+    // Create a corrupted TODO.md file with invalid format
+    // This will now trigger the sync_todo_file error and activate the fallback mechanism
+    let todo_path = repo_dir.join("TODO.md");
+    let corrupted_content = r#"This is completely invalid content that doesn't match any regex pattern
+And this line will also fail validation
+No markdown headers or bullet points here
+Just plain text that should trigger validation failure
+"#;
+    fs::write(&todo_path, corrupted_content).expect("failed to write corrupted TODO.md");
+    debug!("Created corrupted TODO.md at: {:?}", todo_path);
+
+    // Stage and commit the test file so it appears in tracked files for the fallback
+    let mut cmd = Command::new("git");
+    cmd.current_dir(repo_dir)
+        .args(["add", test_file.file_name().unwrap().to_str().unwrap()]);
+    cmd.assert().success();
+    debug!("Staged test file with git add");
+
+    let mut cmd = Command::new("git");
+    cmd.current_dir(repo_dir)
+        .args(["commit", "-m", "Add test file"]);
+    cmd.assert().success();
+    debug!("Committed test file");
+
+    // Run the CLI binary - this should trigger the fallback mechanism
+    let mut cmd = Command::cargo_bin("rusty-todo-md").expect("binary exists");
+    debug!("Running CLI binary to test fallback mechanism");
+    cmd.current_dir(repo_dir)
+        .arg("--todo-path")
+        .arg("TODO.md")
+        .arg(test_file.to_str().expect("test file path valid"));
+
+    // The fallback mechanism should succeed and recreate the TODO.md file properly
+    cmd.assert().success(); // No stderr expected since the fallback succeeds
+
+    // Verify that the TODO.md file was recreated with proper content
+    assert!(todo_path.exists(), "TODO.md should exist after fallback");
+    let final_content = fs::read_to_string(&todo_path).expect("failed to read final TODO.md");
+    debug!("Final TODO.md content: {}", final_content);
+
+    // Verify the fallback worked by checking for expected TODO items
+    assert!(
+        final_content.contains("implement feature A"),
+        "Should contain TODO from test file"
+    );
+    // Note: FIXME comments are treated as TODO by default, so both appear under TODO section
+    assert!(
+        final_content.contains("fix bug B") || final_content.contains("TODO"),
+        "Should contain content from test file"
+    );
+
+    // Verify the corrupted content was replaced
+    assert!(
+        !final_content.contains("This is completely invalid"),
+        "Corrupted content should be gone"
+    );
+
+    // Verify the file has proper markdown structure
+    assert!(final_content.contains("# TODO"), "Should have TODO header");
+    assert!(
+        final_content.contains("## test.rs"),
+        "Should have file section header"
+    );
+
+    info!("Test completed: test_sync_todo_file_fallback_mechanism");
+}

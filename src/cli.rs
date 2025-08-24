@@ -196,6 +196,8 @@ pub fn process_files_from_list(
     info!("TODO.md successfully updated.");
 
     // If auto_add is enabled, check if the TODO file was modified and stage it
+    // TODO simplify this, maybe move to git_utils and maybe do not check if content changed
+    //      but just try to add it and ignore errors in case it was not modified
     if auto_add {
         let todo_content_after = std::fs::read_to_string(todo_path).ok();
         if todo_content_before != todo_content_after {

@@ -152,9 +152,8 @@ pub fn sync_todo_file(
             }
         }
         Err(e) => {
-            warn!(
-                "Warning: Could not read existing TODO.md file: {e}. Proceeding with empty list."
-            );
+            // Propagate the error to trigger fallback mechanism in CLI
+            return Err(e);
         }
     }
 
