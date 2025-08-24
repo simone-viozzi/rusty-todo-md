@@ -22,10 +22,15 @@ Add this to your `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/simone-viozzi/rusty-todo-md-pre-commit
-    rev: v1.7.5  # Use the latest upstream tag (shim mirrors upstream)
+    rev: v1.9.1  # Use the latest upstream tag (shim mirrors upstream)
     hooks:
       - id: rusty-todo-md
+        args: ["--auto-add", "--markers", "TODO", "FIXME", "HACK"]
+        language_version: python3.11
 ```
+
+- `args` customise the markers to scan for and enable `--auto-add` to stage `TODO.md` automatically.
+- `language_version` forces the hook to run with a specific Python interpreter.
 
 Then install the hook:
 
@@ -56,7 +61,7 @@ rusty-todo-md --help
 ## ✨ Key Features
 
 1. **Automatic TODO Collection**
-   By default, Rusty TODO MD scans your **staged files** (or all tracked files using the `--all-files` flag) for markers like `TODO` and `FIXME`, and updates your `TODO.md` with any new entries.
+   By default, Rusty TODO MD scans the files passed to it (typically staged files from pre-commit) for markers like `TODO` and `FIXME`, and updates your `TODO.md` with any new entries.
 
 2. **Sectioned TODO.md Format**
    The `TODO.md` file is now organized into sections, grouped first by marker (e.g., `# TODO`, `# FIXME`), then by file. Each marker section begins with a header (`# <MARKER>`), each file with a sub-header (`## <file-path>`), followed by a list of extracted TODO items.
@@ -74,6 +79,9 @@ rusty-todo-md --help
 6. **Seamless Pre-Commit Integration**
    Easily integrate Rusty TODO MD into your workflow by adding it to your `.pre-commit-config.yaml`.
 
+7. **Auto-stage Updated TODO.md**
+   With the `--auto-add` flag, the tool can automatically stage the `TODO.md` file after updates.
+
 ---
 
 ## 🧩 CLI usage
@@ -82,15 +90,14 @@ rusty-todo-md --help
 ```sh
 rusty-todo-md
 ```
-
-### Scan all tracked files
-```sh
-rusty-todo-md --all-files
-```
-
 ### Use multiple markers
 ```sh
 rusty-todo-md --markers TODO FIXME HACK
+```
+
+### Automatically stage TODO.md
+```sh
+rusty-todo-md --auto-add path/to/file.rs
 ```
 
 ### Custom TODO.md path
