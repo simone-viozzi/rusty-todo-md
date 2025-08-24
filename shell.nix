@@ -79,7 +79,6 @@ pkgs.mkShell {
     export NIX_LD_LIBRARY_PATH
     export LD_LIBRARY_PATH=${pkgs.zlib}/lib:$LD_LIBRARY_PATH
 
-    unset SOURCE_DATE_EPOCH
     pip install --upgrade wheel setuptools
     export PKG_CONFIG_PATH="${pkgs.openssl.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"
 
