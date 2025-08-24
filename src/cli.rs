@@ -38,7 +38,8 @@ where
             Arg::new("files")
                 .value_name("FILE")
                 .help("Optional list of files to process (passed by pre-commit)")
-                .num_args(0..),
+                .num_args(0..)
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new("auto_add")
@@ -126,6 +127,34 @@ fn extract_todos_from_files(files: &Vec<PathBuf>, marker_config: &MarkerConfig) 
     new_todos
 }
 
+pub fn validate_no_empty_todos(new_todos: &[MarkedItem]) -> Result<(), String> {
+    let empty_todos: Vec<&MarkedItem> = new_todos
+        .iter()
+        .filter(|item| item.message.trim().is_empty())
+        .collect();
+
+    if !empty_todos.is_empty() {
+        let errors: Vec<String> = empty_todos
+            .iter()
+            .map(|item| {
+                format!(
+                    "error: empty {} comment found\n  --> {}:{}",
+                    item.marker,
+                    item.file_path.display(),
+                    item.line_number
+                )
+            })
+            .collect();
+
+        return Err(format!(
+            "{}\n\nPlease add descriptions to the empty TODO comments above.",
+            errors.join("\n\n")
+        ));
+    }
+
+    Ok(())
+}
+
 pub fn process_files_from_list(
     todo_path: &Path,
     scanned_files: Vec<PathBuf>,
@@ -139,6 +168,9 @@ pub fn process_files_from_list(
 
     // Capture the TODO file content before modification (if it exists)
     let todo_content_before = std::fs::read_to_string(todo_path).ok();
+
+    // Validate that there are no empty TODO comments
+    validate_no_empty_todos(&new_todos)?;
 
     // Pass the list of scanned files to sync_todo_file.
     if let Err(err) =
