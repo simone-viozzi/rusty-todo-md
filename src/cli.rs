@@ -128,7 +128,7 @@ fn extract_todos_from_files(files: &Vec<PathBuf>, marker_config: &MarkerConfig) 
 
 pub fn validate_no_empty_todos(
     files: &Vec<PathBuf>,
-    marker_config: &todo_extractor::MarkerConfig,
+    marker_config: &MarkerConfig,
 ) -> Result<(), String> {
     let mut errors = Vec::new();
 
@@ -171,7 +171,7 @@ pub struct EmptyTodo {
 pub fn find_empty_todos(
     _file: &Path,
     content: &str,
-    marker_config: &todo_extractor::MarkerConfig,
+    marker_config: &MarkerConfig,
 ) -> Vec<EmptyTodo> {
     let mut empty_todos = Vec::new();
 
@@ -232,11 +232,9 @@ pub fn process_files_from_list(
 
     // Capture the TODO file content before modification (if it exists)
     let todo_content_before = std::fs::read_to_string(todo_path).ok();
-    
+
     // Validate that there are no empty TODO comments
-    if let Err(empty_todo_errors) = validate_no_empty_todos(&scanned_files, marker_config) {
-        return Err(empty_todo_errors);
-    }
+    validate_no_empty_todos(&scanned_files, marker_config)?;
 
     // Pass the list of scanned files to sync_todo_file.
     if let Err(err) =

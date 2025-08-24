@@ -1,5 +1,5 @@
 use rusty_todo_md::cli::{find_empty_todos, validate_no_empty_todos};
-use rusty_todo_md::todo_extractor::MarkerConfig;
+use rusty_todo_md::MarkerConfig;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
