@@ -1,6 +1,6 @@
 use crate::todo_md_internal::TodoCollection;
 use crate::MarkedItem;
-use log::info;
+use log::{debug, info, warn};
 use regex::Regex;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -8,8 +8,6 @@ use std::fs;
 use std::io;
 use std::path::Path;
 use std::path::PathBuf;
-
-use log::warn;
 
 #[derive(Debug)]
 pub enum TodoError {
@@ -138,7 +136,6 @@ pub fn sync_todo_file(
     todo_path: &Path,
     new_todos: Vec<MarkedItem>,
     scanned_files: Vec<PathBuf>,
-    deleted_files: Vec<PathBuf>,
 ) -> Result<(), TodoError> {
     // TODO maybe simplify the logic of this function
 
@@ -146,11 +143,19 @@ pub fn sync_todo_file(
 
     match read_todo_file(todo_path) {
         Ok(existing_todos) => {
-            // Create a TodoCollection from the existing TODO items.
-            for item in existing_todos {
+            let filtered_todos: Vec<MarkedItem> = existing_todos
+                .into_iter()
+                .filter(|item| item.file_path.exists())
+                .collect();
+
+            debug!("Filtered out TODOs for non-existent files");
+
+            // Create a TodoCollection from the filtered existing TODO items.
+            for item in filtered_todos {
                 existing_collection.add_item(item);
             }
         }
+
         Err(e) => {
             // Propagate the error to trigger fallback mechanism in CLI
             return Err(e);
@@ -164,7 +169,7 @@ pub fn sync_todo_file(
     }
 
     // Merge new TODO items into the existing collection, updating only scanned files.
-    existing_collection.merge(new_collection, scanned_files, deleted_files);
+    existing_collection.merge(new_collection, scanned_files);
 
     // Convert the merged collection back into a sorted vector of MarkedItems.
     let merged_todos = existing_collection.to_sorted_vec();
@@ -261,7 +266,7 @@ mod tests {
             },
         ];
 
-        let res = sync_todo_file(&todo_path, new_todos.clone(), vec![], vec![]);
+        let res = sync_todo_file(&todo_path, new_todos.clone(), vec![]);
 
         assert!(res.is_ok());
 
@@ -276,6 +281,62 @@ mod tests {
         assert!(
             !content.ends_with("\n\n"),
             "File should not end with double newlines"
+        );
+    }
+
+    #[test]
+    fn test_sync_todo_file_filters_nonexistent_files() {
+        init_logger();
+        let temp_dir = tempdir().unwrap();
+        let todo_path = temp_dir.path().join("TODO.md");
+
+        // Create an existing TODO.md with entries for both existing and non-existent files
+        let existing_content = r#"# TODO
+## src/existing.rs
+* [src/existing.rs:10](src/existing.rs#L10): This file exists
+
+## src/deleted.rs
+* [src/deleted.rs:5](src/deleted.rs#L5): This file does not exist
+"#;
+        fs::write(&todo_path, existing_content).unwrap();
+
+        // Create only one of the files to simulate that the other was deleted
+        // We need to change to the temp directory so relative paths work correctly
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let existing_file = PathBuf::from("src").join("existing.rs");
+        fs::create_dir_all(existing_file.parent().unwrap()).unwrap();
+        fs::write(&existing_file, "// TODO: This file exists\nfn main() {}").unwrap();
+        // Note: We don't create src/deleted.rs to simulate it being deleted
+
+        // Run sync_todo_file with no new todos, which should filter out the non-existent file
+        let new_todos = vec![];
+        let res = sync_todo_file(&todo_path, new_todos, vec![]);
+        assert!(res.is_ok());
+
+        // Read the updated TODO.md content
+        let content = fs::read_to_string(&todo_path).unwrap();
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+
+        // The content should only contain the entry for the existing file
+        assert!(
+            content.contains("src/existing.rs"),
+            "Should contain existing file"
+        );
+        assert!(
+            !content.contains("src/deleted.rs"),
+            "Should not contain deleted file"
+        );
+        assert!(
+            !content.contains("This file does not exist"),
+            "Should not contain deleted file's TODO"
+        );
+        assert!(
+            content.contains("This file exists"),
+            "Should still contain existing file's TODO"
         );
     }
 

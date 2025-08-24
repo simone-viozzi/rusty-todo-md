@@ -75,15 +75,6 @@ where
         }
     };
 
-    // Retrieve the list of deleted files from the repository.
-    let deleted_files = match git_ops.get_deleted_files(&repo) {
-        Ok(list) => list,
-        Err(e) => {
-            error!("Error retrieving deleted files: {e}");
-            std::process::exit(1);
-        }
-    };
-
     // Parse markers from CLI args (if any)
     let markers: Vec<String> = matches
         .get_many::<String>("markers")
@@ -93,11 +84,10 @@ where
 
     let auto_add = matches.get_flag("auto_add");
 
-    if !files.is_empty() || !deleted_files.is_empty() {
+    if !files.is_empty() {
         if let Err(e) = process_files_from_list(
             Path::new(todo_path),
             files,
-            deleted_files,
             git_ops,
             repo,
             &marker_config,
@@ -107,8 +97,19 @@ where
             std::process::exit(1);
         }
     } else {
-        info!("No files provided, nothing to do.");
-        std::process::exit(0);
+        // Even if no files are provided, we should still run sync_todo_file
+        // to clean up entries for deleted files through file existence checking
+        if let Err(e) = process_files_from_list(
+            Path::new(todo_path),
+            vec![], // Empty files list
+            git_ops,
+            repo,
+            &marker_config,
+            auto_add,
+        ) {
+            error!("Error: {e}");
+            std::process::exit(1);
+        }
     }
 }
 
@@ -158,7 +159,6 @@ pub fn validate_no_empty_todos(new_todos: &[MarkedItem]) -> Result<(), String> {
 pub fn process_files_from_list(
     todo_path: &Path,
     scanned_files: Vec<PathBuf>,
-    deleted_files: Vec<PathBuf>,
     git_ops: &dyn GitOpsTrait,
     repo: Repository,
     marker_config: &MarkerConfig,
@@ -173,7 +173,7 @@ pub fn process_files_from_list(
     validate_no_empty_todos(&new_todos)?;
 
     // Pass the list of scanned files to sync_todo_file.
-    if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, scanned_files, deleted_files) {
+    if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, scanned_files) {
         info!("There was an error updating TODO.md: {err}");
 
         // This branch is tested by test_sync_todo_file_fallback_mechanism.
