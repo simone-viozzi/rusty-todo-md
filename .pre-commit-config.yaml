@@ -20,7 +20,7 @@ repos:
         pass_filenames: false
         types: [rust]
   - repo: https://github.com/simone-viozzi/rusty-todo-md-pre-commit.git
-    rev: v1.8.0
+    rev: v1.9.1
     hooks:
       - id: rusty-todo-md
   - repo: https://github.com/pre-commit/pre-commit-hooks
