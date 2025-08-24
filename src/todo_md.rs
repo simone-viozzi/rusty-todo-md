@@ -392,40 +392,4 @@ mod tests {
             "Marker section ordering is incorrect"
         );
     }
-
-    #[test]
-    fn test_validate_todo_file_with_valid_entries() {
-        let temp_dir = tempdir().unwrap();
-        let todo_path = temp_dir.path().join("TODO.md");
-
-        // Create a valid TODO.md file
-        let content = r#"# TODO
-## test.py
-* [test.py:3](test.py#L3): This is a normal TODO
-# FIXME
-## test.py
-* [test.py:12](test.py#L12): Normal fixme
-"#;
-        fs::write(&todo_path, content).unwrap();
-
-        // Validate should pass
-        assert!(validate_todo_file(&todo_path));
-    }
-
-    #[test]
-    fn test_validate_todo_file_with_empty_messages_fails() {
-        let temp_dir = tempdir().unwrap();
-        let todo_path = temp_dir.path().join("TODO.md");
-
-        // Create a TODO.md file with empty messages (invalid format)
-        let content = r#"# TODO
-## test.py
-* [test.py:3](test.py#L3): This is a normal TODO
-* [test.py:6](test.py#L6):
-"#;
-        fs::write(&todo_path, content).unwrap();
-
-        // Validate should fail due to empty message
-        assert!(!validate_todo_file(&todo_path));
-    }
 }

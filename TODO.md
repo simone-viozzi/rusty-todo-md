@@ -3,8 +3,8 @@
 * [.github/workflows/release.yml:403](.github/workflows/release.yml#L403): This is a smoke test
 
 ## src/cli.rs
-* [src/cli.rs:49](src/cli.rs#L49): add a flag to enable debug logging
-* [src/cli.rs:152](src/cli.rs#L152): add tests for this branch
+* [src/cli.rs:43](src/cli.rs#L43): add a flag to enable debug logging
+* [src/cli.rs:237](src/cli.rs#L237): add tests for this branch
 
 ## src/todo_extractor_internal/aggregator.rs
 * [src/todo_extractor_internal/aggregator.rs:217](src/todo_extractor_internal/aggregator.rs#L217): Add new extensions and their corresponding parser calls here: Currently supported extensions: "js", "jsx", "go", "py", "rs". Example for adding a new extension: "ts" | "tsx" => Some(crate::languages::ts::TsParser::parse_comments(file_content)),

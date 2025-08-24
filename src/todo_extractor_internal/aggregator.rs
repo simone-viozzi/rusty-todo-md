@@ -299,22 +299,14 @@ pub fn collect_marked_items_from_comment_lines(
     let stripped_lines = strip_and_flatten(lines);
     // Group the lines into blocks based on marker lines and their indented continuations.
     let blocks = group_lines_into_blocks_with_marker(stripped_lines, &config.markers);
-    // Convert each block into a MarkedItem, filtering out empty messages.
+    // Convert each block into a MarkedItem.
     blocks
         .into_iter()
-        .filter_map(|(line_number, marker, block)| {
-            let message = process_block_lines(&block, &config.markers);
-            // Filter out empty messages to avoid invalid TODO.md entries
-            if message.trim().is_empty() {
-                None
-            } else {
-                Some(MarkedItem {
-                    file_path: path.to_path_buf(),
-                    line_number,
-                    message,
-                    marker,
-                })
-            }
+        .map(|(line_number, marker, block)| MarkedItem {
+            file_path: path.to_path_buf(),
+            line_number,
+            message: process_block_lines(&block, &config.markers),
+            marker,
         })
         .collect()
 }
@@ -618,29 +610,6 @@ let message = "TODO: This should not be detected";
         assert_eq!(items[2].message, "Add docs");
         assert_eq!(items[3].marker, "FIXME");
         assert_eq!(items[3].message, "Refactor");
-    }
-
-    #[test]
-    fn test_empty_todo_comments() {
-        init_logger();
-        let src = r#"
-// TODO: This is a normal TODO
-// TODO:
-// TODO:
-// FIXME: Normal fixme
-// FIXME:
-"#;
-        let config = MarkerConfig {
-            markers: vec!["TODO".to_string(), "FIXME".to_string()],
-        };
-        let todos = extract_marked_items(Path::new("file.rs"), src, &config);
-
-        // Should only extract the non-empty TODOs
-        assert_eq!(todos.len(), 2);
-        assert_eq!(todos[0].message, "This is a normal TODO");
-        assert_eq!(todos[0].marker, "TODO");
-        assert_eq!(todos[1].message, "Normal fixme");
-        assert_eq!(todos[1].marker, "FIXME");
     }
 
     #[test]
