@@ -429,10 +429,7 @@ mod tests {
         };
         col2.add_item(d_item1.clone());
 
-        // Since we no longer use deleted_files, File C will remain in the collection
-        // The new behavior is that file existence is checked in sync_todo_file, not in merge
-
-        // Updated merge call.
+        // No scanned_files provided, so File C should remain unchanged
         col1.merge(col2, vec![]);
 
         // File A should now have only the new item.
@@ -455,10 +452,10 @@ mod tests {
         assert_eq!(d_items.len(), 1);
         assert_eq!(d_items[0], d_item1);
 
-        // File C should still be present (file existence will be checked in sync_todo_file)
+        // File C should still be present since it wasn't in scanned_files
         assert!(
             col1.todos.contains_key(&PathBuf::from("src/c.rs")),
-            "File C should remain present - deletion is now handled by file existence check"
+            "File C should remain present since it wasn't scanned"
         );
     }
 

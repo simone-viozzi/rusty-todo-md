@@ -30,7 +30,6 @@ mod cli_args_tests {
             temp_dir,
             vec![file1.clone()],
             vec![file1.clone()],
-            vec![],
         );
 
         run_cli_with_args(args, &fake_git_ops);

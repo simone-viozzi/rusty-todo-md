@@ -4,7 +4,7 @@
 
 ## src/cli.rs
 * [src/cli.rs:50](src/cli.rs#L50): add a flag to enable debug logging
-* [src/cli.rs:201](src/cli.rs#L201): simplify this, maybe move to git_utils and maybe do not check if content changed but just try to add it and ignore errors in case it was not modified
+* [src/cli.rs:186](src/cli.rs#L186): simplify this, maybe move to git_utils and maybe do not check if content changed but just try to add it and ignore errors in case it was not modified
 
 ## src/todo_extractor_internal/aggregator.rs
 * [src/todo_extractor_internal/aggregator.rs:208](src/todo_extractor_internal/aggregator.rs#L208): Add new extensions and their corresponding parser calls here: Currently supported extensions: "js", "jsx", "go", "py", "rs". Example for adding a new extension: "ts" | "tsx" => Some(crate::languages::ts::TsParser::parse_comments),

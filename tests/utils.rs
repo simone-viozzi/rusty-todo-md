@@ -77,7 +77,6 @@ impl FakeGitOps {
         temp_dir: tempfile::TempDir,
         staged_files: Vec<std::path::PathBuf>,
         tracked_files: Vec<std::path::PathBuf>,
-        _deleted_files: Vec<std::path::PathBuf>, // Keep for backwards compatibility but ignore
     ) -> Self {
         FakeGitOps {
             _dummy_repo,

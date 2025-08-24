@@ -57,9 +57,7 @@ mod integration_tests {
         let (temp_dir, repo) = init_repo().expect("Failed to init repo");
         let staged_files = vec![file1.clone()];
         let tracked_files = vec![];
-        let deleted_files = vec![];
-        let fake_git_ops =
-            FakeGitOps::new(repo, temp_dir, staged_files, tracked_files, deleted_files);
+        let fake_git_ops = FakeGitOps::new(repo, temp_dir, staged_files, tracked_files);
 
         // Run the CLI.
         run_cli_with_args(args, &fake_git_ops);
@@ -104,9 +102,7 @@ mod integration_tests {
         let (temp_dir, repo) = init_repo().expect("Failed to init repo");
         let staged_files = vec![file1.clone()];
         let tracked_files = vec![];
-        let deleted_files = vec![];
-        let fake_git_ops =
-            FakeGitOps::new(repo, temp_dir, staged_files, tracked_files, deleted_files);
+        let fake_git_ops = FakeGitOps::new(repo, temp_dir, staged_files, tracked_files);
 
         // Run the CLI.
         run_cli_with_args(args.clone(), &fake_git_ops);
@@ -163,9 +159,7 @@ mod integration_tests {
         let (temp_dir, repo) = init_repo().expect("Failed to init repo");
         let staged_files = vec![file1.clone()];
         let tracked_files = vec![];
-        let deleted_files = vec![];
-        let fake_git_ops =
-            FakeGitOps::new(repo, temp_dir, staged_files, tracked_files, deleted_files);
+        let fake_git_ops = FakeGitOps::new(repo, temp_dir, staged_files, tracked_files);
 
         // First run: file has a TODO.
         run_cli_with_args(args.clone(), &fake_git_ops);
@@ -222,9 +216,7 @@ mod integration_tests {
         let (temp_dir, repo) = init_repo().expect("Failed to init repo");
         let staged_files = vec![file1.clone()];
         let tracked_files = vec![];
-        let deleted_files = vec![];
-        let fake_git_ops =
-            FakeGitOps::new(repo, temp_dir, staged_files, tracked_files, deleted_files);
+        let fake_git_ops = FakeGitOps::new(repo, temp_dir, staged_files, tracked_files);
 
         // Run 1: initial TODO.
         run_cli_with_args(args.clone(), &fake_git_ops);
@@ -296,9 +288,7 @@ mod integration_tests {
         let (temp_dir, repo) = init_repo().expect("Failed to init repo");
         let staged_files = vec![file1.clone(), file2.clone()];
         let tracked_files = vec![];
-        let deleted_files = vec![];
-        let fake_git_ops =
-            FakeGitOps::new(repo, temp_dir, staged_files, tracked_files, deleted_files);
+        let fake_git_ops = FakeGitOps::new(repo, temp_dir, staged_files, tracked_files);
 
         // Run 1: both files processed.
         run_cli_with_args(args.clone(), &fake_git_ops);

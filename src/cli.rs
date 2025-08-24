@@ -84,32 +84,17 @@ where
 
     let auto_add = matches.get_flag("auto_add");
 
-    if !files.is_empty() {
-        if let Err(e) = process_files_from_list(
-            Path::new(todo_path),
-            files,
-            git_ops,
-            repo,
-            &marker_config,
-            auto_add,
-        ) {
-            error!("Error: {e}");
-            std::process::exit(1);
-        }
-    } else {
-        // Even if no files are provided, we should still run sync_todo_file
-        // to clean up entries for deleted files through file existence checking
-        if let Err(e) = process_files_from_list(
-            Path::new(todo_path),
-            vec![], // Empty files list
-            git_ops,
-            repo,
-            &marker_config,
-            auto_add,
-        ) {
-            error!("Error: {e}");
-            std::process::exit(1);
-        }
+    // Process files (empty vec if no files provided) to ensure cleanup happens
+    if let Err(e) = process_files_from_list(
+        Path::new(todo_path),
+        files,
+        git_ops,
+        repo,
+        &marker_config,
+        auto_add,
+    ) {
+        error!("Error: {e}");
+        std::process::exit(1);
     }
 }
 
