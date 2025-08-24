@@ -22,10 +22,12 @@ fn test_empty_todo_detection() {
     drop(file);
 
     let marker_config = MarkerConfig::normalized(vec!["TODO".to_string(), "FIXME".to_string()]);
-    let files = vec![test_file.clone()];
+
+    // Extract marked items first
+    let todos = extract_marked_items_from_file(&test_file, &marker_config).unwrap();
 
     // Test that validation fails for empty TODOs
-    let result = validate_no_empty_todos(&files, &marker_config);
+    let result = validate_no_empty_todos(&todos);
     assert!(
         result.is_err(),
         "Expected validation to fail for empty TODOs"
@@ -54,10 +56,12 @@ fn test_valid_todo_detection() {
     drop(file);
 
     let marker_config = MarkerConfig::normalized(vec!["TODO".to_string(), "FIXME".to_string()]);
-    let files = vec![test_file.clone()];
+
+    // Extract marked items first
+    let todos = extract_marked_items_from_file(&test_file, &marker_config).unwrap();
 
     // Test that validation succeeds for valid TODOs
-    let result = validate_no_empty_todos(&files, &marker_config);
+    let result = validate_no_empty_todos(&todos);
     assert!(
         result.is_ok(),
         "Expected validation to succeed for valid TODOs"
@@ -119,9 +123,11 @@ fn test_python_empty_todos() {
     drop(file);
 
     let marker_config = MarkerConfig::normalized(vec!["TODO".to_string(), "FIXME".to_string()]);
-    let files = vec![test_file.clone()];
 
-    let result = validate_no_empty_todos(&files, &marker_config);
+    // Extract marked items first
+    let todos = extract_marked_items_from_file(&test_file, &marker_config).unwrap();
+
+    let result = validate_no_empty_todos(&todos);
     assert!(result.is_err());
 
     let error_message = result.unwrap_err();

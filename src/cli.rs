@@ -127,35 +127,25 @@ fn extract_todos_from_files(files: &Vec<PathBuf>, marker_config: &MarkerConfig) 
     new_todos
 }
 
-pub fn validate_no_empty_todos(
-    files: &Vec<PathBuf>,
-    marker_config: &MarkerConfig,
-) -> Result<(), String> {
-    let mut errors = Vec::new();
+pub fn validate_no_empty_todos(new_todos: &[MarkedItem]) -> Result<(), String> {
+    let empty_todos: Vec<&MarkedItem> = new_todos
+        .iter()
+        .filter(|item| item.message.trim().is_empty())
+        .collect();
 
-    for file in files {
-        match extract_marked_items_from_file(file, marker_config) {
-            Ok(todos) => {
-                let empty_todos: Vec<&MarkedItem> = todos
-                    .iter()
-                    .filter(|item| item.message.trim().is_empty())
-                    .collect();
-                for empty_todo in empty_todos {
-                    errors.push(format!(
-                        "error: empty {} comment found\n  --> {}:{}",
-                        empty_todo.marker,
-                        empty_todo.file_path.display(),
-                        empty_todo.line_number
-                    ));
-                }
-            }
-            Err(e) => {
-                error!("Error processing file {:?}: {}", file, e);
-            }
-        }
-    }
+    if !empty_todos.is_empty() {
+        let errors: Vec<String> = empty_todos
+            .iter()
+            .map(|item| {
+                format!(
+                    "error: empty {} comment found\n  --> {}:{}",
+                    item.marker,
+                    item.file_path.display(),
+                    item.line_number
+                )
+            })
+            .collect();
 
-    if !errors.is_empty() {
         return Err(format!(
             "{}\n\nPlease add descriptions to the empty TODO comments above.",
             errors.join("\n\n")
@@ -180,7 +170,7 @@ pub fn process_files_from_list(
     let todo_content_before = std::fs::read_to_string(todo_path).ok();
 
     // Validate that there are no empty TODO comments
-    validate_no_empty_todos(&scanned_files, marker_config)?;
+    validate_no_empty_todos(&new_todos)?;
 
     // Pass the list of scanned files to sync_todo_file.
     if let Err(err) =
