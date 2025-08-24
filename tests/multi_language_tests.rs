@@ -68,7 +68,6 @@ mod multi_language_tests {
                 go_file.clone(),
                 python_file.clone(),
             ],
-            vec![],
         );
 
         run_cli_with_args(args, &fake_git_ops);
@@ -128,7 +127,6 @@ const x = 10;
             temp_dir,
             vec![js_file.clone()],
             vec![js_file.clone()],
-            vec![],
         );
 
         run_cli_with_args(args, &fake_git_ops);
@@ -185,7 +183,6 @@ func main() {
             temp_dir,
             vec![go_file.clone()],
             vec![go_file.clone()],
-            vec![],
         );
 
         run_cli_with_args(args, &fake_git_ops);

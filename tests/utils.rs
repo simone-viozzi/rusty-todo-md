@@ -68,7 +68,6 @@ pub struct FakeGitOps {
     pub temp_dir: tempfile::TempDir,
     pub staged_files: Vec<std::path::PathBuf>,
     pub tracked_files: Vec<std::path::PathBuf>,
-    pub deleted_files: Vec<std::path::PathBuf>,
 }
 
 #[allow(dead_code)]
@@ -78,14 +77,12 @@ impl FakeGitOps {
         temp_dir: tempfile::TempDir,
         staged_files: Vec<std::path::PathBuf>,
         tracked_files: Vec<std::path::PathBuf>,
-        deleted_files: Vec<std::path::PathBuf>,
     ) -> Self {
         FakeGitOps {
             _dummy_repo,
             temp_dir,
             staged_files,
             tracked_files,
-            deleted_files,
         }
     }
 }
@@ -99,9 +96,6 @@ impl rusty_todo_md::git_utils::GitOpsTrait for FakeGitOps {
     }
     fn get_tracked_files(&self, _repo: &Repository) -> Result<Vec<std::path::PathBuf>, GitError> {
         Ok(self.tracked_files.clone())
-    }
-    fn get_deleted_files(&self, _repo: &Repository) -> Result<Vec<std::path::PathBuf>, GitError> {
-        Ok(self.deleted_files.clone())
     }
     fn add_file_to_index(
         &self,

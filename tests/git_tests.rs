@@ -2,7 +2,7 @@ use log::info;
 use log::LevelFilter;
 use rusty_todo_md::git_utils::{GitOps, GitOpsTrait};
 use rusty_todo_md::logger;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
@@ -54,24 +54,4 @@ fn test_get_staged_files() {
     let staged = GitOps.get_staged_files(&repo).unwrap();
     assert!(staged.contains(&PathBuf::from("test.txt")));
     info!("Completed test_get_staged_files");
-}
-
-#[test]
-fn test_get_deleted_files() {
-    init_logger();
-    info!("Starting test_get_deleted_files");
-    let (temp_dir, repo) = init_repo().unwrap();
-
-    // Delete the file and stage the deletion.
-    let file_path = temp_dir.path().join("test.txt");
-    fs::remove_file(&file_path).unwrap();
-
-    // Update the index to reflect the deletion.
-    let mut index = repo.index().unwrap();
-    index.remove_path(Path::new("test.txt")).unwrap();
-    index.write().unwrap();
-
-    let deleted = GitOps.get_deleted_files(&repo).unwrap();
-    assert!(deleted.contains(&PathBuf::from("test.txt")));
-    info!("Completed test_get_deleted_files");
 }
