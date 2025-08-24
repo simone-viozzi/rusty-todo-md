@@ -265,10 +265,208 @@ jobs:
           name: wheels-sdist
           path: dist
 
+  smoke_test:
+    name: Smoke Test - ${{ matrix.os }} Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    needs: [linux, musllinux, windows, macos, sdist, version_bump]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        exclude:
+          # Python 3.13 might not be available on all platforms yet
+          - os: windows-latest
+            python-version: "3.13"
+          - os: macos-latest
+            python-version: "3.13"
+
+    steps:
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v5
+
+      - name: Find compatible wheel
+        shell: bash
+        run: |
+          # Find the appropriate wheel for this platform and architecture
+          python_version="${{ matrix.python-version }}"
+          python_major_minor="${python_version%.*}"
+
+          echo "Looking for wheel compatible with Python $python_version on ${{ runner.os }} ${{ runner.arch }}"
+
+          # Determine platform-specific wheel pattern
+          case "${{ runner.os }}" in
+            "Linux")
+              if [[ "${{ runner.arch }}" == "X64" ]]; then
+                wheel_pattern="wheels-linux-x86_64/*linux_x86_64.whl"
+              else
+                wheel_pattern="wheels-linux-*/*linux_*.whl"
+              fi
+              ;;
+            "Windows")
+              if [[ "${{ runner.arch }}" == "X64" ]]; then
+                wheel_pattern="wheels-windows-x64/*win_amd64.whl"
+              else
+                wheel_pattern="wheels-windows-x86/*win32.whl"
+              fi
+              ;;
+            "macOS")
+              if [[ "${{ runner.arch }}" == "ARM64" ]]; then
+                wheel_pattern="wheels-macos-aarch64/*macosx_*_arm64.whl"
+              else
+                wheel_pattern="wheels-macos-x86_64/*macosx_*_x86_64.whl"
+              fi
+              ;;
+          esac
+
+          # Find the first matching wheel
+          wheel_file=$(find . -path "$wheel_pattern" | head -1)
+
+          if [ -z "$wheel_file" ]; then
+            echo "No compatible wheel found for pattern: $wheel_pattern"
+            echo "Available wheels:"
+            find . -name "*.whl" -type f
+            exit 1
+          fi
+
+          echo "Found wheel: $wheel_file"
+          echo "WHEEL_FILE=$wheel_file" >> $GITHUB_ENV
+
+      - name: Create test environment
+        shell: bash
+        run: |
+          python -m venv test_env
+
+          # Activate virtual environment
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            source test_env/Scripts/activate
+          else
+            source test_env/bin/activate
+          fi
+
+          # Upgrade pip
+          python -m pip install --upgrade pip
+
+          echo "Virtual environment created with Python $(python --version)"
+
+      - name: Install and test wheel
+        shell: bash
+        run: |
+          # Activate virtual environment
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            source test_env/Scripts/activate
+          else
+            source test_env/bin/activate
+          fi
+
+          # Install the wheel
+          echo "Installing wheel: $WHEEL_FILE"
+          pip install "$WHEEL_FILE"
+
+          # Verify installation
+          echo "✅ Wheel installed successfully"
+
+          # Test that the binary is available and works
+          echo "Testing CLI availability..."
+          rusty-todo-md --help > /dev/null
+          echo "✅ CLI help command works"
+
+          # Test version command if available
+          rusty-todo-md --version || echo "ℹ️  --version flag not available"
+
+      - name: Functional smoke test
+        shell: bash
+        run: |
+          # Activate virtual environment
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            source test_env/Scripts/activate
+          else
+            source test_env/bin/activate
+          fi
+
+          # Create a temporary test directory
+          mkdir smoke_test_dir
+          cd smoke_test_dir
+
+          # Initialize git repo
+          git init
+          git config user.email "smoke-test@example.com"
+          git config user.name "Smoke Test"
+
+          # Create test files with TODO comments
+          cat > test.py << 'EOF'
+          # TODO: This is a smoke test
+          def smoke_test():
+              # FIXME: Add real implementation
+              pass
+          EOF
+
+          cat > test.rs << 'EOF'
+          // TODO: Smoke test for Rust
+          fn main() {
+              // HACK: Just a test
+              println!("smoke test");
+          }
+          EOF
+
+          # Add files to git
+          git add .
+          git commit -m "Smoke test files"
+
+          # Run rusty-todo-md
+          echo "Running rusty-todo-md smoke test..."
+          rusty-todo-md test.py test.rs
+
+          # Verify TODO.md was created
+          if [ ! -f "TODO.md" ]; then
+            echo "❌ TODO.md was not created"
+            exit 1
+          fi
+
+          # Verify content
+          if ! grep -q "TODO" TODO.md; then
+            echo "❌ TODO.md does not contain expected TODO markers"
+            echo "Content of TODO.md:"
+            cat TODO.md
+            exit 1
+          fi
+
+          echo "✅ Functional smoke test passed"
+          echo "TODO.md content:"
+          cat TODO.md
+
+      - name: Test with different markers
+        shell: bash
+        run: |
+          # Activate virtual environment
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            source test_env/Scripts/activate
+          else
+            source test_env/bin/activate
+          fi
+
+          cd smoke_test_dir
+
+          # Test with custom markers
+          echo "Testing custom markers..."
+          rusty-todo-md --markers TODO FIXME HACK NOTE test.py test.rs
+
+          if [ ! -f "TODO.md" ]; then
+            echo "❌ TODO.md was not created with custom markers"
+            exit 1
+          fi
+
+          echo "✅ Custom markers test passed"
+
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [linux, musllinux, windows, macos, sdist, version_bump]
+    needs: [linux, musllinux, windows, macos, sdist, version_bump, smoke_test]
     permissions:
       # Use to sign the release artifacts
       id-token: write
