@@ -268,7 +268,7 @@ jobs:
   smoke_test:
     name: Smoke Test - ${{ matrix.os }} Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
-    needs: [linux, musllinux, windows, macos, sdist, version_bump]
+    needs: [linux, musllinux, windows, macos]
     strategy:
       fail-fast: false
       matrix:
@@ -290,47 +290,58 @@ jobs:
       - name: Download all wheel artifacts
         uses: actions/download-artifact@v5
 
+      - name: Organize wheels in common directory
+        shell: bash
+        run: |
+          # Create a common wheels directory
+          mkdir -p wheels
+
+          # Move all wheels to the common directory
+          find . -name "*.whl" -type f -exec mv {} wheels/ \;
+
+          echo "All wheels organized in common directory:"
+          ls -la wheels/
+
       - name: Find compatible wheel
         shell: bash
         run: |
           # Find the appropriate wheel for this platform and architecture
           python_version="${{ matrix.python-version }}"
-          python_major_minor="${python_version%.*}"
 
           echo "Looking for wheel compatible with Python $python_version on ${{ runner.os }} ${{ runner.arch }}"
 
-          # Determine platform-specific wheel pattern
+          # Determine platform-specific wheel name pattern
           case "${{ runner.os }}" in
             "Linux")
               if [[ "${{ runner.arch }}" == "X64" ]]; then
-                wheel_pattern="wheels-linux-x86_64/*linux_x86_64.whl"
+                wheel_pattern="*manylinux*x86_64*.whl"
               else
-                wheel_pattern="wheels-linux-*/*linux_*.whl"
+                wheel_pattern="*manylinux*.whl"
               fi
               ;;
             "Windows")
               if [[ "${{ runner.arch }}" == "X64" ]]; then
-                wheel_pattern="wheels-windows-x64/*win_amd64.whl"
+                wheel_pattern="*win_amd64.whl"
               else
-                wheel_pattern="wheels-windows-x86/*win32.whl"
+                wheel_pattern="*win32.whl"
               fi
               ;;
             "macOS")
               if [[ "${{ runner.arch }}" == "ARM64" ]]; then
-                wheel_pattern="wheels-macos-aarch64/*macosx_*_arm64.whl"
+                wheel_pattern="*macosx*arm64.whl"
               else
-                wheel_pattern="wheels-macos-x86_64/*macosx_*_x86_64.whl"
+                wheel_pattern="*macosx*x86_64.whl"
               fi
               ;;
           esac
 
-          # Find the first matching wheel
-          wheel_file=$(find . -path "$wheel_pattern" | head -1)
+          # Find the first matching wheel in the wheels directory
+          wheel_file=$(find wheels/ -name "$wheel_pattern" -type f | head -1)
 
           if [ -z "$wheel_file" ]; then
             echo "No compatible wheel found for pattern: $wheel_pattern"
             echo "Available wheels:"
-            find . -name "*.whl" -type f
+            ls -la wheels/
             exit 1
           fi
 
