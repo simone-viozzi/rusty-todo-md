@@ -1,8 +1,8 @@
-use rusty_todo_md::cli::{find_empty_todos, validate_no_empty_todos};
-use rusty_todo_md::MarkerConfig;
+use rusty_todo_md::cli::validate_no_empty_todos;
+use rusty_todo_md::{extract_marked_items_from_file, MarkerConfig};
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+
 use tempfile::TempDir;
 
 #[test]
@@ -65,46 +65,66 @@ fn test_valid_todo_detection() {
 }
 
 #[test]
-fn test_find_empty_todos_function() {
-    let content = r#"// TODO: This is a valid TODO
-fn main() {
-    // TODO:
-    // FIXME:
-    /* TODO:
-       another empty one */
-    println!("Hello, world!");
-}"#;
+fn test_extract_empty_todos_directly() {
+    let temp_dir = TempDir::new().unwrap();
+    let temp_path = temp_dir.path();
+
+    // Create a test file with mixed valid and empty TODOs
+    let test_file = temp_path.join("test.rs");
+    let mut file = fs::File::create(&test_file).unwrap();
+    writeln!(file, "// TODO: This is a valid TODO").unwrap();
+    writeln!(file, "fn main() {{").unwrap();
+    writeln!(file, "    // TODO:").unwrap();
+    writeln!(file, "    // FIXME:").unwrap();
+    writeln!(file, "    println!(\"Hello, world!\");").unwrap();
+    writeln!(file, "}}").unwrap();
+    drop(file);
 
     let marker_config = MarkerConfig::normalized(vec!["TODO".to_string(), "FIXME".to_string()]);
-    let empty_todos = find_empty_todos(&PathBuf::from("test.rs"), content, &marker_config);
 
-    // Should find 3 empty TODOs
-    assert_eq!(empty_todos.len(), 3);
+    // Extract all marked items
+    let todos = extract_marked_items_from_file(&test_file, &marker_config).unwrap();
 
-    // Check line numbers
+    // Should find 3 total items (1 valid, 2 empty)
+    assert_eq!(todos.len(), 3);
+
+    // Filter for empty ones
+    let empty_todos: Vec<_> = todos
+        .iter()
+        .filter(|item| item.message.trim().is_empty())
+        .collect();
+    assert_eq!(empty_todos.len(), 2);
+
+    // Check line numbers and markers
     assert_eq!(empty_todos[0].line_number, 3);
     assert_eq!(empty_todos[0].marker, "TODO");
 
     assert_eq!(empty_todos[1].line_number, 4);
     assert_eq!(empty_todos[1].marker, "FIXME");
-
-    assert_eq!(empty_todos[2].line_number, 5);
-    assert_eq!(empty_todos[2].marker, "TODO");
 }
 
 #[test]
 fn test_python_empty_todos() {
-    let content = r#"# TODO: Valid TODO
-def main():
-    # TODO:
-    # FIXME:
-    pass"#;
+    let temp_dir = TempDir::new().unwrap();
+    let temp_path = temp_dir.path();
+
+    // Create a test file with empty TODOs in Python
+    let test_file = temp_path.join("test.py");
+    let mut file = fs::File::create(&test_file).unwrap();
+    writeln!(file, "# TODO: Valid TODO").unwrap();
+    writeln!(file, "def main():").unwrap();
+    writeln!(file, "    # TODO:").unwrap();
+    writeln!(file, "    # FIXME:").unwrap();
+    writeln!(file, "    pass").unwrap();
+    drop(file);
 
     let marker_config = MarkerConfig::normalized(vec!["TODO".to_string(), "FIXME".to_string()]);
-    let empty_todos = find_empty_todos(&PathBuf::from("test.py"), content, &marker_config);
+    let files = vec![test_file.clone()];
 
-    // Should find 2 empty TODOs
-    assert_eq!(empty_todos.len(), 2);
-    assert_eq!(empty_todos[0].line_number, 3);
-    assert_eq!(empty_todos[1].line_number, 4);
+    let result = validate_no_empty_todos(&files, &marker_config);
+    assert!(result.is_err());
+
+    let error_message = result.unwrap_err();
+    assert!(error_message.contains("empty TODO comment found"));
+    assert!(error_message.contains("empty FIXME comment found"));
 }

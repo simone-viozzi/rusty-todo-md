@@ -38,7 +38,8 @@ where
             Arg::new("files")
                 .value_name("FILE")
                 .help("Optional list of files to process (passed by pre-commit)")
-                .num_args(0..),
+                .num_args(0..)
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new("auto_add")
@@ -133,19 +134,23 @@ pub fn validate_no_empty_todos(
     let mut errors = Vec::new();
 
     for file in files {
-        if let Ok(content) = std::fs::read_to_string(file) {
-            let empty_todos = find_empty_todos(file, &content, marker_config);
-            for empty_todo in empty_todos {
-                errors.push(format!(
-                    "error: empty {} comment found\n  --> {}:{}\n   |\n{:3} | {}\n   | {}^ empty {} comment requires a message",
-                    empty_todo.marker,
-                    file.display(),
-                    empty_todo.line_number,
-                    empty_todo.line_number,
-                    empty_todo.line_content.trim(),
-                    " ".repeat(empty_todo.marker_position),
-                    empty_todo.marker
-                ));
+        match extract_marked_items_from_file(file, marker_config) {
+            Ok(todos) => {
+                let empty_todos: Vec<&MarkedItem> = todos
+                    .iter()
+                    .filter(|item| item.message.trim().is_empty())
+                    .collect();
+                for empty_todo in empty_todos {
+                    errors.push(format!(
+                        "error: empty {} comment found\n  --> {}:{}",
+                        empty_todo.marker,
+                        empty_todo.file_path.display(),
+                        empty_todo.line_number
+                    ));
+                }
+            }
+            Err(e) => {
+                error!("Error processing file {:?}: {}", file, e);
             }
         }
     }
@@ -158,65 +163,6 @@ pub fn validate_no_empty_todos(
     }
 
     Ok(())
-}
-
-#[derive(Debug)]
-pub struct EmptyTodo {
-    pub line_number: usize,
-    pub line_content: String,
-    pub marker: String,
-    pub marker_position: usize,
-}
-
-pub fn find_empty_todos(
-    _file: &Path,
-    content: &str,
-    marker_config: &MarkerConfig,
-) -> Vec<EmptyTodo> {
-    let mut empty_todos = Vec::new();
-
-    for (line_idx, line) in content.lines().enumerate() {
-        let line_number = line_idx + 1;
-        let trimmed_line = line.trim();
-
-        for marker in &marker_config.markers {
-            // Check for comment-style markers like "// TODO:" or "# TODO:"
-            let patterns = vec![
-                format!("// {}:", marker),
-                format!("/* {}:", marker),
-                format!("# {}:", marker),
-                format!("-- {}:", marker),
-            ];
-
-            for pattern in patterns {
-                if let Some(start_pos) = trimmed_line.find(&pattern) {
-                    // Extract the part after the marker
-                    let after_marker = &trimmed_line[start_pos + pattern.len()..];
-
-                    // Check if there's only whitespace or closing comment after the marker
-                    let content_after_marker = after_marker.trim_start();
-                    let is_empty = content_after_marker.is_empty()
-                        || content_after_marker == "*/"
-                        || content_after_marker.starts_with("*/");
-
-                    if is_empty {
-                        // Find the position of the marker in the original line
-                        let marker_pos_in_line = line.find(&pattern).unwrap_or(0);
-
-                        empty_todos.push(EmptyTodo {
-                            line_number,
-                            line_content: line.to_string(),
-                            marker: marker.clone(),
-                            marker_position: marker_pos_in_line,
-                        });
-                        break; // Don't check other patterns for this line
-                    }
-                }
-            }
-        }
-    }
-
-    empty_todos
 }
 
 pub fn process_files_from_list(
