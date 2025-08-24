@@ -355,4 +355,145 @@ mod integration_tests {
             "Feature B should be removed"
         );
     }
+
+    /// Test that the --auto-add flag automatically stages TODO.md when it gets modified.
+    /// This test mimics a real-world pre-commit scenario.
+    ///
+    /// Manual testing steps (if needed):
+    /// 1. Initialize a git repo: `git init`
+    /// 2. Create files with TODOs: `echo "// TODO: test" > sample.rs`
+    /// 3. Add and commit files: `git add sample.rs && git commit -m "initial"`
+    /// 4. Run without auto-add: `rusty-todo-md sample.rs`
+    /// 5. Check status: `git status` (TODO.md should be untracked)
+    /// 6. Add another TODO file: `echo "# TODO: another" > sample.py`
+    /// 7. Run with auto-add: `rusty-todo-md --auto-add sample.rs sample.py`
+    /// 8. Check status: `git status` (TODO.md should be staged)
+    #[test]
+    fn test_auto_add_functionality() {
+        init_logger();
+        log::info!("Starting test_auto_add_functionality");
+
+        // Save the current working directory
+        let original_cwd = std::env::current_dir().expect("Failed to get current dir");
+
+        // Create a real git repository using the test utility
+        let (temp_dir, repo) = init_repo().expect("Failed to init repo");
+        let repo_path = temp_dir.path();
+        let todo_path = repo_path.join("TODO.md");
+
+        // Change to the git repository directory for the test
+        std::env::set_current_dir(repo_path).expect("Failed to change directory");
+
+        // Create initial test file with TODO comments in the git repo directory
+        let _file1 = create_test_file(
+            repo_path,
+            "sample.rs",
+            "// TODO: Implement user authentication\nfn main() {}",
+        );
+
+        // Commit the test file to git
+        let mut index = repo.index().expect("Failed to get index");
+        index
+            .add_path(std::path::Path::new("sample.rs"))
+            .expect("Failed to add sample.rs");
+        index.write().expect("Failed to write index");
+
+        let tree_id = index.write_tree().expect("Failed to write tree");
+        let tree = repo.find_tree(tree_id).expect("Failed to find tree");
+        let sig = git2::Signature::now("Test User", "test@example.com")
+            .expect("Failed to create signature");
+        repo.commit(
+            Some("HEAD"),
+            &sig,
+            &sig,
+            "Add test files",
+            &tree,
+            &[&repo.head().unwrap().peel_to_commit().unwrap()],
+        )
+        .expect("Failed to commit");
+
+        // Test 1: Run without --auto-add flag (TODO.md should NOT be staged)
+        let args_no_auto = vec![
+            "rusty-todo-md".to_string(),
+            "--todo-path".to_string(),
+            "TODO.md".to_string(), // Use relative path since we're in the repo dir
+            "sample.rs".to_string(), // Use relative path
+        ];
+
+        let git_ops = rusty_todo_md::git_utils::GitOps;
+        run_cli_with_args(args_no_auto, &git_ops);
+
+        // Verify TODO.md was created
+        assert!(todo_path.exists(), "TODO.md should be created");
+        let todo_content = fs::read_to_string(&todo_path).expect("Failed to read TODO.md");
+        assert!(
+            todo_content.contains("Implement user authentication"),
+            "Should contain TODO from sample.rs"
+        );
+
+        // Check git status - TODO.md should NOT be staged
+        let status = repo.statuses(None).expect("Failed to get git status");
+        let todo_md_status = status.iter().find(|s| s.path() == Some("TODO.md"));
+        assert!(
+            todo_md_status.is_some(),
+            "TODO.md should appear in git status"
+        );
+        if let Some(status_entry) = todo_md_status {
+            assert!(
+                status_entry.status().is_wt_new() || status_entry.status().is_wt_modified(),
+                "TODO.md should be untracked/modified, not staged"
+            );
+        }
+
+        // Test 2: Add another file and run with --auto-add flag (TODO.md should be staged)
+        let _file2 = create_test_file(
+            repo_path,
+            "sample.py",
+            "# TODO: Add error handling\ndef main():\n    pass",
+        );
+
+        let args_with_auto = vec![
+            "rusty-todo-md".to_string(),
+            "--auto-add".to_string(),
+            "--todo-path".to_string(),
+            "TODO.md".to_string(),   // Use relative path
+            "sample.rs".to_string(), // Use relative path
+            "sample.py".to_string(), // Use relative path
+        ];
+
+        run_cli_with_args(args_with_auto, &git_ops);
+
+        // Verify TODO.md was updated with both files
+        let updated_content =
+            fs::read_to_string(&todo_path).expect("Failed to read updated TODO.md");
+        assert!(
+            updated_content.contains("Implement user authentication"),
+            "Should still contain TODO from sample.rs"
+        );
+        assert!(
+            updated_content.contains("Add error handling"),
+            "Should now contain TODO from sample.py"
+        );
+
+        // Check git status - TODO.md should NOW be staged
+        let status_after = repo
+            .statuses(None)
+            .expect("Failed to get git status after auto-add");
+        let todo_md_status_after = status_after.iter().find(|s| s.path() == Some("TODO.md"));
+        assert!(
+            todo_md_status_after.is_some(),
+            "TODO.md should appear in git status"
+        );
+        if let Some(status_entry) = todo_md_status_after {
+            assert!(
+                status_entry.status().is_index_new() || status_entry.status().is_index_modified(),
+                "TODO.md should be staged after --auto-add"
+            );
+        }
+
+        // Restore the original working directory
+        std::env::set_current_dir(original_cwd).expect("Failed to restore original directory");
+
+        log::info!("test_auto_add_functionality completed successfully");
+    }
 }

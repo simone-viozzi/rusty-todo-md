@@ -103,4 +103,15 @@ impl rusty_todo_md::git_utils::GitOpsTrait for FakeGitOps {
     fn get_deleted_files(&self, _repo: &Repository) -> Result<Vec<std::path::PathBuf>, GitError> {
         Ok(self.deleted_files.clone())
     }
+    fn add_file_to_index(
+        &self,
+        repo: &Repository,
+        file_path: &std::path::Path,
+    ) -> Result<(), GitError> {
+        // For testing, actually add the file to the index like the real implementation
+        let mut index = repo.index()?;
+        index.add_path(file_path)?;
+        index.write()?;
+        Ok(())
+    }
 }

@@ -15,7 +15,7 @@ where
 {
     let matches = Command::new("rusty-todo-md")
         .version("0.1.5")
-        .author("Simone Viozzi <you@example.com>")
+        .author("Simone Viozzi simoneviozzi97@gmail.com")
         .about("Automatically scans files for TODO comments and updates TODO.md.")
         .arg(
             Arg::new("todo_path")
@@ -39,6 +39,12 @@ where
                 .value_name("FILE")
                 .help("Optional list of files to process (passed by pre-commit)")
                 .num_args(0..),
+        )
+        .arg(
+            Arg::new("auto_add")
+                .long("auto-add")
+                .help("Automatically add TODO.md file to git staging if it was modified")
+                .action(ArgAction::SetTrue),
         )
         // TODO add a flag to enable debug logging
         .get_matches_from(args);
@@ -84,6 +90,8 @@ where
         .unwrap_or_else(|| vec!["TODO".to_string()]);
     let marker_config = MarkerConfig::normalized(markers);
 
+    let auto_add = matches.get_flag("auto_add");
+
     if !files.is_empty() || !deleted_files.is_empty() {
         if let Err(e) = process_files_from_list(
             Path::new(todo_path),
@@ -92,6 +100,7 @@ where
             git_ops,
             repo,
             &marker_config,
+            auto_add,
         ) {
             error!("Error: {e}");
             std::process::exit(1);
@@ -124,8 +133,12 @@ pub fn process_files_from_list(
     git_ops: &dyn GitOpsTrait,
     repo: Repository,
     marker_config: &MarkerConfig,
+    auto_add: bool,
 ) -> Result<(), String> {
     let new_todos = extract_todos_from_files(&scanned_files, marker_config);
+
+    // Capture the TODO file content before modification (if it exists)
+    let todo_content_before = std::fs::read_to_string(todo_path).ok();
 
     // Pass the list of scanned files to sync_todo_file.
     if let Err(err) =
@@ -151,5 +164,36 @@ pub fn process_files_from_list(
         }
     }
     info!("TODO.md successfully updated.");
+
+    // If auto_add is enabled, check if the TODO file was modified and stage it
+    if auto_add {
+        let todo_content_after = std::fs::read_to_string(todo_path).ok();
+        if todo_content_before != todo_content_after {
+            info!("TODO file was modified, staging it for commit");
+
+            // Convert todo_path to absolute path, then to relative path from repo root
+            let repo_workdir = repo
+                .workdir()
+                .ok_or("Repository has no working directory")?;
+            let absolute_todo_path = if todo_path.is_absolute() {
+                todo_path.to_path_buf()
+            } else {
+                repo_workdir.join(todo_path)
+            };
+            let relative_todo_path = absolute_todo_path
+                .strip_prefix(repo_workdir)
+                .map_err(|_| "TODO path is not within repository")?;
+
+            if let Err(e) = git_ops.add_file_to_index(&repo, relative_todo_path) {
+                error!("Warning: Failed to add TODO file to git index: {e}");
+                // Don't fail the entire operation just because we couldn't stage the file
+            } else {
+                info!("Successfully staged TODO file: {relative_todo_path:?}");
+            }
+        } else {
+            info!("TODO file was not modified, skipping auto-add");
+        }
+    }
+
     Ok(())
 }
