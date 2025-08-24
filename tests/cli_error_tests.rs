@@ -107,7 +107,7 @@ fn test_sync_todo_file_fallback_mechanism() {
     info!("Starting test: test_sync_todo_file_fallback_mechanism");
 
     // Use the common helper to initialize a real repository.
-    let (temp_dir, _repo) = init_repo().expect("Failed to initialize test repo");
+    let (temp_dir, repo) = init_repo().expect("Failed to initialize test repo");
     let repo_dir = temp_dir.path();
     debug!("Initialized repository at: {:?}", repo_dir);
 
@@ -132,17 +132,28 @@ Just plain text that should trigger validation failure
     debug!("Created corrupted TODO.md at: {:?}", todo_path);
 
     // Stage and commit the test file so it appears in tracked files for the fallback
-    let mut cmd = Command::new("git");
-    cmd.current_dir(repo_dir)
-        .args(["add", test_file.file_name().unwrap().to_str().unwrap()]);
-    cmd.assert().success();
-    debug!("Staged test file with git add");
+    // Use git2 library directly like other tests to avoid CI/CD environment issues
+    let mut index = repo.index().expect("Failed to get index");
+    index
+        .add_path(std::path::Path::new("test.rs"))
+        .expect("Failed to add test.rs");
+    index.write().expect("Failed to write index");
+    debug!("Staged test file with git2");
 
-    let mut cmd = Command::new("git");
-    cmd.current_dir(repo_dir)
-        .args(["commit", "-m", "Add test file"]);
-    cmd.assert().success();
-    debug!("Committed test file");
+    let tree_id = index.write_tree().expect("Failed to write tree");
+    let tree = repo.find_tree(tree_id).expect("Failed to find tree");
+    let sig =
+        git2::Signature::now("Test User", "test@example.com").expect("Failed to create signature");
+    repo.commit(
+        Some("HEAD"),
+        &sig,
+        &sig,
+        "Add test file",
+        &tree,
+        &[&repo.head().unwrap().peel_to_commit().unwrap()],
+    )
+    .expect("Failed to commit");
+    debug!("Committed test file with git2");
 
     // Run the CLI binary - this should trigger the fallback mechanism
     let mut cmd = Command::cargo_bin("rusty-todo-md").expect("binary exists");
