@@ -159,6 +159,7 @@ Just plain text that should trigger validation failure
     let mut cmd = Command::cargo_bin("rusty-todo-md").expect("binary exists");
     debug!("Running CLI binary to test fallback mechanism");
     cmd.current_dir(repo_dir)
+        .env("RUST_LOG", "debug")
         .arg("--todo-path")
         .arg("TODO.md")
         .arg(test_file.to_str().expect("test file path valid"));
