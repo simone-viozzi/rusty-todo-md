@@ -16,7 +16,7 @@ where
     let matches = Command::new("rusty-todo-md")
         .version("0.1.5")
         .author("Simone Viozzi simoneviozzi97@gmail.com")
-        .about("Automatically scans files for TODO comments and updates TODO.md.")
+        .about("Automatically scans files for TODO comments and updates TODO.md. Use '--' to separate markers from files when markers is the last option.")
         .arg(
             Arg::new("todo_path")
                 .short('p')
@@ -31,7 +31,7 @@ where
                 .short('m')
                 .long("markers")
                 .value_name("KEYWORDS")
-                .help("Specifies one or more marker keywords to search for (e.g., TODO FIXME HACK). Usage: --markers TODO FIXME HACK")
+                .help("Specifies one or more marker keywords to search for (e.g., TODO FIXME HACK). Usage: --markers TODO FIXME HACK [-- file1.rs file2.rs]")
                 .num_args(1..)
         )
         .arg(
