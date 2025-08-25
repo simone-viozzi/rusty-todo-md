@@ -491,7 +491,7 @@ mod integration_tests {
     fn test_markers_arg_parsing() {
         init_logger();
         log::info!("Starting test_markers_arg_parsing");
-        
+
         let temp_dir = tempdir().expect("Failed to create temp dir");
         let repo_path = temp_dir.path();
         let todo_path = repo_path.join("TODO.md");
@@ -502,7 +502,7 @@ mod integration_tests {
             "rusty-todo-md",
             "--markers",
             "TODO",
-            "FIXME", 
+            "FIXME",
             "HACK",
             "--todo-path",
             todo_path.to_str().unwrap(),
@@ -521,7 +521,7 @@ mod integration_tests {
         let content = fs::read_to_string(&todo_path).unwrap();
         assert!(content.contains("file1.rs"));
         assert!(content.contains("test marker"));
-        
+
         log::info!("test_markers_arg_parsing completed successfully");
     }
 
@@ -529,7 +529,7 @@ mod integration_tests {
     fn test_markers_with_separator() {
         init_logger();
         log::info!("Starting test_markers_with_separator");
-        
+
         // This test verifies that using -- separator works correctly
         let temp_dir = tempdir().expect("Failed to create temp dir");
         let repo_path = temp_dir.path();
@@ -572,7 +572,7 @@ mod integration_tests {
         assert!(content.contains("file2.rs"));
         assert!(content.contains("test marker in file1"));
         assert!(content.contains("test marker in file2"));
-        
+
         log::info!("test_markers_with_separator completed successfully");
     }
 }

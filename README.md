@@ -95,6 +95,14 @@ rusty-todo-md
 rusty-todo-md --markers TODO FIXME HACK
 ```
 
+### Specify files to process with markers
+When using `--markers` as the last option before specifying files, use `--` to separate markers from files:
+```sh
+rusty-todo-md --markers TODO FIXME HACK -- file1.rs file2.rs
+```
+
+Without the `--` separator, the files would be incorrectly treated as additional markers.
+
 ### Automatically stage TODO.md
 ```sh
 rusty-todo-md --auto-add path/to/file.rs
