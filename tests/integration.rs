@@ -486,4 +486,93 @@ mod integration_tests {
 
         log::info!("test_auto_add_functionality completed successfully");
     }
+
+    #[test]
+    fn test_markers_arg_parsing() {
+        init_logger();
+        log::info!("Starting test_markers_arg_parsing");
+        
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let repo_path = temp_dir.path();
+        let todo_path = repo_path.join("TODO.md");
+        let file1 = repo_path.join("file1.rs");
+        fs::write(&file1, "// TODO: test marker").unwrap();
+
+        let args = vec![
+            "rusty-todo-md",
+            "--markers",
+            "TODO",
+            "FIXME", 
+            "HACK",
+            "--todo-path",
+            todo_path.to_str().unwrap(),
+            file1.to_str().unwrap(),
+        ];
+
+        let fake_git_ops = FakeGitOps::new(
+            git2::Repository::init(repo_path).unwrap(),
+            temp_dir,
+            vec![file1.clone()],
+            vec![file1.clone()],
+        );
+
+        run_cli_with_args(args, &fake_git_ops);
+        assert!(todo_path.exists());
+        let content = fs::read_to_string(&todo_path).unwrap();
+        assert!(content.contains("file1.rs"));
+        assert!(content.contains("test marker"));
+        
+        log::info!("test_markers_arg_parsing completed successfully");
+    }
+
+    #[test]
+    fn test_markers_with_separator() {
+        init_logger();
+        log::info!("Starting test_markers_with_separator");
+        
+        // This test verifies that using -- separator works correctly
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let repo_path = temp_dir.path();
+        let todo_path = repo_path.join("TODO.md");
+        let file1 = repo_path.join("file1.rs");
+        let file2 = repo_path.join("file2.rs");
+
+        fs::write(&file1, "// TODO: test marker in file1").unwrap();
+        fs::write(&file2, "// FIXME: test marker in file2").unwrap();
+
+        // Using -- to separate markers from files
+        let args = vec![
+            "rusty-todo-md",
+            "--auto-add",
+            "--todo-path",
+            todo_path.to_str().unwrap(),
+            "--markers",
+            "TODO",
+            "FIXME",
+            "HACK",
+            "--",
+            file1.to_str().unwrap(),
+            file2.to_str().unwrap(),
+        ];
+
+        let fake_git_ops = FakeGitOps::new(
+            git2::Repository::init(repo_path).unwrap(),
+            temp_dir,
+            vec![file1.clone(), file2.clone()],
+            vec![file1.clone(), file2.clone()],
+        );
+
+        run_cli_with_args(args, &fake_git_ops);
+
+        assert!(todo_path.exists());
+        let content = fs::read_to_string(&todo_path).unwrap();
+
+        // Both files should be processed correctly
+        assert!(content.contains("file1.rs"));
+        assert!(content.contains("file2.rs"));
+        assert!(content.contains("test marker in file1"));
+        assert!(content.contains("test marker in file2"));
+        
+        log::info!("test_markers_with_separator completed successfully");
+    }
 }
