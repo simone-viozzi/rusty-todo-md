@@ -1,10 +1,10 @@
-# **Rusty TODO MD** — A Pre-Commit Hook & CLI for Managing TODOs
+# **Rusty TODO.md** — A Pre-Commit Hook & CLI for Managing TODOs
 
 [![PyPI - Version](https://img.shields.io/pypi/v/rusty-todo-md.svg)](https://pypi.org/project/rusty-todo-md/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/rusty-todo-md.svg)](https://pypi.org/project/rusty-todo-md/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Rusty TODO MD helps you **find, centralize, and maintain** all your `TODO` comments across your codebase.
+Rusty TODO.md helps you **find, centralize, and maintain** all your `TODO` comments across your codebase.
 It can run as a **[pre-commit](https://pre-commit.com/) hook** or from the **CLI**, automatically extracting TODO-style comments into a structured `TODO.md` file.
 
 Supports a wide range of languages and file types, with **sectioned formatting**, **multi-line support**, and **smart sync**.
@@ -13,7 +13,7 @@ Supports a wide range of languages and file types, with **sectioned formatting**
 
 ## 📌 Recommended usage: Pre-commit via shim repo
 
-When `pre-commit` installs a hook from a Git repo, it runs `pip install .` from that repo — which would normally build Rusty TODO MD from source (requiring a Rust toolchain).
+When `pre-commit` installs a hook from a Git repo, it runs `pip install .` from that repo — which would normally build Rusty TODO.md from source (requiring a Rust toolchain).
 
 The **shim repository** ([`rusty-todo-md-pre-commit`](https://github.com/simone-viozzi/rusty-todo-md-pre-commit)) solves this by depending on the `rusty_todo_md` PyPI package, ensuring **prebuilt wheels** are used.
 
@@ -44,7 +44,7 @@ pre-commit install
 
 ## ⚙️ CLI installation
 
-You can also install Rusty TODO MD directly for manual CLI use:
+You can also install Rusty TODO.md directly for manual CLI use:
 
 ```sh
 pip install rusty_todo_md
@@ -61,7 +61,7 @@ rusty-todo-md --help
 ## ✨ Key Features
 
 1. **Automatic TODO Collection**
-   By default, Rusty TODO MD scans the files passed to it (typically staged files from pre-commit) for markers like `TODO` and `FIXME`, and updates your `TODO.md` with any new entries.
+   By default, Rusty TODO.md scans the files passed to it (typically staged files from pre-commit) for markers like `TODO` and `FIXME`, and updates your `TODO.md` with any new entries.
 
 2. **Sectioned TODO.md Format**
    The `TODO.md` file is now organized into sections, grouped first by marker (e.g., `# TODO`, `# FIXME`), then by file. Each marker section begins with a header (`# <MARKER>`), each file with a sub-header (`## <file-path>`), followed by a list of extracted TODO items.
@@ -77,7 +77,7 @@ rusty-todo-md --help
    Supports precise parsing for **Python**, **Rust**, **JavaScript**, and **Go** out-of-the-box, with plans for additional languages such as TypeScript, PHP, and Java.
 
 6. **Seamless Pre-Commit Integration**
-   Easily integrate Rusty TODO MD into your workflow by adding it to your `.pre-commit-config.yaml`.
+   Easily integrate Rusty TODO.md into your workflow by adding it to your `.pre-commit-config.yaml`.
 
 7. **Auto-stage Updated TODO.md**
    With the `--auto-add` flag, the tool can automatically stage the `TODO.md` file after updates.
@@ -117,7 +117,7 @@ rusty-todo-md --todo-path docs/TODOS.md
 
 ## 📝 Supported languages & extensions
 
-Rusty TODO MD detects comment syntax based on file extension:
+Rusty TODO.md detects comment syntax based on file extension:
 
 | Language / Type    | Extensions                                       |
 |--------------------|--------------------------------------------------|
@@ -189,7 +189,7 @@ Prebuilt wheels are published for:
 
 ## 👩‍💻 Development
 
-If you want to run Rusty TODO MD directly from the main repo via pre-commit (building from source):
+If you want to run Rusty TODO.md directly from the main repo via pre-commit (building from source):
 
 ```yaml
 repos:
@@ -227,4 +227,4 @@ Licensed under the [MIT License](LICENSE).
 
 ## ❤️ Support
 
-If you find Rusty TODO MD helpful, please consider giving it a ⭐ on GitHub to help others discover the project.
+If you find Rusty TODO.md helpful, please consider giving it a ⭐ on GitHub to help others discover the project.
