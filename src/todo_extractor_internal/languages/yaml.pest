@@ -1,0 +1,46 @@
+// ===============================
+// 📄 YAML Comment Parser
+// ===============================
+
+// A YAML file consists of comments, string literals, and other content.
+yaml_file = { SOI ~ (comment | str_literal | any_non_comment)* ~ EOI }
+
+// ===============================
+// 📌 Comment Extraction
+// ===============================
+
+// Single-line comments: match '#' followed by any characters until newline.
+// YAML only supports line comments starting with '#', no docstrings like Python.
+line_comment = @{
+    "#" ~ (!NEWLINE ~ ANY)*
+}
+
+// General comment rule: only line comments in YAML.
+comment = { line_comment }
+
+// ===============================
+// 🚫 Ignoring String Literals
+// ===============================
+
+// String literals in YAML: single-quoted, double-quoted, or multi-line strings.
+// We need to avoid parsing TODOs from inside these string values.
+str_literal = _{
+    // Double-quoted strings (can contain escape sequences)
+    "\"" ~ (!"\"" ~ ANY)* ~ "\"" |
+    // Single-quoted strings
+    "'" ~ (!"'" ~ ANY)* ~ "'" |
+    // Multi-line strings (literal block scalar) starting with |
+    "|" ~ (!NEWLINE ~ ANY)* ~ NEWLINE ~ (("  " | "\t") ~ (!NEWLINE ~ ANY)* ~ NEWLINE)* |
+    // Multi-line strings (folded block scalar) starting with >
+    ">" ~ (!NEWLINE ~ ANY)* ~ NEWLINE ~ (("  " | "\t") ~ (!NEWLINE ~ ANY)* ~ NEWLINE)* |
+    // Triple-quoted strings (not standard YAML but sometimes used)
+    "\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"" |
+    "'''" ~ (!"'''" ~ ANY)* ~ "'''"
+}
+
+// ===============================
+// ❌ Any Other Non-Comment Content
+// ===============================
+
+// Anything that is NOT a comment or a string literal.
+any_non_comment = { !(comment | str_literal) ~ ANY }

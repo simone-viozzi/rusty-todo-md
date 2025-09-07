@@ -183,32 +183,46 @@ pub fn get_parser_for_extension(
     file_path: &Path,
 ) -> Option<fn(&str) -> Vec<CommentLine>> {
     let result: Option<fn(&str) -> Vec<CommentLine>> = match extension {
+        // Python-style comments (# only)
         "py" => {
             Some(crate::todo_extractor_internal::languages::python::PythonParser::parse_comments)
         }
+
+        // Rust-style comments (// and /* */)
         "rs" => Some(crate::todo_extractor_internal::languages::rust::RustParser::parse_comments),
+
+        // JavaScript and similar C-style comment languages (// and /* */)
         "js" | "jsx" | "mjs" => {
             Some(crate::todo_extractor_internal::languages::js::JsParser::parse_comments)
         }
+
+        // Other C-style comment languages (using JS parser for // and /* */ comments)
         "ts" | "tsx" | "java" | "cpp" | "hpp" | "cc" | "hh" | "cs" | "swift" | "kt" | "kts"
         | "json" => Some(crate::todo_extractor_internal::languages::js::JsParser::parse_comments),
+
+        // Go-style comments (similar to C-style but with specific handling)
         "go" => Some(crate::todo_extractor_internal::languages::go::GoParser::parse_comments),
+
+        // Hash-style comment languages (# only, using Python parser for line comments)
         "sh" => Some(crate::todo_extractor_internal::languages::shell::ShellParser::parse_comments),
-        "yml" | "yaml" => {
-            Some(crate::todo_extractor_internal::languages::yaml::YamlParser::parse_comments)
-        }
         "toml" => Some(crate::todo_extractor_internal::languages::toml::TomlParser::parse_comments),
         "dockerfile" => Some(
             crate::todo_extractor_internal::languages::dockerfile::DockerfileParser::parse_comments,
         ),
+
+        // YAML-style comments (# only)
+        "yml" | "yaml" => {
+            Some(crate::todo_extractor_internal::languages::yaml::YamlParser::parse_comments)
+        }
+
+        // SQL-style comments (-- for line comments)
         "sql" => Some(crate::todo_extractor_internal::languages::sql::SqlParser::parse_comments),
+
+        // Markdown-style comments (HTML-style <!-- --> comments)
         "md" => Some(
             crate::todo_extractor_internal::languages::markdown::MarkdownParser::parse_comments,
         ),
-        // TODO Add new extensions and their corresponding parser calls here:
-        //      Currently supported extensions: "js", "jsx", "go", "py", "rs".
-        //      Example for adding a new extension:
-        //      "ts" | "tsx" => Some(crate::languages::ts::TsParser::parse_comments),
+
         _ => None,
     };
 
