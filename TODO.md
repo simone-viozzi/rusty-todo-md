@@ -1,4 +1,11 @@
 # TODO
+## /tmp/test-docker-compose.yaml
+* [/tmp/test-docker-compose.yaml:38](/tmp/test-docker-compose.yaml#L38): to be removed
+
+## /tmp/test-yaml-docstring.yaml
+* [/tmp/test-yaml-docstring.yaml:6](/tmp/test-yaml-docstring.yaml#L6): This should NOT be detected as a comment but it might be by the Python parser """
+* [/tmp/test-yaml-docstring.yaml:10](/tmp/test-yaml-docstring.yaml#L10): This SHOULD be detected as a comment
+
 ## .github/workflows/release.yml
 * [.github/workflows/release.yml:414](.github/workflows/release.yml#L414): This is a smoke test
 
