@@ -1,0 +1,39 @@
+// ===============================
+// 🐳 Dockerfile Comment Parser
+// ===============================
+
+// A Dockerfile consists of comments, string literals, and other content.
+dockerfile_file = { SOI ~ (comment | str_literal | any_non_comment)* ~ EOI }
+
+// ===============================
+// 📌 Comment Extraction
+// ===============================
+
+// Single-line comments: match '#' followed by any characters until newline.
+// Dockerfiles only support line comments starting with '#'.
+line_comment = @{
+    "#" ~ (!NEWLINE ~ ANY)*
+}
+
+// General comment rule: only line comments in Dockerfile.
+comment = { line_comment }
+
+// ===============================
+// 🚫 Ignoring String Literals
+// ===============================
+
+// String literals in Dockerfile: single-quoted and double-quoted strings.
+// We need to avoid parsing TODOs from inside these string values.
+str_literal = _{
+    // Double-quoted strings (can contain escape sequences)
+    "\"" ~ (!"\"" ~ ANY)* ~ "\"" |
+    // Single-quoted strings
+    "'" ~ (!"'" ~ ANY)* ~ "'"
+}
+
+// ===============================
+// ❌ Any Other Non-Comment Content
+// ===============================
+
+// Anything that is NOT a comment or a string literal.
+any_non_comment = { !(comment | str_literal) ~ ANY }
