@@ -174,7 +174,7 @@ Prebuilt wheels are published for:
 | **Linux (manylinux)** | `x86_64`, `x86`, `aarch64`, `armv7`, `ppc64le` |
 | **Linux (musllinux)** | `x86_64`, `x86`, `aarch64`, `armv7`          |
 | **Windows**           | `x64`, `x86`                               |
-| **macOS**             | `x86_64` (macOS 13), `aarch64` (macOS 14)  |
+| **macOS**             | `x86_64` (macOS 15), `aarch64` (macOS 14)  |
 
 ---
 
