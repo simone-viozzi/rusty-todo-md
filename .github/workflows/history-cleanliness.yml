@@ -1,0 +1,69 @@
+name: history-cleanliness
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check:
+    name: Enforce history cleanliness
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # we need history to inspect commits
+
+      - name: Fetch remote branches
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git fetch --no-tags --prune origin +refs/heads/*:refs/remotes/origin/*
+
+      - name: Run history cleanliness checks
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+          HEAD_REF="${{ github.event.pull_request.head.ref }}"
+
+          echo "Base: $BASE_REF @ $BASE_SHA"
+          echo "Head: $HEAD_REF @ $HEAD_SHA"
+
+          # 1) Ensure the PR is rebased on the CURRENT base tip
+          #    (merge-base must be exactly the base tip)
+          MERGE_BASE="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+          echo "merge-base(base, head) = $MERGE_BASE"
+          if [[ "$MERGE_BASE" != "$BASE_SHA" ]]; then
+            echo "::error::Branch is not rebased on the latest $BASE_REF tip."
+            echo "         Rebase $HEAD_REF onto origin/$BASE_REF (no merges), then push."
+            exit 1
+          fi
+
+          # 2) Ensure the PR branch has NO merge commits since base tip
+          MERGES="$(git rev-list --merges "$BASE_SHA..$HEAD_SHA" || true)"
+          if [[ -n "$MERGES" ]]; then
+            echo "::error::Merge commits detected in $HEAD_REF. Semi-linear policy requires a clean, rebase-only branch."
+            echo "         Please 'git rebase origin/$BASE_REF' instead of merging $BASE_REF into your branch."
+            echo "         Merge commits found:"
+            echo "$MERGES"
+            exit 1
+          fi
+
+          # 3) Ensure the PR branch has NO fixup commits since base tip
+          FIXUPS="$(git rev-list --oneline --grep="^fixup!" "$BASE_SHA..$HEAD_SHA" || true)"
+          if [[ -n "$FIXUPS" ]]; then
+            echo "::error::Fixup commits detected in $HEAD_REF. Please squash fixup commits before merging."
+            echo "         Fixup commits found:"
+            echo "$FIXUPS"
+            exit 1
+          fi
+
+          echo "✅ History cleanliness checks passed: head is rebased on base tip and contains no merge or fixup commits."
