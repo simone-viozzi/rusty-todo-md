@@ -21,6 +21,7 @@ fn init_logger() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_run_cli_no_files() {
     init_logger();
 
