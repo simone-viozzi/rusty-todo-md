@@ -23,6 +23,7 @@ fn init_logger() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_run_cli_in_non_git_directory() {
     init_logger();
 
@@ -47,6 +48,7 @@ fn test_run_cli_in_non_git_directory() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_run_cli_with_unreadable_file() {
     // Initialize logging for the test.
     init_logger();
@@ -102,6 +104,7 @@ fn test_run_cli_with_unreadable_file() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_sync_todo_file_fallback_mechanism() {
     init_logger();
     info!("Starting test: test_sync_todo_file_fallback_mechanism");
