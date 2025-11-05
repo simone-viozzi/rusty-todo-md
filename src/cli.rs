@@ -47,6 +47,14 @@ where
                 .help("Automatically add TODO.md file to git staging if it was modified")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new("exclude")
+                .short('e')
+                .long("exclude")
+                .value_name("PATH")
+                .help("Exclude specific files or directories from processing. Can be specified multiple times.")
+                .action(ArgAction::Append),
+        )
         // TODO add a flag to enable debug logging
         .get_matches_from(args);
 
@@ -84,6 +92,12 @@ where
 
     let auto_add = matches.get_flag("auto_add");
 
+    // Parse exclude paths from CLI args (if any)
+    let exclude_paths: Vec<PathBuf> = matches
+        .get_many::<String>("exclude")
+        .map(|vals| vals.map(PathBuf::from).collect())
+        .unwrap_or_default();
+
     // Process files (empty vec if no files provided) to ensure cleanup happens
     if let Err(e) = process_files_from_list(
         Path::new(todo_path),
@@ -92,6 +106,7 @@ where
         repo,
         &marker_config,
         auto_add,
+        &exclude_paths,
     ) {
         error!("Error: {e}");
         std::process::exit(1);
@@ -102,9 +117,62 @@ pub fn run_cli() {
     run_cli_with_args(std::env::args(), &GitOps);
 }
 
-fn extract_todos_from_files(files: &Vec<PathBuf>, marker_config: &MarkerConfig) -> Vec<MarkedItem> {
+/// Check if a file path should be excluded based on the exclude patterns.
+/// Returns true if the file should be excluded.
+fn should_exclude(file_path: &Path, exclude_paths: &[PathBuf]) -> bool {
+    for exclude_path in exclude_paths {
+        // Get the file name for simple file name matching
+        if let Some(file_name) = file_path.file_name() {
+            if let Some(exclude_name) = exclude_path.file_name() {
+                // Check if it's a simple file name match
+                if exclude_path.components().count() == 1 && file_name == exclude_name {
+                    return true;
+                }
+            }
+        }
+
+        // Normalize both paths
+        let file_normalized = file_path.components().collect::<PathBuf>();
+        let exclude_normalized = exclude_path.components().collect::<PathBuf>();
+
+        // Check if file path ends with the exclude pattern (handles relative paths)
+        if file_normalized.ends_with(&exclude_normalized) {
+            return true;
+        }
+
+        // Check if any component sequence matches
+        let file_components: Vec<_> = file_normalized.components().collect();
+        let exclude_components: Vec<_> = exclude_normalized.components().collect();
+
+        // Check if exclude pattern matches from any position in the file path
+        for i in 0..=file_components
+            .len()
+            .saturating_sub(exclude_components.len())
+        {
+            let slice: PathBuf = file_components[i..i + exclude_components.len()]
+                .iter()
+                .collect();
+            if slice == exclude_normalized {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn extract_todos_from_files(
+    files: &Vec<PathBuf>,
+    marker_config: &MarkerConfig,
+    exclude_paths: &[PathBuf],
+) -> Vec<MarkedItem> {
     let mut new_todos = Vec::new();
     for file in files {
+        // Skip excluded files
+        if should_exclude(file, exclude_paths) {
+            info!("Excluding file: {:?}", file);
+            continue;
+        }
+
         match extract_marked_items_from_file(file, marker_config) {
             Ok(mut todos) => new_todos.append(&mut todos),
             Err(e) => error!("Error processing file {:?}: {}", file, e),
@@ -148,8 +216,9 @@ pub fn process_files_from_list(
     repo: Repository,
     marker_config: &MarkerConfig,
     auto_add: bool,
+    exclude_paths: &[PathBuf],
 ) -> Result<(), String> {
-    let new_todos = extract_todos_from_files(&scanned_files, marker_config);
+    let new_todos = extract_todos_from_files(&scanned_files, marker_config, exclude_paths);
 
     // Capture the TODO file content before modification (if it exists)
     let todo_content_before = std::fs::read_to_string(todo_path).ok();
@@ -173,7 +242,7 @@ pub fn process_files_from_list(
             }
         };
 
-        let new_todos = extract_todos_from_files(&all_files, marker_config);
+        let new_todos = extract_todos_from_files(&all_files, marker_config, exclude_paths);
 
         if let Err(err) = todo_md::write_todo_file(todo_path, new_todos) {
             error!("Error updating TODO.md: {err}");

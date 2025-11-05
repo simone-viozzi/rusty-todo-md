@@ -3,8 +3,8 @@
 * [.github/workflows/release.yml:414](.github/workflows/release.yml#L414): This is a smoke test
 
 ## src/cli.rs
-* [src/cli.rs:50](src/cli.rs#L50): add a flag to enable debug logging
-* [src/cli.rs:195](src/cli.rs#L195): simplify this, maybe move to git_utils and maybe do not check if content changed but just try to add it and ignore errors in case it was not modified
+* [src/cli.rs:58](src/cli.rs#L58): add a flag to enable debug logging
+* [src/cli.rs:255](src/cli.rs#L255): simplify this, maybe move to git_utils and maybe do not check if content changed but just try to add it and ignore errors in case it was not modified
 
 ## src/todo_extractor_internal/languages/dockerfile.rs
 * [src/todo_extractor_internal/languages/dockerfile.rs:32](src/todo_extractor_internal/languages/dockerfile.rs#L32): now in the tests i need to actually create the file instead of passing a fake path and a content
