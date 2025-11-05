@@ -132,7 +132,7 @@ CMD ["./app"]"#;
     fn test_dockerfile_mixed_comment_styles() {
         init_logger();
         let src = r#"# TODO: Base image selection
-FROM node:22-alpine
+FROM node:24-alpine
 
 RUN apt-get update && \
     # FIXME: Pin package versions
