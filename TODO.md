@@ -12,3 +12,11 @@
 
 ## src/todo_md_internal.rs
 * [src/todo_md_internal.rs:6](src/todo_md_internal.rs#L6): generalize in maker collection
+
+## tests/cli_error_tests.rs
+* [tests/cli_error_tests.rs:26](tests/cli_error_tests.rs#L26): Replace Command::cargo_bin() with cargo::cargo_bin_cmd! macro
+* [tests/cli_error_tests.rs:55](tests/cli_error_tests.rs#L55): Replace Command::cargo_bin() with cargo::cargo_bin_cmd! macro
+* [tests/cli_error_tests.rs:115](tests/cli_error_tests.rs#L115): Replace Command::cargo_bin() with cargo::cargo_bin_cmd! macro
+
+## tests/cli_no_files_tests.rs
+* [tests/cli_no_files_tests.rs:24](tests/cli_no_files_tests.rs#L24): Replace Command::cargo_bin() with cargo::cargo_bin_cmd! macro
