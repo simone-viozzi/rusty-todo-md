@@ -1,6 +1,7 @@
 // Allow deprecated functions for backward compatibility in public API
 
 pub mod cli;
+pub mod exclusion;
 pub mod git_utils;
 pub mod logger;
 pub mod todo_md;

@@ -1,3 +1,4 @@
+use crate::exclusion::{build_exclusion_matcher, filter_excluded_files, ExclusionRule};
 use crate::git_utils::GitOps;
 use crate::git_utils::GitOpsTrait;
 use crate::todo_md;
@@ -5,8 +6,7 @@ use crate::{extract_marked_items_from_file, MarkedItem, MarkerConfig};
 use clap::{Arg, ArgAction, Command};
 use git2::Repository;
 use log::{error, info};
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub fn run_cli_with_args<I, T>(args: I, git_ops: &dyn GitOpsTrait)
 where
@@ -47,6 +47,21 @@ where
                 .help("Automatically add TODO.md file to git staging if it was modified")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new("exclude")
+                .short('e')
+                .long("exclude")
+                .value_name("GLOB")
+                .help("Exclude files or directories matching glob pattern (relative to scan root). Can be specified multiple times. Use '/' suffix for directory-only patterns. Supports *, ?, and **.")
+                .action(ArgAction::Append),
+        )
+        .arg(
+            Arg::new("exclude_dir")
+                .long("exclude-dir")
+                .value_name("GLOB")
+                .help("Exclude directories matching glob pattern (directory-only). Can be specified multiple times.")
+                .action(ArgAction::Append),
+        )
         // TODO add a flag to enable debug logging
         .get_matches_from(args);
 
@@ -84,6 +99,26 @@ where
 
     let auto_add = matches.get_flag("auto_add");
 
+    // Parse exclude patterns from CLI args
+    let exclude_patterns: Vec<String> = matches
+        .get_many::<String>("exclude")
+        .map(|vals| vals.map(|s| s.to_string()).collect())
+        .unwrap_or_default();
+
+    let exclude_dir_patterns: Vec<String> = matches
+        .get_many::<String>("exclude_dir")
+        .map(|vals| vals.map(|s| s.to_string()).collect())
+        .unwrap_or_default();
+
+    // Build exclusion rules
+    let exclusion_rules = match build_exclusion_matcher(exclude_patterns, exclude_dir_patterns) {
+        Ok(rules) => rules,
+        Err(e) => {
+            error!("Error building exclusion patterns: {}", e);
+            std::process::exit(1);
+        }
+    };
+
     // Process files (empty vec if no files provided) to ensure cleanup happens
     if let Err(e) = process_files_from_list(
         Path::new(todo_path),
@@ -92,6 +127,7 @@ where
         repo,
         &marker_config,
         auto_add,
+        &exclusion_rules,
     ) {
         error!("Error: {e}");
         std::process::exit(1);
@@ -102,7 +138,7 @@ pub fn run_cli() {
     run_cli_with_args(std::env::args(), &GitOps);
 }
 
-fn extract_todos_from_files(files: &Vec<PathBuf>, marker_config: &MarkerConfig) -> Vec<MarkedItem> {
+fn extract_todos_from_files(files: &[PathBuf], marker_config: &MarkerConfig) -> Vec<MarkedItem> {
     let mut new_todos = Vec::new();
     for file in files {
         match extract_marked_items_from_file(file, marker_config) {
@@ -148,8 +184,12 @@ pub fn process_files_from_list(
     repo: Repository,
     marker_config: &MarkerConfig,
     auto_add: bool,
+    exclusion_rules: &[ExclusionRule],
 ) -> Result<(), String> {
-    let new_todos = extract_todos_from_files(&scanned_files, marker_config);
+    // Filter files based on exclusion rules before extraction
+    let filtered_files = filter_excluded_files(scanned_files.clone(), exclusion_rules);
+
+    let new_todos = extract_todos_from_files(&filtered_files, marker_config);
 
     // Capture the TODO file content before modification (if it exists)
     let todo_content_before = std::fs::read_to_string(todo_path).ok();
@@ -158,7 +198,7 @@ pub fn process_files_from_list(
     validate_no_empty_todos(&new_todos)?;
 
     // Pass the list of scanned files to sync_todo_file.
-    if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, scanned_files) {
+    if let Err(err) = todo_md::sync_todo_file(todo_path, new_todos, filtered_files.clone()) {
         info!("There was an error updating TODO.md: {err}");
 
         // This branch is tested by test_sync_todo_file_fallback_mechanism.
@@ -173,7 +213,9 @@ pub fn process_files_from_list(
             }
         };
 
-        let new_todos = extract_todos_from_files(&all_files, marker_config);
+        // Filter all files with exclusion rules
+        let filtered_all_files = filter_excluded_files(all_files, exclusion_rules);
+        let new_todos = extract_todos_from_files(&filtered_all_files, marker_config);
 
         if let Err(err) = todo_md::write_todo_file(todo_path, new_todos) {
             error!("Error updating TODO.md: {err}");

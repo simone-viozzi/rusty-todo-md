@@ -23,6 +23,11 @@ fn init_logger() {
 }
 
 #[test]
+// TODO: Replace Command::cargo_bin() with cargo::cargo_bin_cmd! macro
+// The current usage of Command::cargo_bin() is deprecated and incompatible with custom cargo build-dir.
+// This #[allow(deprecated)] suppresses clippy warnings to prevent pre-commit hook failures.
+// See: https://docs.rs/assert_cmd/latest/assert_cmd/cargo/fn.cargo_bin_cmd.html
+#[allow(deprecated)]
 fn test_run_cli_in_non_git_directory() {
     init_logger();
 
@@ -47,6 +52,11 @@ fn test_run_cli_in_non_git_directory() {
 }
 
 #[test]
+// TODO: Replace Command::cargo_bin() with cargo::cargo_bin_cmd! macro
+// The current usage of Command::cargo_bin() is deprecated and incompatible with custom cargo build-dir.
+// This #[allow(deprecated)] suppresses clippy warnings to prevent pre-commit hook failures.
+// See: https://docs.rs/assert_cmd/latest/assert_cmd/cargo/fn.cargo_bin_cmd.html
+#[allow(deprecated)]
 fn test_run_cli_with_unreadable_file() {
     // Initialize logging for the test.
     init_logger();
@@ -102,6 +112,11 @@ fn test_run_cli_with_unreadable_file() {
 }
 
 #[test]
+// TODO: Replace Command::cargo_bin() with cargo::cargo_bin_cmd! macro
+// The current usage of Command::cargo_bin() is deprecated and incompatible with custom cargo build-dir.
+// This #[allow(deprecated)] suppresses clippy warnings to prevent pre-commit hook failures.
+// See: https://docs.rs/assert_cmd/latest/assert_cmd/cargo/fn.cargo_bin_cmd.html
+#[allow(deprecated)]
 fn test_sync_todo_file_fallback_mechanism() {
     init_logger();
     info!("Starting test: test_sync_todo_file_fallback_mechanism");

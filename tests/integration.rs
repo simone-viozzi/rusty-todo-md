@@ -26,6 +26,10 @@ mod integration_tests {
     /// Helper to create a file in the provided directory.
     fn create_test_file(dir: &Path, filename: &str, content: &str) -> PathBuf {
         let file_path = dir.join(filename);
+        // Create parent directories if needed for nested files
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent).ok();
+        }
         fs::write(&file_path, content).expect("Failed to write test file");
         file_path
     }
@@ -574,5 +578,64 @@ mod integration_tests {
         assert!(content.contains("test marker in file2"));
 
         log::info!("test_markers_with_separator completed successfully");
+    }
+
+    /// Integration test for file exclusion with glob patterns
+    #[test]
+    fn test_exclude_files_with_glob_patterns() {
+        init_logger();
+        log::info!("Starting test_exclude_files_with_glob_patterns");
+
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let repo_path = temp_dir.path();
+        let todo_path = repo_path.join("TODO.md");
+
+        // Create multiple files with TODO comments
+        let file1 = create_test_file(repo_path, "src/main.rs", "// TODO: Main file");
+        let file2 = create_test_file(repo_path, "src/lib.rs", "// TODO: Library file");
+        let file3 = create_test_file(repo_path, "build/output.rs", "// TODO: Build output");
+        let file4 = create_test_file(repo_path, "tests/test.rs", "// TODO: Test file");
+
+        // Exclude src/ directory and all build output
+        let args = vec![
+            "rusty-todo-md".to_string(),
+            "--todo-path".to_string(),
+            todo_path.to_str().unwrap().to_string(),
+            "--exclude".to_string(),
+            "src/".to_string(),
+            "--exclude-dir".to_string(),
+            "build".to_string(),
+            file1.to_str().unwrap().to_string(),
+            file2.to_str().unwrap().to_string(),
+            file3.to_str().unwrap().to_string(),
+            file4.to_str().unwrap().to_string(),
+        ];
+
+        let (temp_dir_git, repo) = init_repo().expect("Failed to init repo");
+        let staged_files = vec![file1, file2, file3, file4.clone()];
+        let fake_git_ops = FakeGitOps::new(repo, temp_dir_git, staged_files, vec![]);
+
+        run_cli_with_args(args, &fake_git_ops);
+
+        let content = fs::read_to_string(&todo_path).expect("Failed to read TODO.md");
+        log::debug!("TODO.md content: {}", content);
+
+        // src/ should be excluded
+        assert!(!content.contains("src/main.rs"), "src/ should be excluded");
+        assert!(!content.contains("src/lib.rs"), "src/ should be excluded");
+
+        // build should be excluded
+        assert!(
+            !content.contains("build/output.rs"),
+            "build/ should be excluded"
+        );
+
+        // tests should be included
+        assert!(
+            content.contains("tests/test.rs"),
+            "tests/ should be included"
+        );
+
+        log::info!("test_exclude_files_with_glob_patterns completed successfully");
     }
 }
