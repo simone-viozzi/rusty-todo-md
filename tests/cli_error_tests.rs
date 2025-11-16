@@ -1,4 +1,4 @@
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use log::LevelFilter;
 use log::{debug, info};
 use predicates::str::contains;
@@ -23,11 +23,9 @@ fn init_logger() {
 }
 
 #[test]
-// TODO: Replace Command::cargo_bin() with cargo::cargo_bin_cmd! macro
-// The current usage of Command::cargo_bin() is deprecated and incompatible with custom cargo build-dir.
-// This #[allow(deprecated)] suppresses clippy warnings to prevent pre-commit hook failures.
-// See: https://docs.rs/assert_cmd/latest/assert_cmd/cargo/fn.cargo_bin_cmd.html
-#[allow(deprecated)]
+// Uses assert_cmd::cargo::cargo_bin_cmd! to locate the test binary in a way
+// that works with custom Cargo build directories. See:
+// https://docs.rs/assert_cmd/latest/assert_cmd/cargo/
 fn test_run_cli_in_non_git_directory() {
     init_logger();
 
@@ -38,7 +36,8 @@ fn test_run_cli_in_non_git_directory() {
     debug!("Created temporary directory: {:?}", temp.path());
 
     // Run the CLI binary in that directory. Since there is no .git, it should fail.
-    let mut cmd = Command::cargo_bin("rusty-todo-md").expect("binary exists");
+    let mut cmd = cargo_bin_cmd!("rusty-todo-md");
+
     debug!("Running CLI binary in temporary directory");
     cmd.current_dir(&temp)
         .arg("--todo-path")
@@ -52,11 +51,9 @@ fn test_run_cli_in_non_git_directory() {
 }
 
 #[test]
-// TODO: Replace Command::cargo_bin() with cargo::cargo_bin_cmd! macro
-// The current usage of Command::cargo_bin() is deprecated and incompatible with custom cargo build-dir.
-// This #[allow(deprecated)] suppresses clippy warnings to prevent pre-commit hook failures.
-// See: https://docs.rs/assert_cmd/latest/assert_cmd/cargo/fn.cargo_bin_cmd.html
-#[allow(deprecated)]
+// Uses assert_cmd::cargo::cargo_bin_cmd! to locate the test binary in a way
+// that works with custom Cargo build directories. See:
+// https://docs.rs/assert_cmd/latest/assert_cmd/cargo/
 fn test_run_cli_with_unreadable_file() {
     // Initialize logging for the test.
     init_logger();
@@ -84,7 +81,8 @@ fn test_run_cli_with_unreadable_file() {
     }
 
     // Run the CLI binary in the repository directory.
-    let mut cmd = Command::cargo_bin("rusty-todo-md").expect("binary exists");
+    let mut cmd = cargo_bin_cmd!("rusty-todo-md");
+
     debug!("Running CLI binary in repository directory");
     cmd.current_dir(repo_dir)
         .arg("--todo-path")
@@ -112,11 +110,9 @@ fn test_run_cli_with_unreadable_file() {
 }
 
 #[test]
-// TODO: Replace Command::cargo_bin() with cargo::cargo_bin_cmd! macro
-// The current usage of Command::cargo_bin() is deprecated and incompatible with custom cargo build-dir.
-// This #[allow(deprecated)] suppresses clippy warnings to prevent pre-commit hook failures.
-// See: https://docs.rs/assert_cmd/latest/assert_cmd/cargo/fn.cargo_bin_cmd.html
-#[allow(deprecated)]
+// Uses assert_cmd::cargo::cargo_bin_cmd! to locate the test binary in a way
+// that works with custom Cargo build directories. See:
+// https://docs.rs/assert_cmd/latest/assert_cmd/cargo/
 fn test_sync_todo_file_fallback_mechanism() {
     init_logger();
     info!("Starting test: test_sync_todo_file_fallback_mechanism");
@@ -171,7 +167,8 @@ Just plain text that should trigger validation failure
     debug!("Committed test file with git2");
 
     // Run the CLI binary - this should trigger the fallback mechanism
-    let mut cmd = Command::cargo_bin("rusty-todo-md").expect("binary exists");
+    let mut cmd = cargo_bin_cmd!("rusty-todo-md");
+
     debug!("Running CLI binary to test fallback mechanism");
     cmd.current_dir(repo_dir)
         .env("RUST_LOG", "debug")
