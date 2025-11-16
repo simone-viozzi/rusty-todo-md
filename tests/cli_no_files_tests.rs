@@ -1,4 +1,4 @@
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use log::LevelFilter;
 mod utils;
 use utils::init_repo;
@@ -21,11 +21,9 @@ fn init_logger() {
 }
 
 #[test]
-// TODO: Replace Command::cargo_bin() with cargo::cargo_bin_cmd! macro
-// The current usage of Command::cargo_bin() is deprecated and incompatible with custom cargo build-dir.
-// This #[allow(deprecated)] suppresses clippy warnings to prevent pre-commit hook failures.
-// See: https://docs.rs/assert_cmd/latest/assert_cmd/cargo/fn.cargo_bin_cmd.html
-#[allow(deprecated)]
+// Uses assert_cmd::cargo::cargo_bin_cmd! to locate the test binary in a way
+// that works with custom Cargo build directories. See:
+// https://docs.rs/assert_cmd/latest/assert_cmd/cargo/
 fn test_run_cli_no_files() {
     init_logger();
 
@@ -34,7 +32,8 @@ fn test_run_cli_no_files() {
 
     // Run the CLI binary from the temporary directory with only the TODO file specified.
     // Since no files are provided, it should log "No files provided, nothing to do." and exit with code 0.
-    let mut cmd = Command::cargo_bin("rusty-todo-md").expect("binary exists");
+    let mut cmd = cargo_bin_cmd!("rusty-todo-md");
+
     cmd.current_dir(repo_dir).arg("--todo-path").arg("TODO.md"); // no file arguments
 
     // Because the CLI calls std::process::exit(0) in this branch,
