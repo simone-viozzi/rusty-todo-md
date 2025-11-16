@@ -52,6 +52,7 @@ repos:
           - "target"
           - "--exclude"
           - "**/*.test.js"
+          - --
         language_version: python3.11
 ```
 
