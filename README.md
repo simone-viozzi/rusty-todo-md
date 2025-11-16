@@ -32,6 +32,29 @@ repos:
 - `args` customise the markers to scan for and enable `--auto-add` to stage `TODO.md` automatically.
 - `language_version` forces the hook to run with a specific Python interpreter.
 
+**Example with exclusions:**
+
+```yaml
+repos:
+  - repo: https://github.com/simone-viozzi/rusty-todo-md-pre-commit
+    rev: v1.9.1
+    hooks:
+      - id: rusty-todo-md
+        args:
+          - "--auto-add"
+          - "--markers"
+          - "TODO"
+          - "FIXME"
+          - "HACK"
+          - "--exclude-dir"
+          - "node_modules"
+          - "--exclude-dir"
+          - "target"
+          - "--exclude"
+          - "**/*.test.js"
+        language_version: python3.11
+```
+
 Then install the hook:
 
 ```sh
@@ -112,6 +135,65 @@ rusty-todo-md --auto-add path/to/file.rs
 ```sh
 rusty-todo-md --todo-path docs/TODOS.md
 ```
+
+### Exclude files and directories
+
+Rusty TODO.md supports glob-based exclusion patterns to filter out files and directories from TODO extraction.
+
+#### Exclude specific files or patterns
+```sh
+# Exclude all log files
+rusty-todo-md --exclude "*.log"
+
+# Exclude specific file
+rusty-todo-md --exclude "config.rs"
+
+# Exclude files in a specific directory
+rusty-todo-md --exclude "src/generated/*"
+```
+
+#### Exclude directories
+```sh
+# Exclude a directory (and all files within it)
+rusty-todo-md --exclude-dir "build"
+
+# Or use --exclude with trailing slash
+rusty-todo-md --exclude "build/"
+
+# Exclude multiple directories
+rusty-todo-md --exclude-dir "node_modules" --exclude-dir "target"
+```
+
+#### Recursive exclusion with wildcards
+```sh
+# Exclude all files under src/ recursively
+rusty-todo-md --exclude "src/**"
+
+# Exclude all .test.js files anywhere in the tree
+rusty-todo-md --exclude "**/*.test.js"
+
+# Exclude all 'vendor' directories at any depth
+rusty-todo-md --exclude-dir "**/vendor"
+```
+
+#### Multiple exclusion patterns
+```sh
+# Combine multiple exclusions
+rusty-todo-md \
+  --exclude "*.log" \
+  --exclude "*.tmp" \
+  --exclude-dir "build" \
+  --exclude-dir "dist" \
+  --markers TODO FIXME
+```
+
+#### Glob pattern syntax
+- `*` — matches any sequence of characters within a single path component
+- `?` — matches any single character
+- `**` — matches zero or more path components (recursive)
+- `/` suffix — indicates directory-only matching (when used with `--exclude`)
+
+> **Note:** Patterns are matched relative to the scan root. The `--exclude-dir` flag automatically ensures directory-only matching.
 
 ---
 
