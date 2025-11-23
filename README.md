@@ -25,7 +25,7 @@ repos:
     rev: v1.9.1  # Use the latest upstream tag (shim mirrors upstream)
     hooks:
       - id: rusty-todo-md
-        args: ["--auto-add", "--markers", "TODO", "FIXME", "HACK"]
+        args: ["--auto-add", "--markers", "TODO", "FIXME", "HACK", "--"]
         language_version: python3.11
 ```
 
@@ -52,6 +52,7 @@ repos:
           - "target"
           - "--exclude"
           - "**/*.test.js"
+          - --
         language_version: python3.11
 ```
 
