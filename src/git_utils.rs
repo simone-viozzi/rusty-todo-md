@@ -71,7 +71,9 @@ impl GitOpsTrait for GitOps {
                 let path = if root.is_empty() {
                     entry.name().unwrap_or("").into()
                 } else {
-                    format!("{}/{}", root, entry.name().unwrap_or(""))
+                    // Strip trailing slash from root to avoid double slashes
+                    let root_trimmed = root.trim_end_matches('/');
+                    format!("{}/{}", root_trimmed, entry.name().unwrap_or(""))
                 };
                 debug!("Tracked file: {path:?}",);
                 tracked_files.push(PathBuf::from(path));

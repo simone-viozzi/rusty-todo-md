@@ -30,6 +30,21 @@ fn test_get_tracked_files() {
     let (_temp_dir, repo) = init_repo().unwrap();
     let tracked = GitOps.get_tracked_files(&repo).unwrap();
     assert!(tracked.contains(&PathBuf::from("test.txt")));
+    // Verify nested directory file is tracked with correct path (no double slashes)
+    assert!(
+        tracked.contains(&PathBuf::from("app/src/nested.txt")),
+        "Expected 'app/src/nested.txt' in tracked files, got: {:?}",
+        tracked
+    );
+    // Verify no path contains double slashes
+    for path in &tracked {
+        let path_str = path.to_string_lossy();
+        assert!(
+            !path_str.contains("//"),
+            "Path '{}' contains double slashes",
+            path_str
+        );
+    }
     info!("Completed test_get_tracked_files");
 }
 
