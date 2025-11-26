@@ -35,6 +35,16 @@ pub fn init_repo() -> Result<(TempDir, Repository), GitError> {
     }
     debug!("Created initial file: {:?}", file_path);
 
+    // 3b. Create a file in a nested directory to test path handling.
+    let nested_dir = temp_dir.path().join("app").join("src");
+    std::fs::create_dir_all(&nested_dir).expect("failed to create nested directories");
+    let nested_file = nested_dir.join("nested.txt");
+    {
+        let mut file = File::create(&nested_file).expect("failed to create nested file");
+        writeln!(file, "nested content").expect("failed to write to nested file");
+    }
+    debug!("Created nested file: {:?}", nested_file);
+
     // 4. Stage the file (simulate `git add .`).
     let mut index = repo.index()?;
     index.add_all(["."].iter(), IndexAddOption::DEFAULT, None)?;
