@@ -257,3 +257,4 @@ Cargo.lock
 coverage/
 
 lldb-bin/
+.mcp.json
