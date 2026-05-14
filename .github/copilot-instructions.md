@@ -121,7 +121,8 @@ pre-commit run rusty-todo-md
 ├── TODO.md                # Generated TODO file (example)
 ├── bump-version.sh        # Version management script
 ├── pyproject.toml         # Python packaging configuration
-├── shell.nix              # Nix development environment
+├── flake.nix              # Nix development environment (flake)
+├── flake.lock             # Pinned flake inputs
 ├── src/                   # Rust source code
 │   ├── main.rs
 │   ├── cli.rs
@@ -157,8 +158,8 @@ RUST_LOG=debug rusty-todo-md file1.rs
 
 ### Development Environment Setup (Optional - Nix)
 ```bash
-# Enter nix shell for reproducible development environment
-nix-shell shell.nix
+# Enter nix dev shell for reproducible development environment
+nix develop
 ```
 
 ## CI/CD Integration
