@@ -1,4 +1,4 @@
-use git2::{DiffOptions, Error as GitError, ObjectType, Repository, TreeWalkMode, TreeWalkResult};
+use git2::{DiffOptions, Error as GitError, Repository};
 use log::{debug, info};
 use std::path::{Path, PathBuf};
 
@@ -59,27 +59,32 @@ impl GitOpsTrait for GitOps {
         Ok(staged_files)
     }
 
-    /// Retrieves all files that are currently tracked by Git by walking the HEAD tree.
-    /// This function ignores directories (like the .git folder) and returns file paths relative to the repo root.
+    /// Retrieves all files git considers tracked **right now** — i.e. the
+    /// current index. Equivalent to `git ls-files`.
+    ///
+    /// We deliberately read the index rather than walking the HEAD tree:
+    /// during `git rebase` (and during a partial-commit pre-commit run) the
+    /// index reflects the state being committed, while HEAD still points at
+    /// the previous commit. The merge driver invoked mid-rebase needs the
+    /// index view, otherwise files added by the replayed commit are missed
+    /// and their TODOs silently disappear from TODO.md.
     fn get_tracked_files(&self, repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
-        debug!("Retrieving all tracked files");
-        let head_tree = repo.head()?.peel_to_tree()?;
-        let mut tracked_files = Vec::new();
-
-        head_tree.walk(TreeWalkMode::PreOrder, |root, entry| {
-            if entry.kind() == Some(ObjectType::Blob) {
-                let path = if root.is_empty() {
-                    entry.name().unwrap_or("").into()
-                } else {
-                    // Strip trailing slash from root to avoid double slashes
-                    let root_trimmed = root.trim_end_matches('/');
-                    format!("{}/{}", root_trimmed, entry.name().unwrap_or(""))
-                };
-                debug!("Tracked file: {path:?}",);
-                tracked_files.push(PathBuf::from(path));
-            }
-            TreeWalkResult::Ok
-        })?;
+        debug!("Retrieving all tracked files from index");
+        let index = repo.index()?;
+        let mut tracked_files = Vec::with_capacity(index.len());
+        for entry in index.iter() {
+            // index path bytes are git's internal encoding; on unix this is
+            // raw filesystem bytes, on windows it's UTF-8.
+            let path = match std::str::from_utf8(&entry.path) {
+                Ok(s) => PathBuf::from(s),
+                Err(_) => {
+                    debug!("Skipping index entry with non-UTF-8 path");
+                    continue;
+                }
+            };
+            debug!("Tracked file: {path:?}");
+            tracked_files.push(path);
+        }
         info!(
             "Found {tracked_files_len} tracked files",
             tracked_files_len = tracked_files.len()

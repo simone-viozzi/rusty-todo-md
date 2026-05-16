@@ -48,6 +48,29 @@ fn test_get_tracked_files() {
     info!("Completed test_get_tracked_files");
 }
 
+/// `get_tracked_files` must reflect the current index, not the HEAD tree:
+/// during a rebase/merge-driver invocation files added in the replayed commit
+/// are in the index but not yet in HEAD.
+#[test]
+fn test_get_tracked_files_includes_staged_but_uncommitted() {
+    init_logger();
+    info!("Starting test_get_tracked_files_includes_staged_but_uncommitted");
+    let (temp_dir, repo) = init_repo().unwrap();
+
+    // Add a brand-new file and stage it, but do NOT commit.
+    let new_file = temp_dir.path().join("freshly_staged.rs");
+    std::fs::write(&new_file, "// TODO: new\n").unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new("freshly_staged.rs")).unwrap();
+    index.write().unwrap();
+
+    let tracked = GitOps.get_tracked_files(&repo).unwrap();
+    assert!(
+        tracked.contains(&PathBuf::from("freshly_staged.rs")),
+        "expected staged-but-uncommitted file in tracked list, got: {tracked:?}"
+    );
+}
+
 #[test]
 fn test_get_staged_files() {
     init_logger();
