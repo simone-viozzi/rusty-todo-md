@@ -284,6 +284,16 @@ pub fn extract_marked_items_from_file(
 
     match std::fs::read_to_string(file) {
         Ok(content) => {
+            if content_has_conflict_markers(&content) {
+                // Use eprintln (not log::warn) so this surfaces without the
+                // user having to set RUST_LOG — these warnings are essential
+                // context during a rebase.
+                eprintln!(
+                    "rusty-todo-md: skipping {}: contains conflict markers",
+                    file.display()
+                );
+                return Ok(Vec::new());
+            }
             if !content_may_contain_marker(&content, &marker_config.markers) {
                 info!(
                     "Skipping file with no marker substrings present: {:?}",
@@ -312,6 +322,13 @@ fn content_may_contain_marker(content: &str, markers: &[String]) -> bool {
     markers
         .iter()
         .any(|m| !m.is_empty() && content.contains(m.as_str()))
+}
+
+/// Detect Git conflict markers in raw file bytes. Used to skip source files
+/// mid-rebase so the regenerate path doesn't pull garbled TODOs out of a
+/// half-merged file. Conservative: only `<<<<<<<` at the start of a line.
+pub fn content_has_conflict_markers(content: &str) -> bool {
+    content.lines().any(|line| line.starts_with("<<<<<<<"))
 }
 
 /// A single comment line with (line_number, entire_comment_text).

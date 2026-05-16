@@ -198,6 +198,52 @@ rusty-todo-md \
 
 ---
 
+## 🔀 Rebase conflicts in TODO.md
+
+Because each `TODO.md` bullet embeds the line number twice (`* [file:line](file#L<line>)`), branches that shift TODOs to different line numbers produce a Git conflict at every replayed commit during a rebase. The fix is a **custom git merge driver** that regenerates `TODO.md` from working-tree source instead of trying to text-merge the file.
+
+### Default flow (no install)
+
+Without the driver installed, `TODO.md` conflicts the way it always has. To rebuild it after a conflict:
+
+```sh
+rusty-todo-md --regenerate
+```
+
+This re-scans every tracked file and rewrites `TODO.md` from scratch, wiping any conflict markers. The tool also prints a one-line advisory whenever it detects `<<<<<<<` in `TODO.md`, pointing at `--regenerate` and `--install-merge-driver`.
+
+### Install the merge driver (per-clone, once)
+
+To eliminate this conflict shape entirely on a given clone:
+
+```sh
+rusty-todo-md --install-merge-driver
+```
+
+This writes two pieces of state, both local to the clone:
+
+1. `merge.rusty-todo-md.name` and `merge.rusty-todo-md.driver` in `.git/config`.
+2. `TODO.md merge=rusty-todo-md` appended to `.gitattributes` (committable).
+
+The command prints exactly what it changed, plus the `git config --unset` lines to undo. Pass `--markers`, `--exclude`, `--exclude-dir`, or `--todo-path` to bake non-default settings into the driver command. After install, future rebases call `rusty-todo-md --merge-driver` for `TODO.md` and resolve cleanly without text-merging line numbers.
+
+### Repo-maintainer opt-in (auto-install)
+
+Maintainers who want every collaborator's clone to register the driver automatically can add the flag to pre-commit args:
+
+```yaml
+- id: rusty-todo-md
+  args: ["--auto-add", "--auto-install-merge-driver", "--markers", "TODO", "FIXME", "--"]
+```
+
+On the first pre-commit run in each clone, the tool registers the driver and prints a loud summary to stdout describing exactly what was modified. On subsequent runs it's a no-op. The maintainer's PR adding the flag serves as team consent; the visible-on-first-run message ensures no collaborator is surprised.
+
+### Failure mode
+
+If a source file is in a conflicted state (contains `<<<<<<<`) when the merge driver runs, the extractor skips it with a stderr warning. `TODO.md` is then approximate until you resolve the source-file conflicts and re-run `rusty-todo-md --regenerate`.
+
+---
+
 ## 📝 Supported languages & extensions
 
 Rusty TODO.md detects comment syntax based on file extension:
