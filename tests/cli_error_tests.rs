@@ -1,4 +1,4 @@
-use assert_cmd::cargo::cargo_bin_cmd;
+use assert_cmd::Command;
 use log::LevelFilter;
 use log::{debug, info};
 use predicates::str::contains;
@@ -36,7 +36,8 @@ fn test_run_cli_in_non_git_directory() {
     debug!("Created temporary directory: {:?}", temp.path());
 
     // Run the CLI binary in that directory. Since there is no .git, it should fail.
-    let mut cmd = cargo_bin_cmd!("rusty-todo-md");
+    let mut cmd =
+        Command::cargo_bin("rusty-todo-md").expect("failed to locate rusty-todo-md binary");
 
     debug!("Running CLI binary in temporary directory");
     cmd.current_dir(&temp)
@@ -81,7 +82,8 @@ fn test_run_cli_with_unreadable_file() {
     }
 
     // Run the CLI binary in the repository directory.
-    let mut cmd = cargo_bin_cmd!("rusty-todo-md");
+    let mut cmd =
+        Command::cargo_bin("rusty-todo-md").expect("failed to locate rusty-todo-md binary");
 
     debug!("Running CLI binary in repository directory");
     cmd.current_dir(repo_dir)
@@ -167,7 +169,8 @@ Just plain text that should trigger validation failure
     debug!("Committed test file with git2");
 
     // Run the CLI binary - this should trigger the fallback mechanism
-    let mut cmd = cargo_bin_cmd!("rusty-todo-md");
+    let mut cmd =
+        Command::cargo_bin("rusty-todo-md").expect("failed to locate rusty-todo-md binary");
 
     debug!("Running CLI binary to test fallback mechanism");
     cmd.current_dir(repo_dir)
