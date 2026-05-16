@@ -235,28 +235,31 @@ mod mode {
     }
 
     /// Auto-install side-effect. Only called from scan mode when
-    /// `--auto-install-merge-driver` is set. Non-fatal on failure: a flaky
-    /// install must never block the actual pre-commit work.
+    /// `--auto-install-merge-driver` is set. Reconciles the registered
+    /// driver against the current invocation's args: silent no-op when
+    /// already in sync, loud summary when it has to write. Non-fatal on
+    /// failure — a flaky install must never block the actual pre-commit
+    /// work.
     fn maybe_auto_install(args: &ParsedArgs, repo: &Repository) {
-        if merge_driver::is_driver_registered(repo) {
-            return;
-        }
-        match merge_driver::install_driver(
+        match merge_driver::reconcile(
             repo,
             &args.marker_config,
             &args.exclude_patterns,
             &args.exclude_dir_patterns,
             &args.todo_path,
         ) {
-            Ok(summary) => {
+            Ok(None) => {
+                // Already in sync — say nothing.
+            }
+            Ok(Some(summary)) => {
                 println!(
-                    "rusty-todo-md: --auto-install-merge-driver enabled and driver not yet registered."
+                    "rusty-todo-md: --auto-install-merge-driver reconciling merge driver registration."
                 );
                 print!("{}", merge_driver::format_install_summary(&summary));
             }
             Err(e) => {
                 eprintln!(
-                    "rusty-todo-md: --auto-install-merge-driver: failed to install driver: {e}"
+                    "rusty-todo-md: --auto-install-merge-driver: failed to reconcile driver: {e}"
                 );
             }
         }
