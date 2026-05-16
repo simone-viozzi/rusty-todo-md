@@ -48,6 +48,49 @@ fn test_get_tracked_files() {
     info!("Completed test_get_tracked_files");
 }
 
+/// During an unresolved merge, the index holds the same path at multiple
+/// stages (1 = ancestor, 2 = ours, 3 = theirs). We must return each path
+/// exactly once — otherwise the merge driver re-scans the same source file
+/// up to three times and emits duplicate warnings.
+#[test]
+fn test_get_tracked_files_deduplicates_conflict_stages() {
+    init_logger();
+    let (_temp_dir, repo) = init_repo().unwrap();
+
+    // Forge an index with three conflict-stage entries for one path. This
+    // mirrors the state git leaves the index in mid-merge.
+    let mut index = repo.index().unwrap();
+    let oid = repo.blob(b"placeholder").unwrap();
+    for stage in 1..=3u16 {
+        let entry = git2::IndexEntry {
+            ctime: git2::IndexTime::new(0, 0),
+            mtime: git2::IndexTime::new(0, 0),
+            dev: 0,
+            ino: 0,
+            mode: 0o100644,
+            uid: 0,
+            gid: 0,
+            file_size: 11,
+            id: oid,
+            // bits 12-13 of flags encode the stage.
+            flags: stage << 12,
+            flags_extended: 0,
+            path: b"conflicted.txt".to_vec(),
+        };
+        index.add(&entry).unwrap();
+    }
+
+    let tracked = GitOps.get_tracked_files(&repo).unwrap();
+    let occurrences = tracked
+        .iter()
+        .filter(|p| p == &&PathBuf::from("conflicted.txt"))
+        .count();
+    assert_eq!(
+        occurrences, 1,
+        "expected conflicted.txt once, got {occurrences} (tracked: {tracked:?})"
+    );
+}
+
 /// `get_tracked_files` must reflect the current index, not the HEAD tree:
 /// during a rebase/merge-driver invocation files added in the replayed commit
 /// are in the index but not yet in HEAD.

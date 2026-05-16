@@ -68,10 +68,17 @@ impl GitOpsTrait for GitOps {
     /// the previous commit. The merge driver invoked mid-rebase needs the
     /// index view, otherwise files added by the replayed commit are missed
     /// and their TODOs silently disappear from TODO.md.
+    ///
+    /// During an unresolved merge, the index can hold multiple entries for
+    /// the same path — one per conflict stage (1 = ancestor, 2 = ours,
+    /// 3 = theirs). The working-tree file is the same on disk for all
+    /// stages, so we deduplicate by path: the first entry we see per path
+    /// wins (stage 0 if present, otherwise stage 1).
     fn get_tracked_files(&self, repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
         debug!("Retrieving all tracked files from index");
         let index = repo.index()?;
         let mut tracked_files = Vec::with_capacity(index.len());
+        let mut seen = std::collections::HashSet::new();
         for entry in index.iter() {
             // index path bytes are git's internal encoding; on unix this is
             // raw filesystem bytes, on windows it's UTF-8.
@@ -82,6 +89,9 @@ impl GitOpsTrait for GitOps {
                     continue;
                 }
             };
+            if !seen.insert(path.clone()) {
+                continue;
+            }
             debug!("Tracked file: {path:?}");
             tracked_files.push(path);
         }
