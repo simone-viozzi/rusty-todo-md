@@ -200,32 +200,47 @@ rusty-todo-md \
 
 ## 🔀 Rebase conflicts in TODO.md
 
-Because each `TODO.md` bullet embeds the line number twice (`* [file:line](file#L<line>)`), branches that shift TODOs to different line numbers produce a Git conflict at every replayed commit during a rebase. The fix is a **custom git merge driver** that regenerates `TODO.md` from working-tree source instead of trying to text-merge the file.
+### Why it happens
 
-### Default flow (no install)
+Each `TODO.md` bullet embeds the line number twice — once in the label and once in the link anchor (`* [file:line](file#L<line>)`). When two branches both shift the same TODO to different line numbers, git's line-by-line text merge sees the same physical `TODO.md` line edited differently on each side and produces a conflict — at **every replayed commit** during a rebase. The user did not meaningfully edit `TODO.md`; the line numbers just moved.
 
-Without the driver installed, `TODO.md` conflicts the way it always has. To rebuild it after a conflict:
+### Workflow without the driver
+
+You still get a `TODO.md` conflict whenever the underlying source files shift. When that happens:
 
 ```sh
 rusty-todo-md --regenerate
 ```
 
-This re-scans every tracked file and rewrites `TODO.md` from scratch, wiping any conflict markers. The tool also prints a one-line advisory whenever it detects `<<<<<<<` in `TODO.md`, pointing at `--regenerate` and `--install-merge-driver`.
+This re-scans every tracked file and rewrites `TODO.md` from scratch, wiping any conflict markers. The tool also prints a one-line advisory whenever it detects `<<<<<<<` in `TODO.md` (during a regular pre-commit run), pointing at `--regenerate` and `--install-merge-driver`.
 
-### Install the merge driver (per-clone, once)
+### Workflow with the driver (one-time per-clone install)
 
-To eliminate this conflict shape entirely on a given clone:
+To eliminate this conflict shape entirely:
 
 ```sh
 rusty-todo-md --install-merge-driver
 ```
 
-This writes two pieces of state, both local to the clone:
+What this changes (printed verbatim on every run):
 
-1. `merge.rusty-todo-md.name` and `merge.rusty-todo-md.driver` in `.git/config`.
-2. `TODO.md merge=rusty-todo-md` appended to `.gitattributes` (committable).
+1. `merge.rusty-todo-md.name` and `merge.rusty-todo-md.driver` in `.git/config` (clone-local; not committed).
+2. A managed block appended to `.gitattributes` (committable, so collaborators inherit the rule):
+   ```
+   # BEGIN rusty-todo-md (managed; do not edit between markers)
+   TODO.md merge=rusty-todo-md
+   # END rusty-todo-md
+   ```
 
-The command prints exactly what it changed, plus the `git config --unset` lines to undo. Pass `--markers`, `--exclude`, `--exclude-dir`, or `--todo-path` to bake non-default settings into the driver command. After install, future rebases call `rusty-todo-md --merge-driver` for `TODO.md` and resolve cleanly without text-merging line numbers.
+Pass `--markers`, `--exclude`, `--exclude-dir`, or `--todo-path` to bake non-default settings into the registered driver command — those args propagate into the merge-driver invocation.
+
+**What happens during a rebase, with the driver installed:**
+
+1. Git replays a commit that touched source files which had also moved in your branch.
+2. Source files with overlapping edits get conflict markers (normal git behavior — you resolve those by hand).
+3. When git would have emitted a `TODO.md` conflict, it invokes our merge driver instead.
+4. The driver ignores both sides of the would-be `TODO.md` merge, re-scans every tracked source file in the current working tree (which already has commit N applied for files that merged cleanly), and writes the canonical `TODO.md` to the OURS path.
+5. Git accepts the result as the resolution. No `TODO.md` conflict to fix by hand.
 
 ### Repo-maintainer opt-in (auto-install)
 
@@ -236,11 +251,14 @@ Maintainers who want every collaborator's clone to register the driver automatic
   args: ["--auto-add", "--auto-install-merge-driver", "--markers", "TODO", "FIXME", "--"]
 ```
 
-On the first pre-commit run in each clone, the tool registers the driver and prints a loud summary to stdout describing exactly what was modified. On subsequent runs it's a no-op. The maintainer's PR adding the flag serves as team consent; the visible-on-first-run message ensures no collaborator is surprised.
+On every pre-commit invocation, the tool **reconciles** the registration: if `.git/config` and the `.gitattributes` block already match the args this run was invoked with, it does nothing silently. If they don't (first run on a fresh clone, or someone changed `args:` in `.pre-commit-config.yaml` and the registration went stale), it rewrites them and prints a loud summary to stdout describing exactly what changed.
 
-### Failure mode
+The maintainer's PR adding the flag serves as team consent; the visible-on-change message ensures no collaborator is surprised by config mutation.
 
-If a source file is in a conflicted state (contains `<<<<<<<`) when the merge driver runs, the extractor skips it with a stderr warning. `TODO.md` is then approximate until you resolve the source-file conflicts and re-run `rusty-todo-md --regenerate`.
+### Failure modes
+
+- **Source file in a conflicted state when the merge driver runs** (e.g., a rebase that left `<<<<<<<` in some `.rs` file you haven't resolved yet). The extractor skips that file with a stderr warning rather than emitting garbled TODOs. `TODO.md` is then approximate until you resolve the source conflicts and re-run `rusty-todo-md --regenerate` to canonicalize.
+- **Pre-commit hooks do not run during `git rebase` or `git rebase --continue`.** The driver runs because git invokes it directly for the `TODO.md` file. Only after the rebase finishes (and you make a regular commit) does the pre-commit pipeline run again.
 
 ---
 
