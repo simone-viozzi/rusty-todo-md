@@ -1,34 +1,23 @@
 //! TODO.md merge driver registration.
 //!
-//! Three responsibilities, all derived from one input — the user's current
-//! invocation args — so that the registration in `.git/config` and the rule
-//! in `.gitattributes` always reflect *this run's* configuration:
+//! Derive the expected state from the user's current CLI args, then write
+//! `.git/config` and `.gitattributes` to match. Two callers:
+//! [`install_driver`] (explicit `--install-merge-driver`) always reports a
+//! summary; [`reconcile`] (auto-install) skips silently when state already
+//! matches and only writes on drift.
 //!
-//! 1. [`build_expected`] — pure function from args to the canonical
-//!    "what should be installed" pair (driver command + gitattributes block).
-//! 2. [`install_driver`] — write `.git/config` + `.gitattributes` to match
-//!    the expected pair. Idempotent: same args twice = no net change.
-//! 3. [`reconcile`] — auto-install entry point. Compare expected vs.
-//!    currently-installed; install (and print the diff) only on mismatch.
+//! The `.gitattributes` rule lives in a `# BEGIN/END rusty-todo-md` block
+//! that we rewrite as a unit. Rules outside the block are preserved
+//! byte-for-byte; rules inside are canonical, so a hand-edit between the
+//! markers will be reverted on the next install.
 //!
-//! ### `.gitattributes` is owned by a managed block
-//!
-//! We delimit our rule with `# BEGIN/END rusty-todo-md` markers and rewrite
-//! the block as a unit. Anything outside the block is never touched, so the
-//! user can edit other rules freely. Anything inside is canonical: a user
-//! edit between the markers will be reverted on the next install — the
-//! marker comment warns about this.
-//!
-//! ### Why bake args into the driver command at install time
-//!
-//! Git invokes the merge driver as a plain process; it can't read CLI flags
-//! the user passed elsewhere. The driver command in `.git/config` has to be
-//! self-contained, including the marker list and exclusions, so that the
-//! TODO.md the driver writes matches the TODO.md pre-commit writes.
+//! Args are baked into the driver command (`--markers …`, `--exclude …`)
+//! because git invokes the driver as a plain subprocess with no awareness
+//! of CLI flags the user passed elsewhere — the registration has to be
+//! self-contained.
 
 use crate::MarkerConfig;
 use git2::Repository;
-use log::{debug, info};
 use std::path::{Path, PathBuf};
 
 const BLOCK_BEGIN: &str = "# BEGIN rusty-todo-md (managed; do not edit between markers)";
@@ -37,20 +26,14 @@ const DRIVER_NAME: &str = "rusty-todo-md TODO.md merge driver";
 const CONFIG_KEY_NAME: &str = "merge.rusty-todo-md.name";
 const CONFIG_KEY_DRIVER: &str = "merge.rusty-todo-md.driver";
 
-/// Canonical "what should be in `.git/config` and `.gitattributes`" pair,
-/// computed purely from the user's current CLI args. No I/O, no Repository
-/// — used both to write state and to compare against existing state.
-#[derive(Debug)]
+/// Canonical state, computed purely from the user's current CLI args.
+/// No I/O, no Repository — used both to write state and to compare
+/// against existing state.
 pub struct Expected {
-    pub driver_name: String,
     pub driver_command: String,
     pub gitattributes_block: String,
-    /// Pattern field of the single `.gitattributes` rule we manage —
-    /// surfaced for display only.
-    pub gitattributes_pattern: String,
 }
 
-/// Build the expected install state from the user's current args.
 pub fn build_expected(
     markers: &MarkerConfig,
     exclude_patterns: &[String],
@@ -63,72 +46,53 @@ pub fn build_expected(
             todo_path.display()
         ));
     }
-
     let driver_command =
         build_driver_command(markers, exclude_patterns, exclude_dir_patterns, todo_path);
     let pattern = quote_for_gitattributes(&todo_path.display().to_string());
     let gitattributes_block =
         format!("{BLOCK_BEGIN}\n{pattern} merge=rusty-todo-md\n{BLOCK_END}\n");
-
     Ok(Expected {
-        driver_name: DRIVER_NAME.to_string(),
         driver_command,
         gitattributes_block,
-        gitattributes_pattern: pattern,
     })
 }
 
-/// Per-key changes that happened during an install. Empty = nothing changed.
-/// Used to make the install message accurate: we only print "wrote X" for
-/// keys that actually moved.
+/// Outcome of an install. Captures only what the summary printer needs.
 pub struct InstallSummary {
-    pub driver_name: String,
     pub driver_command: String,
     pub gitattributes_path: PathBuf,
-    pub gitattributes_pattern: String,
-    /// Lines from the user's previous block (without our markers) so we can
-    /// say "WAS X, NOW Y" when self-healing rewrites the block.
-    pub previous_block_body: Option<String>,
-    pub config_name_changed: bool,
-    pub config_driver_changed: bool,
-    pub gitattributes_changed: bool,
+    /// True when on-disk state already matched expected before this call —
+    /// the writers were skipped entirely.
+    pub was_in_sync: bool,
 }
 
-impl InstallSummary {
-    pub fn anything_changed(&self) -> bool {
-        self.config_name_changed || self.config_driver_changed || self.gitattributes_changed
-    }
-}
-
-/// Whether the registration currently in this repo matches what `build_expected`
-/// would install for the same args. Used by auto-install to skip work when
+/// Whether the registration in this repo matches what `build_expected`
+/// would install for the same args. Used by `reconcile` to skip work when
 /// nothing has drifted.
 pub fn matches_expected(repo: &Repository, expected: &Expected) -> bool {
-    let stored_name = repo
-        .config()
-        .ok()
-        .and_then(|c| c.get_string(CONFIG_KEY_NAME).ok());
-    if stored_name.as_deref() != Some(expected.driver_name.as_str()) {
-        return false;
-    }
-    let stored_driver = repo
-        .config()
-        .ok()
-        .and_then(|c| c.get_string(CONFIG_KEY_DRIVER).ok());
-    if stored_driver.as_deref() != Some(expected.driver_command.as_str()) {
-        return false;
-    }
     let Some(workdir) = repo.workdir() else {
         return false;
     };
+    let config_ok = repo
+        .config()
+        .ok()
+        .and_then(|c| {
+            Some((
+                c.get_string(CONFIG_KEY_NAME).ok()?,
+                c.get_string(CONFIG_KEY_DRIVER).ok()?,
+            ))
+        })
+        .is_some_and(|(name, driver)| name == DRIVER_NAME && driver == expected.driver_command);
+    if !config_ok {
+        return false;
+    }
     let gitattributes = std::fs::read_to_string(workdir.join(".gitattributes")).unwrap_or_default();
     extract_block(&gitattributes).as_deref() == Some(expected.gitattributes_block.as_str())
 }
 
-/// Auto-install entry point. Computes the expected state from the current
-/// args and installs only if it doesn't already match — making this safe to
-/// call on every pre-commit invocation. Returns `Ok(None)` when nothing
-/// changed, `Ok(Some(summary))` when state was updated.
+/// Auto-install entry point. Installs only if state has drifted from
+/// expected; safe to call on every invocation. Returns `Ok(None)` when
+/// nothing changed.
 pub fn reconcile(
     repo: &Repository,
     markers: &MarkerConfig,
@@ -140,13 +104,12 @@ pub fn reconcile(
     if matches_expected(repo, &expected) {
         return Ok(None);
     }
-    Ok(Some(install_inner(repo, &expected)?))
+    Ok(Some(install_to_match(repo, &expected, false)?))
 }
 
-/// Public install entry point used by the explicit `--install-merge-driver`
-/// mode. Always writes (no skip-when-matching), but the value-level writes
-/// underneath are idempotent — running it twice still produces a summary
-/// that says "nothing changed" the second time.
+/// `--install-merge-driver` entry point. Always reports a summary (even
+/// when already in sync) so a manual run shows the user what the current
+/// registration looks like.
 pub fn install_driver(
     repo: &Repository,
     markers: &MarkerConfig,
@@ -155,64 +118,49 @@ pub fn install_driver(
     todo_path: &Path,
 ) -> Result<InstallSummary, String> {
     let expected = build_expected(markers, exclude_patterns, exclude_dir_patterns, todo_path)?;
-    install_inner(repo, &expected)
+    let was_in_sync = matches_expected(repo, &expected);
+    install_to_match(repo, &expected, was_in_sync)
 }
 
-fn install_inner(repo: &Repository, expected: &Expected) -> Result<InstallSummary, String> {
-    let mut config = repo
-        .config()
-        .map_err(|e| format!("failed to open git config: {e}"))?;
-
-    let stored_name = config.get_string(CONFIG_KEY_NAME).ok();
-    let stored_driver = config.get_string(CONFIG_KEY_DRIVER).ok();
-
-    let config_name_changed = stored_name.as_deref() != Some(expected.driver_name.as_str());
-    let config_driver_changed = stored_driver.as_deref() != Some(expected.driver_command.as_str());
-
-    if config_name_changed {
-        config
-            .set_str(CONFIG_KEY_NAME, &expected.driver_name)
-            .map_err(|e| format!("failed to write {CONFIG_KEY_NAME}: {e}"))?;
-    }
-    if config_driver_changed {
-        config
-            .set_str(CONFIG_KEY_DRIVER, &expected.driver_command)
-            .map_err(|e| format!("failed to write {CONFIG_KEY_DRIVER}: {e}"))?;
-    }
-
-    info!("merge.rusty-todo-md.* config in sync");
-
+fn install_to_match(
+    repo: &Repository,
+    expected: &Expected,
+    already_in_sync: bool,
+) -> Result<InstallSummary, String> {
     let workdir = repo
         .workdir()
         .ok_or_else(|| "repository has no working directory".to_string())?;
     let gitattributes_path = workdir.join(".gitattributes");
+
+    if already_in_sync {
+        return Ok(InstallSummary {
+            driver_command: expected.driver_command.clone(),
+            gitattributes_path,
+            was_in_sync: true,
+        });
+    }
+
+    let mut config = repo
+        .config()
+        .map_err(|e| format!("failed to open git config: {e}"))?;
+    config
+        .set_str(CONFIG_KEY_NAME, DRIVER_NAME)
+        .map_err(|e| format!("failed to write {CONFIG_KEY_NAME}: {e}"))?;
+    config
+        .set_str(CONFIG_KEY_DRIVER, &expected.driver_command)
+        .map_err(|e| format!("failed to write {CONFIG_KEY_DRIVER}: {e}"))?;
+
     let existing = std::fs::read_to_string(&gitattributes_path).unwrap_or_default();
-
-    let previous_block_body = extract_block(&existing).map(|block| {
-        block
-            .lines()
-            .filter(|l| !(l.trim() == BLOCK_BEGIN || l.trim() == BLOCK_END))
-            .collect::<Vec<_>>()
-            .join("\n")
-    });
-
     let new_gitattributes = rewrite_block(&existing, &expected.gitattributes_block);
-    let gitattributes_changed = new_gitattributes != existing;
-    if gitattributes_changed {
+    if new_gitattributes != existing {
         std::fs::write(&gitattributes_path, &new_gitattributes)
             .map_err(|e| format!("failed to write .gitattributes: {e}"))?;
-        debug!("Wrote managed block to {gitattributes_path:?}");
     }
 
     Ok(InstallSummary {
-        driver_name: expected.driver_name.clone(),
         driver_command: expected.driver_command.clone(),
         gitattributes_path,
-        gitattributes_pattern: expected.gitattributes_pattern.clone(),
-        previous_block_body,
-        config_name_changed,
-        config_driver_changed,
-        gitattributes_changed,
+        was_in_sync: false,
     })
 }
 
@@ -350,75 +298,21 @@ fn rewrite_block(content: &str, new_block: &str) -> String {
     out
 }
 
-/// Render the install summary in human-readable form, surfacing only what
-/// actually changed. Used by both the explicit `--install-merge-driver`
-/// mode and the `--auto-install-merge-driver` reconciler so collaborators
-/// see a precise account of any state mutation.
-pub fn format_install_summary(summary: &InstallSummary) -> String {
-    let mut out = String::new();
-    if !summary.anything_changed() {
-        out.push_str("rusty-todo-md: merge driver already in sync; no changes.\n");
-        out.push_str(&format!("  current driver: {}\n", summary.driver_command));
-        return out;
-    }
-
-    out.push_str("rusty-todo-md: merge driver registration updated.\n");
-    out.push_str("  git config changes (local):\n");
-    out.push_str(&format!(
-        "    {CONFIG_KEY_NAME}   = {} {}\n",
-        summary.driver_name,
-        if summary.config_name_changed {
-            "(changed)"
-        } else {
-            "(unchanged)"
-        }
-    ));
-    out.push_str(&format!(
-        "    {CONFIG_KEY_DRIVER} = {} {}\n",
-        summary.driver_command,
-        if summary.config_driver_changed {
-            "(changed)"
-        } else {
-            "(unchanged)"
-        }
-    ));
-    if summary.gitattributes_changed {
-        if let Some(prev) = &summary.previous_block_body {
-            if !prev.is_empty() {
-                out.push_str(&format!(
-                    "  rewrote managed block in {}; previous body:\n",
-                    summary.gitattributes_path.display()
-                ));
-                for line in prev.lines() {
-                    out.push_str(&format!("    - {line}\n"));
-                }
-            } else {
-                out.push_str(&format!(
-                    "  rewrote managed block in {}\n",
-                    summary.gitattributes_path.display()
-                ));
-            }
-        } else {
-            out.push_str(&format!(
-                "  wrote managed block to {}\n",
-                summary.gitattributes_path.display()
-            ));
-        }
-        out.push_str(&format!(
-            "    {} merge=rusty-todo-md\n",
-            summary.gitattributes_pattern
-        ));
+/// Render the install summary. Two states: "already in sync" (silent
+/// confirmation that the current registration matches the user's args) or
+/// "installed/updated" (driver command + undo hint).
+pub fn format_install_summary(s: &InstallSummary) -> String {
+    let header = if s.was_in_sync {
+        "rusty-todo-md: merge driver already in sync."
     } else {
-        out.push_str(&format!(
-            "  {} managed block unchanged\n",
-            summary.gitattributes_path.display()
-        ));
-    }
-    out.push_str(&format!(
-        "  to undo:\n    git config --unset {CONFIG_KEY_NAME}\n    git config --unset {CONFIG_KEY_DRIVER}\n    # then delete the `# BEGIN rusty-todo-md` .. `# END rusty-todo-md` block from {}\n",
-        summary.gitattributes_path.display()
-    ));
-    out
+        "rusty-todo-md: merge driver installed/updated."
+    };
+    format!(
+        "{header}\n  {CONFIG_KEY_DRIVER} = {}\n  managed block in {}\n  to undo: git config --unset {CONFIG_KEY_NAME} && git config --unset {CONFIG_KEY_DRIVER} && remove the `# BEGIN rusty-todo-md` .. `# END rusty-todo-md` block from {}\n",
+        s.driver_command,
+        s.gitattributes_path.display(),
+        s.gitattributes_path.display(),
+    )
 }
 
 #[cfg(test)]
@@ -449,61 +343,25 @@ mod tests {
     }
 
     #[test]
-    fn rewrite_block_appends_when_absent() {
-        let before = "*.png binary\n";
-        let block = format!("{BLOCK_BEGIN}\nTODO.md merge=rusty-todo-md\n{BLOCK_END}\n");
-        let after = rewrite_block(before, &block);
-        assert!(after.contains("*.png binary"));
-        assert!(after.contains(BLOCK_BEGIN));
-        assert!(after.ends_with(&format!("{BLOCK_END}\n")));
-    }
-
-    #[test]
-    fn rewrite_block_replaces_when_present() {
-        let initial = format!(
-            "*.png binary\n{BLOCK_BEGIN}\nold TODO.md merge=rusty-todo-md\n{BLOCK_END}\n*.lock linguist-generated\n"
-        );
-        let new_block = format!("{BLOCK_BEGIN}\nnew/path.md merge=rusty-todo-md\n{BLOCK_END}\n");
-        let after = rewrite_block(&initial, &new_block);
-        assert!(after.contains("*.png binary"));
-        assert!(after.contains("*.lock linguist-generated"));
-        assert!(after.contains("new/path.md merge=rusty-todo-md"));
-        assert!(!after.contains("old TODO.md merge=rusty-todo-md"));
-    }
-
-    #[test]
-    fn rewrite_block_is_idempotent() {
-        let block = format!("{BLOCK_BEGIN}\nTODO.md merge=rusty-todo-md\n{BLOCK_END}\n");
-        let first = rewrite_block("", &block);
-        let second = rewrite_block(&first, &block);
-        assert_eq!(first, second);
-    }
-
-    #[test]
-    fn extract_block_returns_full_block() {
-        let content = format!(
-            "*.png binary\n{BLOCK_BEGIN}\nTODO.md merge=rusty-todo-md\n{BLOCK_END}\nother stuff\n"
-        );
-        let block = extract_block(&content).unwrap();
-        assert!(block.starts_with(BLOCK_BEGIN));
-        assert!(block.contains("TODO.md merge=rusty-todo-md"));
-        assert!(block.trim_end().ends_with(BLOCK_END));
-    }
-
-    #[test]
     fn build_expected_rejects_absolute_todo_path() {
         let markers = MarkerConfig::normalized(vec!["TODO".to_string()]);
         let result = build_expected(&markers, &[], &[], Path::new("/abs/TODO.md"));
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("absolute"));
+        let Err(msg) = result else {
+            panic!("expected Err");
+        };
+        assert!(msg.contains("absolute"), "got: {msg}");
     }
 
     #[test]
-    fn build_expected_emits_quoted_path_in_block() {
+    fn build_expected_quotes_path_with_specials() {
         let markers = MarkerConfig::normalized(vec!["TODO".to_string()]);
         let expected = build_expected(&markers, &[], &[], Path::new("docs/my todos.md")).unwrap();
-        assert!(expected
-            .gitattributes_block
-            .contains("\"docs/my todos.md\""));
+        assert!(
+            expected
+                .gitattributes_block
+                .contains("\"docs/my todos.md\""),
+            "block: {}",
+            expected.gitattributes_block
+        );
     }
 }

@@ -144,9 +144,7 @@ fn install_merge_driver_writes_config_and_gitattributes() {
         .arg("--install-merge-driver")
         .assert()
         .success()
-        .stdout(predicates::str::contains(
-            "merge driver registration updated",
-        ));
+        .stdout(predicates::str::contains("merge driver installed/updated"));
 
     let config = read(&repo.join(".git").join("config"));
     assert!(
