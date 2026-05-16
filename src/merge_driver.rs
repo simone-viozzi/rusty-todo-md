@@ -364,4 +364,155 @@ mod tests {
             expected.gitattributes_block
         );
     }
+
+    // ---- in-process tests against a real git2::Repository -----------------
+    //
+    // These exist because the end-to-end integration tests in
+    // tests/merge_driver_tests.rs spawn the binary as a subprocess (via
+    // assert_cmd), which `cargo tarpaulin` cannot instrument. The merge
+    // driver code runs in that subprocess and shows as uncovered. The tests
+    // below exercise the same public surface in-process so coverage
+    // reflects the work the integration tests already do end-to-end.
+
+    fn default_markers() -> MarkerConfig {
+        MarkerConfig::normalized(vec!["TODO".to_string()])
+    }
+
+    fn fresh_repo() -> (tempfile::TempDir, Repository) {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = Repository::init(dir.path()).unwrap();
+        (dir, repo)
+    }
+
+    #[test]
+    fn install_driver_writes_state_first_run() {
+        let (dir, repo) = fresh_repo();
+        let summary =
+            install_driver(&repo, &default_markers(), &[], &[], Path::new("TODO.md")).unwrap();
+        assert!(!summary.was_in_sync);
+
+        let cfg = repo.config().unwrap();
+        assert_eq!(cfg.get_string(CONFIG_KEY_NAME).unwrap(), DRIVER_NAME);
+        assert!(cfg
+            .get_string(CONFIG_KEY_DRIVER)
+            .unwrap()
+            .contains("--merge-driver %O %A %B"));
+
+        let attrs = std::fs::read_to_string(dir.path().join(".gitattributes")).unwrap();
+        assert!(attrs.contains(BLOCK_BEGIN));
+        assert!(attrs.contains("TODO.md merge=rusty-todo-md"));
+    }
+
+    #[test]
+    fn install_driver_is_a_fixed_point() {
+        let (dir, repo) = fresh_repo();
+        install_driver(&repo, &default_markers(), &[], &[], Path::new("TODO.md")).unwrap();
+        let after_first = std::fs::read_to_string(dir.path().join(".gitattributes")).unwrap();
+        let summary =
+            install_driver(&repo, &default_markers(), &[], &[], Path::new("TODO.md")).unwrap();
+        assert!(summary.was_in_sync);
+        let after_second = std::fs::read_to_string(dir.path().join(".gitattributes")).unwrap();
+        assert_eq!(after_first, after_second);
+    }
+
+    #[test]
+    fn reconcile_is_none_when_state_matches() {
+        let (_dir, repo) = fresh_repo();
+        install_driver(&repo, &default_markers(), &[], &[], Path::new("TODO.md")).unwrap();
+        let result = reconcile(&repo, &default_markers(), &[], &[], Path::new("TODO.md")).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn reconcile_writes_when_config_drifted() {
+        let (_dir, repo) = fresh_repo();
+        install_driver(&repo, &default_markers(), &[], &[], Path::new("TODO.md")).unwrap();
+        repo.config()
+            .unwrap()
+            .set_str(CONFIG_KEY_DRIVER, "stale-cmd")
+            .unwrap();
+        let result = reconcile(&repo, &default_markers(), &[], &[], Path::new("TODO.md")).unwrap();
+        let summary = result.expect("expected drift to trigger an install");
+        assert!(!summary.was_in_sync);
+        assert_eq!(
+            repo.config()
+                .unwrap()
+                .get_string(CONFIG_KEY_DRIVER)
+                .unwrap(),
+            summary.driver_command
+        );
+    }
+
+    #[test]
+    fn install_driver_rewrites_block_on_path_change() {
+        let (dir, repo) = fresh_repo();
+        install_driver(&repo, &default_markers(), &[], &[], Path::new("TODO.md")).unwrap();
+        install_driver(
+            &repo,
+            &default_markers(),
+            &[],
+            &[],
+            Path::new("docs/TODOS.md"),
+        )
+        .unwrap();
+        let attrs = std::fs::read_to_string(dir.path().join(".gitattributes")).unwrap();
+        assert_eq!(
+            attrs.matches("merge=rusty-todo-md").count(),
+            1,
+            "exactly one managed rule expected; got:\n{attrs}"
+        );
+        assert!(attrs.contains("docs/TODOS.md merge=rusty-todo-md"));
+    }
+
+    #[test]
+    fn build_driver_command_emits_all_args() {
+        let markers = MarkerConfig::normalized(vec!["TODO".to_string(), "FIXME".to_string()]);
+        let cmd = build_driver_command(
+            &markers,
+            &["*.log".to_string()],
+            &["vendor".to_string()],
+            Path::new("docs/T.md"),
+        );
+        assert!(cmd.contains("--markers TODO FIXME"));
+        assert!(cmd.contains("--exclude '*.log'"));
+        assert!(cmd.contains("--exclude-dir vendor"));
+        assert!(cmd.contains("--todo-path docs/T.md"));
+        assert!(cmd.ends_with("--merge-driver %O %A %B"));
+    }
+
+    #[test]
+    fn quote_for_shell_passes_safe_strings_through() {
+        assert_eq!(quote_for_shell("TODO"), "TODO");
+        assert_eq!(quote_for_shell("docs/file.md"), "docs/file.md");
+        assert_eq!(quote_for_shell("a-b_c.d"), "a-b_c.d");
+    }
+
+    #[test]
+    fn quote_for_shell_quotes_specials_and_escapes_single_quotes() {
+        assert_eq!(quote_for_shell("a b"), "'a b'");
+        assert_eq!(quote_for_shell("*.log"), "'*.log'");
+        assert_eq!(quote_for_shell("a'b"), "'a'\\''b'");
+        assert_eq!(quote_for_shell(""), "''");
+    }
+
+    #[test]
+    fn format_install_summary_renders_both_states() {
+        let path = PathBuf::from("/x/.gitattributes");
+        let in_sync = InstallSummary {
+            driver_command: "rusty-todo-md --merge-driver %O %A %B".into(),
+            gitattributes_path: path.clone(),
+            was_in_sync: true,
+        };
+        let out = format_install_summary(&in_sync);
+        assert!(out.contains("already in sync"));
+        assert!(out.contains("rusty-todo-md --merge-driver"));
+
+        let installed = InstallSummary {
+            was_in_sync: false,
+            ..in_sync
+        };
+        let out = format_install_summary(&installed);
+        assert!(out.contains("installed/updated"));
+        assert!(out.contains("to undo"));
+    }
 }
