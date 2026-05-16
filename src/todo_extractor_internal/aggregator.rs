@@ -324,9 +324,21 @@ fn content_may_contain_marker(content: &str, markers: &[String]) -> bool {
         .any(|m| !m.is_empty() && content.contains(m.as_str()))
 }
 
-/// Detect Git conflict markers in raw file bytes. Used to skip source files
-/// mid-rebase so the regenerate path doesn't pull garbled TODOs out of a
-/// half-merged file. Conservative: only `<<<<<<<` at the start of a line.
+/// Detect Git conflict markers in raw file bytes.
+///
+/// Pre-commit doesn't run during `git rebase` / `git rebase --continue`, so
+/// this check is **not** for the normal pre-commit invocation. It exists for
+/// two specific callers that can encounter half-merged source files:
+///
+/// 1. **The merge driver** (`--merge-driver` flag). Git invokes it for
+///    TODO.md during a rebase/merge while other source files in the working
+///    tree may still contain `<<<<<<<` markers from their own conflicts.
+/// 2. **`--regenerate`** run manually after a rebase that left conflict
+///    markers in some source file.
+///
+/// Without this check, the parser would treat the conflict-marker block as
+/// regular content and emit garbled TODOs. Conservative match: only
+/// `<<<<<<<` at the start of a line.
 pub fn content_has_conflict_markers(content: &str) -> bool {
     content.lines().any(|line| line.starts_with("<<<<<<<"))
 }
