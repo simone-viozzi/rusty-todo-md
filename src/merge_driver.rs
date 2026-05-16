@@ -266,28 +266,34 @@ fn quote_for_shell(s: &str) -> String {
 }
 
 /// Quote a path for use as the pattern field of a `.gitattributes` rule.
-/// gitattributes uses a different syntax than shell: whitespace and the
-/// glob metacharacters `*?[\` are significant. Patterns containing any of
-/// them must be wrapped in double quotes, with backslash and double-quote
-/// inside the quoted form escaped with backslashes.
+///
+/// gitattributes treats `*`, `?`, `[` as glob metacharacters; an unescaped
+/// `?` in `weird?file.md` would match a literal `?` *or* any single
+/// character, which is not what we want for a fixed filename. We always
+/// escape glob metacharacters with a backslash. We additionally
+/// double-quote the pattern when it contains whitespace, comment-leading
+/// `#`, or characters that need backslash escaping (`"`, `\`), since
+/// gitattributes parses unquoted whitespace as the field separator.
 fn quote_for_gitattributes(pattern: &str) -> String {
     let needs_quoting = pattern.is_empty()
         || pattern
             .chars()
             .any(|c| c.is_whitespace() || matches!(c, '"' | '\\' | '#'));
-    if !needs_quoting {
-        return pattern.to_string();
-    }
-    let mut out = String::with_capacity(pattern.len() + 2);
-    out.push('"');
+    let mut body = String::with_capacity(pattern.len() + 2);
     for c in pattern.chars() {
-        if c == '"' || c == '\\' {
-            out.push('\\');
+        match c {
+            '*' | '?' | '[' | '\\' | '"' => {
+                body.push('\\');
+                body.push(c);
+            }
+            _ => body.push(c),
         }
-        out.push(c);
     }
-    out.push('"');
-    out
+    if needs_quoting {
+        format!("\"{body}\"")
+    } else {
+        body
+    }
 }
 
 /// Pull the `# BEGIN rusty-todo-md` ... `# END rusty-todo-md` block out of
@@ -405,7 +411,8 @@ pub fn format_install_summary(summary: &InstallSummary) -> String {
         ));
     }
     out.push_str(&format!(
-        "  to undo: git config --unset {CONFIG_KEY_NAME} && \\\n           git config --unset {CONFIG_KEY_DRIVER}\n"
+        "  to undo:\n    git config --unset {CONFIG_KEY_NAME}\n    git config --unset {CONFIG_KEY_DRIVER}\n    # then delete the `# BEGIN rusty-todo-md` .. `# END rusty-todo-md` block from {}\n",
+        summary.gitattributes_path.display()
     ));
     out
 }
@@ -426,6 +433,15 @@ mod tests {
         assert_eq!(quote_for_gitattributes("a\\b"), "\"a\\\\b\"");
         assert_eq!(quote_for_gitattributes("a\"b"), "\"a\\\"b\"");
         assert_eq!(quote_for_gitattributes("# weird.md"), "\"# weird.md\"");
+    }
+
+    #[test]
+    fn quote_for_gitattributes_escapes_glob_metacharacters() {
+        // `*`, `?`, `[` are gitattributes glob meta — must be backslash-
+        // escaped so they match literally and don't expand to a pattern.
+        assert_eq!(quote_for_gitattributes("file?.md"), "file\\?.md");
+        assert_eq!(quote_for_gitattributes("a*b.md"), "a\\*b.md");
+        assert_eq!(quote_for_gitattributes("[brackets].md"), "\\[brackets].md");
     }
 
     #[test]
