@@ -143,20 +143,10 @@ pub fn reconcile(
     Ok(Some(install_inner(repo, &expected)?))
 }
 
-/// Cheap "is anything registered at all" probe. Kept separate from
-/// [`matches_expected`] because callers sometimes only want to know whether
-/// a driver exists, regardless of its content (e.g. status output).
-pub fn is_driver_registered(repo: &Repository) -> bool {
-    match repo.config() {
-        Ok(config) => config.get_string(CONFIG_KEY_DRIVER).is_ok(),
-        Err(_) => false,
-    }
-}
-
 /// Public install entry point used by the explicit `--install-merge-driver`
-/// mode. Always writes (no skip-when-matching), but the underlying writer
-/// is idempotent at the value level — running it twice still produces a
-/// summary that says "nothing changed" the second time.
+/// mode. Always writes (no skip-when-matching), but the value-level writes
+/// underneath are idempotent — running it twice still produces a summary
+/// that says "nothing changed" the second time.
 pub fn install_driver(
     repo: &Repository,
     markers: &MarkerConfig,
