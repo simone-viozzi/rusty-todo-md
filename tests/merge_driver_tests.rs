@@ -319,8 +319,8 @@ fn auto_install_self_heals_on_args_change() {
         .success();
     let driver_v1 = read(&repo.join(".git").join("config"));
     assert!(
-        !driver_v1.contains("--markers"),
-        "v1 driver should have no --markers (defaults):\n{driver_v1}"
+        driver_v1.contains("--markers TODO"),
+        "v1 driver should bake the default marker verbatim:\n{driver_v1}"
     );
 
     // Second run: pre-commit args changed to include FIXME.

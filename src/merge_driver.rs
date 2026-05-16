@@ -227,13 +227,17 @@ fn build_driver_command(
 ) -> String {
     let mut cmd = String::from("rusty-todo-md");
 
-    let is_default_markers =
-        markers.markers.len() == 1 && markers.markers[0].eq_ignore_ascii_case("TODO");
-    if !is_default_markers && !markers.markers.is_empty() {
+    // Always emit --markers when non-empty. We previously omitted it for the
+    // "default" case (single marker case-insensitively equal to "TODO") to
+    // keep the command shorter, but marker matching is case-sensitive
+    // downstream — `--markers todo` is a real configuration choice that has
+    // to be preserved verbatim in the driver command, otherwise the merge
+    // driver would extract using the wrong marker name.
+    if !markers.markers.is_empty() {
         cmd.push_str(" --markers");
         for m in &markers.markers {
             cmd.push(' ');
-            cmd.push_str(m);
+            cmd.push_str(&quote_for_shell(m));
         }
     }
     for pat in exclude_patterns {
