@@ -284,6 +284,13 @@ pub fn extract_marked_items_from_file(
 
     match std::fs::read_to_string(file) {
         Ok(content) => {
+            if !content_may_contain_marker(&content, &marker_config.markers) {
+                info!(
+                    "Skipping file with no marker substrings present: {:?}",
+                    file
+                );
+                return Ok(Vec::new());
+            }
             let todos = extract_marked_items_with_parser(file, &content, parser_fn, marker_config);
             Ok(todos)
         }
@@ -292,6 +299,19 @@ pub fn extract_marked_items_from_file(
             Err(format!("Could not read file {:?}: {}", file, e))
         }
     }
+}
+
+/// Cheap pre-parse check: return true iff at least one configured marker
+/// appears as a raw byte substring anywhere in `content`. Short-circuits the
+/// pest parse path for marker-free files (e.g. `package-lock.json`, long
+/// marker-free markdown) which otherwise pay full parse cost to produce zero
+/// results. False positives (marker-shaped bytes inside a string literal) are
+/// fine: they route through the normal pipeline where string-literal exclusion
+/// already handles them.
+fn content_may_contain_marker(content: &str, markers: &[String]) -> bool {
+    markers
+        .iter()
+        .any(|m| !m.is_empty() && content.contains(m.as_str()))
 }
 
 /// A single comment line with (line_number, entire_comment_text).
@@ -944,5 +964,87 @@ fn some_function() {
         assert!(error_msg.contains("Could not read file"));
 
         // TempDir automatically cleans up on drop
+    }
+
+    #[test]
+    fn test_marker_prefilter_skips_large_marker_free_file() {
+        use std::io::Write;
+        use std::time::Instant;
+        use tempfile::Builder;
+
+        init_logger();
+
+        // Synthesize a multi-MB marker-free markdown file. Without the
+        // prefilter, this routes through pest's MarkdownParser whose
+        // `any_non_comment = { !(comment) ~ ANY }` rule emits one pair per
+        // byte and takes minutes to process (#164).
+        let mut temp_file = Builder::new()
+            .suffix(".md")
+            .tempfile()
+            .expect("Failed to create temp file");
+        let chunk = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. \
+                     Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.\n";
+        let target_bytes = 2 * 1024 * 1024;
+        let repeat = target_bytes / chunk.len() + 1;
+        for _ in 0..repeat {
+            temp_file
+                .write_all(chunk.as_bytes())
+                .expect("Failed to write");
+        }
+        temp_file.flush().expect("Failed to flush");
+        let path = temp_file.path().to_path_buf();
+
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string(), "FIXME".to_string(), "HACK".to_string()],
+        };
+
+        let start = Instant::now();
+        let result =
+            extract_marked_items_from_file(&path, &config).expect("prefilter should succeed");
+        let elapsed = start.elapsed();
+
+        assert!(result.is_empty(), "marker-free file must yield no items");
+        assert!(
+            elapsed.as_secs() < 1,
+            "marker-free fast path took too long: {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn test_marker_prefilter_lets_marker_bearing_file_through() {
+        use std::io::Write;
+        use tempfile::Builder;
+
+        init_logger();
+
+        let mut temp_file = Builder::new()
+            .suffix(".rs")
+            .tempfile()
+            .expect("Failed to create temp file");
+        temp_file
+            .write_all(b"// TODO: keep this one\nfn main() {}\n")
+            .expect("Failed to write");
+        temp_file.flush().expect("Failed to flush");
+
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
+        let result = extract_marked_items_from_file(temp_file.path(), &config)
+            .expect("extract should succeed");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].marker, "TODO");
+    }
+
+    #[test]
+    fn test_content_may_contain_marker_basic() {
+        let markers = vec!["TODO".to_string(), "FIXME".to_string()];
+        assert!(content_may_contain_marker("hello TODO world", &markers));
+        assert!(content_may_contain_marker("FIXME at start", &markers));
+        assert!(!content_may_contain_marker("nothing to see here", &markers));
+        assert!(!content_may_contain_marker("", &markers));
+        // Empty marker list never matches.
+        assert!(!content_may_contain_marker("TODO", &[]));
+        // Empty marker string is ignored (would otherwise match every file).
+        assert!(!content_may_contain_marker("nothing", &["".to_string()]));
     }
 }
