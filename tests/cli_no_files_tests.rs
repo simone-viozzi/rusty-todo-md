@@ -1,4 +1,4 @@
-use assert_cmd::cargo::cargo_bin_cmd;
+use assert_cmd::Command;
 use log::LevelFilter;
 mod utils;
 use utils::init_repo;
@@ -32,7 +32,8 @@ fn test_run_cli_no_files() {
 
     // Run the CLI binary from the temporary directory with only the TODO file specified.
     // Since no files are provided, it should log "No files provided, nothing to do." and exit with code 0.
-    let mut cmd = cargo_bin_cmd!("rusty-todo-md");
+    let mut cmd =
+        Command::cargo_bin("rusty-todo-md").expect("failed to locate rusty-todo-md binary");
 
     cmd.current_dir(repo_dir).arg("--todo-path").arg("TODO.md"); // no file arguments
 
