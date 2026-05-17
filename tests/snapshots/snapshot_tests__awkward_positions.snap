@@ -1,0 +1,10 @@
+---
+source: tests/snapshot_tests.rs
+expression: out
+---
+# FIXME
+## quirks.rs
+* [quirks.rs:4](quirks.rs#L4): trailing end-of-line marker
+# TODO
+## quirks.rs
+* [quirks.rs:3](quirks.rs#L3): deeply indented marker

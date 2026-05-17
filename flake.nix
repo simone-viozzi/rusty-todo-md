@@ -33,6 +33,7 @@
             "rustc"
             "clippy"
             "rustfmt"
+            "llvm-tools-preview"
           ];
         };
 
@@ -77,6 +78,7 @@
             pythonPackages.wheel
             pkgs.patchelf
             pkgs.maturin
+            pkgs.cargo-llvm-cov
           ];
 
           postVenvCreation = ''

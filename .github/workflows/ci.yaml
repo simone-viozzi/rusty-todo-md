@@ -50,19 +50,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      # Step 2: Set up Rust toolchain (stable only for coverage)
+      # Step 2: Set up Rust toolchain (stable only for coverage) + llvm-tools
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+          components: llvm-tools-preview
 
-      # Step 3: Install cargo-tarpaulin
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
+      # Step 3: Install cargo-llvm-cov
+      # llvm-cov instruments via LLVM source-based coverage, so subprocess
+      # tests (assert_cmd) are counted — tarpaulin couldn't follow `exec`.
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
 
       # Step 4: Generate coverage report
       - name: Generate coverage report
-        run: cargo tarpaulin --out Lcov --output-dir ./coverage
+        run: cargo llvm-cov --workspace --lcov --output-path coverage/lcov.info
 
       # Step 5: Upload coverage reports as artifacts
       - name: Upload coverage reports
