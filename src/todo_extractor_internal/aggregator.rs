@@ -284,6 +284,16 @@ pub fn extract_marked_items_from_file(
 
     match std::fs::read_to_string(file) {
         Ok(content) => {
+            if content_has_conflict_markers(&content) {
+                // Use eprintln (not log::warn) so this surfaces without the
+                // user having to set RUST_LOG — these warnings are essential
+                // context during a rebase.
+                eprintln!(
+                    "rusty-todo-md: skipping {}: contains conflict markers",
+                    file.display()
+                );
+                return Ok(Vec::new());
+            }
             if !content_may_contain_marker(&content, &marker_config.markers) {
                 info!(
                     "Skipping file with no marker substrings present: {:?}",
@@ -312,6 +322,25 @@ fn content_may_contain_marker(content: &str, markers: &[String]) -> bool {
     markers
         .iter()
         .any(|m| !m.is_empty() && content.contains(m.as_str()))
+}
+
+/// Detect Git conflict markers in raw file bytes.
+///
+/// Pre-commit doesn't run during `git rebase` / `git rebase --continue`, so
+/// this check is **not** for the normal pre-commit invocation. It exists for
+/// two specific callers that can encounter half-merged source files:
+///
+/// 1. **The merge driver** (`--merge-driver` flag). Git invokes it for
+///    TODO.md during a rebase/merge while other source files in the working
+///    tree may still contain `<<<<<<<` markers from their own conflicts.
+/// 2. **`--regenerate`** run manually after a rebase that left conflict
+///    markers in some source file.
+///
+/// Without this check, the parser would treat the conflict-marker block as
+/// regular content and emit garbled TODOs. Conservative match: only
+/// `<<<<<<<` at the start of a line.
+pub fn content_has_conflict_markers(content: &str) -> bool {
+    content.lines().any(|line| line.starts_with("<<<<<<<"))
 }
 
 /// A single comment line with (line_number, entire_comment_text).
