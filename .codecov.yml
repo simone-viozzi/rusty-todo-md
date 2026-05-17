@@ -1,0 +1,17 @@
+# Coverage is a non-blocking informational signal, not a PR gate.
+# Status checks never fail CI (rust-analyzer pattern); the bot comment
+# is enabled as a passive readout so the number is actually visible on
+# the PR — otherwise the coverage job in CI would have nothing to show
+# for itself. The primary correctness signal is still the test suite.
+
+coverage:
+  status:
+    patch: off
+    project:
+      default:
+        informational: true
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false

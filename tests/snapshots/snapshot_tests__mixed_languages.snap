@@ -1,0 +1,22 @@
+---
+source: tests/snapshot_tests.rs
+expression: out
+---
+# FIXME
+## main.rs
+* [main.rs:3](main.rs#L3): panic on bad input
+
+## script.js
+* [script.js:3](script.js#L3): race condition under load
+# HACK
+## app.py
+* [app.py:3](app.py#L3): short timeout for now
+# TODO
+## app.py
+* [app.py:1](app.py#L1): switch to async client
+
+## main.rs
+* [main.rs:1](main.rs#L1): wire up cli
+
+## script.js
+* [script.js:1](script.js#L1): validate input

@@ -1,0 +1,14 @@
+---
+source: tests/snapshot_tests.rs
+expression: out
+---
+# FIXME
+## sample.py
+* [sample.py:4](sample.py#L4): This function needs proper documentation """
+# HACK
+## sample.py
+* [sample.py:8](sample.py#L8): Using hardcoded values for now
+# TODO
+## sample.py
+* [sample.py:1](sample.py#L1): Add comprehensive error handling
+* [sample.py:13](sample.py#L13): implement helper

@@ -13,8 +13,9 @@ Rusty TODO MD is a multi-language TODO comment extractor written in Rust that au
 
 ### Testing and Validation
 - **Run all tests**: `cargo test` -- takes 2-5 minutes with dependency downloads. **NEVER CANCEL.** Set timeout to 300+ seconds.
-- **Generate coverage report**: `cargo tarpaulin --out Lcov --output-dir ./coverage` -- takes 4-6 minutes. **NEVER CANCEL.** Set timeout to 360+ seconds.
-- Coverage reports are generated in `./coverage/lcov.info` for VS Code integration
+- **Generate coverage report**: `cargo llvm-cov --workspace --lcov --output-path coverage/lcov.info` -- takes 2-5 minutes. **NEVER CANCEL.** Set timeout to 360+ seconds. Requires `llvm-tools-preview` rustup component and the `cargo-llvm-cov` binary (`cargo install cargo-llvm-cov`).
+- Coverage reports are generated in `./coverage/lcov.info` for VS Code integration. Unlike the previous tarpaulin setup, `cargo-llvm-cov` instruments subprocess tests (`assert_cmd`), so CLI integration tests count toward coverage.
+- Coverage is **informational only** — codecov is configured (see `.codecov.yml`) to never fail CI and never post a status check. A non-gating Codecov PR comment is enabled as a passive readout. The primary correctness signal is the test suite, in particular the `insta` snapshot tests under `tests/snapshot_tests.rs`.
 
 ### Code Quality and Linting
 - **Format code**: `cargo fmt` -- very fast, ~1 second
