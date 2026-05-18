@@ -1,25 +1,28 @@
 #!/usr/bin/env bash
-# Per-test coverage extraction. Reads coverage/binaries.list (one binary
-# path per line) and runs each contained #[test] individually with an
-# isolated LLVM_PROFILE_FILE pattern. The pattern uses %p so subprocess
-# coverage (assert_cmd::Command::cargo_bin) lands in distinct profraw
-# files; all profraws are merged, and llvm-cov export is invoked with
-# both the test binary AND the rusty-todo-md binary as objects so source
-# files reached only via subprocess are visible.
+# Per-test coverage extraction (one-shot experiment for issue #202).
+# Reads coverage/binaries.list (one instrumented test-binary path per
+# line, relative to the repo root) and runs each contained #[test]
+# individually with an isolated LLVM_PROFILE_FILE pattern. The pattern
+# uses %p so subprocess coverage (assert_cmd::Command::cargo_bin) lands
+# in distinct profraw files; all profraws are merged, and llvm-cov
+# export is invoked with both the test binary AND the rusty-todo-md
+# binary as objects so source files reached only via subprocess are
+# visible. Output JSONs feed scripts/overlap_analysis.py.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-RAW_DIR="$ROOT/coverage/per-test-raw"
-DATA_DIR="$ROOT/coverage/per-test"
-JSON_DIR="$ROOT/coverage/per-test-json"
-MAIN_BIN="$ROOT/target/debug/rusty-todo-md"
+REPO_ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)"
+OUT_ROOT="$REPO_ROOT/coverage"
+RAW_DIR="$OUT_ROOT/per-test-raw"
+DATA_DIR="$OUT_ROOT/per-test"
+JSON_DIR="$OUT_ROOT/per-test-json"
+MAIN_BIN="$REPO_ROOT/target/debug/rusty-todo-md"
 mkdir -p "$RAW_DIR" "$DATA_DIR" "$JSON_DIR"
 
 if [[ ! -x "$MAIN_BIN" ]]; then
   echo "missing instrumented main binary at $MAIN_BIN" >&2
   exit 1
 fi
-if [[ ! -s "$ROOT/coverage/binaries.list" ]]; then
+if [[ ! -s "$OUT_ROOT/binaries.list" ]]; then
   echo "coverage/binaries.list is missing or empty" >&2
   exit 1
 fi
@@ -64,6 +67,6 @@ while IFS= read -r bin; do
       > "$json"
     count=$((count + 1))
   done < <("$bin" --list --format=terse 2>/dev/null | sed -n 's/: test$//p')
-done < "$ROOT/coverage/binaries.list"
+done < "$OUT_ROOT/binaries.list"
 
 echo "wrote $count per-test json files into $JSON_DIR"

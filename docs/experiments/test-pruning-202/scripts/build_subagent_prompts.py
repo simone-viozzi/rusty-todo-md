@@ -18,8 +18,10 @@ import pathlib
 import re
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-DATA = json.loads((ROOT / "coverage/overlap-data.json").read_text())
+HERE = pathlib.Path(__file__).resolve()
+EXPERIMENT_DIR = HERE.parents[1]  # docs/experiments/test-pruning-202/
+ROOT = HERE.parents[4]            # repo root, retained as ROOT for path strings below
+DATA = json.loads((EXPERIMENT_DIR / "overlap-data.json").read_text())
 OUT = ROOT / "coverage" / "subagent-prompts"
 OUT.mkdir(parents=True, exist_ok=True)
 

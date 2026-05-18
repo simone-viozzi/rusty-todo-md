@@ -1,5 +1,11 @@
 # Per-test coverage overlap vs snapshot suite (issue #202)
 
+> **Generated file.** Rewritten by
+> `docs/experiments/test-pruning-202/scripts/overlap_analysis.py`
+> from the per-test JSON corpus under `coverage/per-test-json/`
+> (produced by the sibling `extract_per_test_coverage.sh`). The PR
+> only commits this report, not the JSON inputs.
+
 Snapshot union covers **574 distinct (file, line) keys** in `src/`.
 
 **Scope of measurement.** Only lines under `src/` are counted —
@@ -7,22 +13,68 @@ third-party code (tests/utils.rs, cargo registry, std) is excluded.
 Per-test coverage is collected with `cargo llvm-cov` + `LLVM_PROFILE_FILE`
 per process; subprocess coverage from `assert_cmd::Command::cargo_bin`
 propagates correctly via the `%p` substitution in the profile path.
-Reproducer: `scripts/extract_per_test_coverage.sh`, then
-`scripts/overlap_analysis.py`.
 
 **Branch coverage.** Stable rustc 1.95 does not emit branch counts;
 `cargo llvm-cov --branch` needs nightly. This pass uses line overlap only.
-The QA framed branch as an enhancement on top of line overlap, not a
-substitute. The false-flag rate is mitigated by the per-candidate
-subagent review in stage 3 (see `triage-verdicts.md`).
 
 **Outcome of stage 3 (preview):** the subagent fan-out returned KEEP for
 all 28 `tests/*.rs` candidates with overlap ≥ 0.70. The snapshot corpus
 (5 happy-path fixtures, fixed flags, no error paths) is too narrow to
-subsume any integration test — every candidate reaches an error path,
-flag combo, multi-run update, merge-driver path, or internal invariant
-the snapshot suite does not assert on. No deletions in this PR; see
+subsume any integration test. No deletions in this PR; see
 `triage-verdicts.md` for the full per-candidate breakdown.
+
+## Coverage of `src/` per test group
+
+Three columns, each capped at the file's executable line count:
+
+- **snap%** — `tests/snapshot_tests.rs` alone (the new primary signal).
+- **intg%** — every other file under `tests/*.rs` (the integration
+  suite this PR was meant to prune).
+- **all%** — everything, including in-source `#[cfg(test)]` modules.
+
+The gap `intg% − snap%` is exactly the slack the snapshot corpus
+would need to grow to absorb before any `tests/*.rs` file becomes
+a safe-delete candidate.
+
+| file | snap% | intg% | all% | executable |
+|---|---:|---:|---:|---:|
+| `src/cli.rs` | 54% | 91% | 91% | 345 |
+| `src/exclusion.rs` | 36% | 84% | 100% | 100 |
+| `src/git_utils.rs` | 10% | 94% | 94% | 62 |
+| `src/logger.rs` | 0% | 84% | 84% | 32 |
+| `src/main.rs` | 100% | 100% | 100% | 6 |
+| `src/merge_driver.rs` | 0% | 83% | 100% | 215 |
+| `src/test_utils.rs` | 0% | 0% | 95% | 22 |
+| `src/todo_extractor_internal/aggregator.rs` | 82% | 92% | 100% | 246 |
+| `src/todo_extractor_internal/languages/common_syntax.rs` | 83% | 79% | 100% | 29 |
+| `src/todo_extractor_internal/languages/dockerfile.rs` | 0% | 100% | 100% | 3 |
+| `src/todo_extractor_internal/languages/go.rs` | 0% | 100% | 100% | 3 |
+| `src/todo_extractor_internal/languages/js.rs` | 100% | 100% | 100% | 3 |
+| `src/todo_extractor_internal/languages/markdown.rs` | 0% | 100% | 100% | 3 |
+| `src/todo_extractor_internal/languages/python.rs` | 100% | 100% | 100% | 3 |
+| `src/todo_extractor_internal/languages/rust.rs` | 100% | 100% | 100% | 3 |
+| `src/todo_extractor_internal/languages/shell.rs` | 0% | 0% | 100% | 3 |
+| `src/todo_extractor_internal/languages/sql.rs` | 0% | 0% | 100% | 3 |
+| `src/todo_extractor_internal/languages/toml.rs` | 0% | 0% | 100% | 3 |
+| `src/todo_extractor_internal/languages/yaml.rs` | 0% | 0% | 100% | 3 |
+| `src/todo_md.rs` | 54% | 91% | 100% | 136 |
+| `src/todo_md_internal.rs` | 84% | 84% | 100% | 38 |
+| **total** | **45.5%** | **86.5%** | **96.7%** | **1261** |
+
+Notes to avoid misreading the 0%/100% rows:
+
+- A 0% in **snap%** does NOT mean nothing covers that code — it
+  means snapshots don't. The in-source `dockerfile_tests` etc. do
+  exercise their matching `languages/<x>.rs`, but in a separate
+  test binary not shown in the snap column.
+- Each `languages/<x>.rs` file shows **3 executable lines** because
+  the snapshot/integration binaries compile the library *without*
+  `#[cfg(test)]`, exposing only the production `impl CommentParser`
+  body. Measuring against the in-source test binary instead would
+  show ~120 lines per language file (production + test-mod).
+- `shell/sql/toml/yaml.rs` are at intg% = 0% / all% = 100%: only
+  their in-source unit tests reach them. Deleting those tests would
+  leave those parsers with no test coverage at all.
 
 ## Distribution of overlap ratio across non-snapshot tests
 

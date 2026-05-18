@@ -31,7 +31,7 @@ repos:
         exclude: |
           (?x)^(
             tests/fixtures/snapshots/.*
-            | scripts/build_subagent_prompts\.py
+            | docs/experiments/test-pruning-202/.*
           )$
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

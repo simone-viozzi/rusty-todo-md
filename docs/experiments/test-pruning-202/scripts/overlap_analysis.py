@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Per-test overlap analysis vs the snapshot test suite.
+"""Per-test overlap analysis vs the snapshot test suite (issue #202).
 
 Inputs: coverage/per-test-json/*.json (one per #[test], produced by
-extract_per_test_coverage.sh).
+extract_per_test_coverage.sh — that script writes them at the repo root
+under coverage/, not under this experiment directory).
 
 For each test we build a set of (file, line) keys covered by that test
 (line in src/* only — third-party code is uninteresting). The snapshot
@@ -10,9 +11,9 @@ test suite's union becomes the reference set. Per-test overlap is the
 fraction of the candidate test's covered src lines that are also covered
 by the snapshot union.
 
-Outputs:
-- coverage/overlap-report.md (human-readable, with distribution + tables)
-- coverage/overlap-data.json (machine-readable, consumed by stage 3)
+Outputs (rewritten in-place next to this script):
+- ../overlap-report.md (human-readable, with distribution + tables)
+- ../overlap-data.json (machine-readable, consumed by stage 3)
 """
 
 from __future__ import annotations
@@ -22,11 +23,14 @@ import json
 import pathlib
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
-JSON_DIR = ROOT / "coverage" / "per-test-json"
-REPORT_PATH = ROOT / "coverage" / "overlap-report.md"
-DATA_PATH = ROOT / "coverage" / "overlap-data.json"
-SRC_PREFIX = str(ROOT / "src") + "/"
+HERE = pathlib.Path(__file__).resolve()
+EXPERIMENT_DIR = HERE.parents[1]  # docs/experiments/test-pruning-202/
+REPO_ROOT = HERE.parents[4]       # repo root
+JSON_DIR = REPO_ROOT / "coverage" / "per-test-json"
+REPORT_PATH = EXPERIMENT_DIR / "overlap-report.md"
+DATA_PATH = EXPERIMENT_DIR / "overlap-data.json"
+SRC_PREFIX = str(REPO_ROOT / "src") + "/"
+ROOT = REPO_ROOT  # backwards-compat alias used in path strings below
 
 SNAPSHOT_PREFIX = "snapshot_tests__"
 
@@ -204,8 +208,50 @@ def main() -> int:
             return ""
         return "; ".join(f"{t['file']} ({t['unique_lines']})" for t in top)
 
+    # Coverage of src/ by three groups, capped by executable line count
+    # so the segment-expansion proxy doesn't double-count:
+    #   1. snapshot-only (tests/snapshot_tests.rs)
+    #   2. integration-only (tests/*.rs minus snapshot_tests.rs)
+    #   3. all tests (also includes in-source #[cfg(test)] modules)
+    INTG_PREFIXES = (
+        "cli_error_tests",
+        "cli_no_files_tests",
+        "empty_todo_validation_tests",
+        "git_tests",
+        "glob_exclude_tests",
+        "integration",
+        "merge_driver_tests",
+        "multi_language_tests",
+    )
+    snap_lines_by_file: dict[str, set[int]] = {}
+    intg_lines_by_file: dict[str, set[int]] = {}
+    all_lines_by_file: dict[str, set[int]] = {}
+    exec_lines_by_file: dict[str, int] = {}
+    for p in sorted(JSON_DIR.glob("*.json")):
+        d = json.loads(p.read_text())
+        is_snap = p.name.startswith("snapshot_tests__")
+        is_intg = p.name.startswith(INTG_PREFIXES)
+        for f in d["data"][0]["files"]:
+            fn = f["filename"]
+            if not fn.startswith(SRC_PREFIX):
+                continue
+            short = fn[len(str(REPO_ROOT)) + 1 :]
+            exec_lines_by_file[short] = f["summary"]["lines"]["count"]
+            file_lines = {ln for (_f, ln) in covered_lines(f) if _f == short}
+            all_lines_by_file.setdefault(short, set()).update(file_lines)
+            if is_snap:
+                snap_lines_by_file.setdefault(short, set()).update(file_lines)
+            if is_intg:
+                intg_lines_by_file.setdefault(short, set()).update(file_lines)
+
     lines: list[str] = []
     lines.append("# Per-test coverage overlap vs snapshot suite (issue #202)")
+    lines.append("")
+    lines.append("> **Generated file.** Rewritten by")
+    lines.append("> `docs/experiments/test-pruning-202/scripts/overlap_analysis.py`")
+    lines.append("> from the per-test JSON corpus under `coverage/per-test-json/`")
+    lines.append("> (produced by the sibling `extract_per_test_coverage.sh`). The PR")
+    lines.append("> only commits this report, not the JSON inputs.")
     lines.append("")
     lines.append(
         f"Snapshot union covers **{len(cov_snapshot)} distinct (file, line) keys** in `src/`."
@@ -216,22 +262,69 @@ def main() -> int:
     lines.append("Per-test coverage is collected with `cargo llvm-cov` + `LLVM_PROFILE_FILE`")
     lines.append("per process; subprocess coverage from `assert_cmd::Command::cargo_bin`")
     lines.append("propagates correctly via the `%p` substitution in the profile path.")
-    lines.append("Reproducer: `scripts/extract_per_test_coverage.sh`, then")
-    lines.append("`scripts/overlap_analysis.py`.")
     lines.append("")
     lines.append("**Branch coverage.** Stable rustc 1.95 does not emit branch counts;")
     lines.append("`cargo llvm-cov --branch` needs nightly. This pass uses line overlap only.")
-    lines.append("The QA framed branch as an enhancement on top of line overlap, not a")
-    lines.append("substitute. The false-flag rate is mitigated by the per-candidate")
-    lines.append("subagent review in stage 3 (see `triage-verdicts.md`).")
     lines.append("")
     lines.append("**Outcome of stage 3 (preview):** the subagent fan-out returned KEEP for")
     lines.append("all 28 `tests/*.rs` candidates with overlap ≥ 0.70. The snapshot corpus")
     lines.append("(5 happy-path fixtures, fixed flags, no error paths) is too narrow to")
-    lines.append("subsume any integration test — every candidate reaches an error path,")
-    lines.append("flag combo, multi-run update, merge-driver path, or internal invariant")
-    lines.append("the snapshot suite does not assert on. No deletions in this PR; see")
+    lines.append("subsume any integration test. No deletions in this PR; see")
     lines.append("`triage-verdicts.md` for the full per-candidate breakdown.")
+    lines.append("")
+    lines.append("## Coverage of `src/` per test group")
+    lines.append("")
+    lines.append("Three columns, each capped at the file's executable line count:")
+    lines.append("")
+    lines.append("- **snap%** — `tests/snapshot_tests.rs` alone (the new primary signal).")
+    lines.append("- **intg%** — every other file under `tests/*.rs` (the integration")
+    lines.append("  suite this PR was meant to prune).")
+    lines.append("- **all%** — everything, including in-source `#[cfg(test)]` modules.")
+    lines.append("")
+    lines.append("The gap `intg% − snap%` is exactly the slack the snapshot corpus")
+    lines.append("would need to grow to absorb before any `tests/*.rs` file becomes")
+    lines.append("a safe-delete candidate.")
+    lines.append("")
+    lines.append("| file | snap% | intg% | all% | executable |")
+    lines.append("|---|---:|---:|---:|---:|")
+    snap_total = intg_total = all_total = exec_total = 0
+    for fn in sorted(exec_lines_by_file):
+        tot = exec_lines_by_file[fn]
+        s = min(len(snap_lines_by_file.get(fn, set())), tot)
+        i = min(len(intg_lines_by_file.get(fn, set())), tot)
+        a = min(len(all_lines_by_file.get(fn, set())), tot)
+
+        def pct(x: int) -> str:
+            return f"{100.0 * x / tot:.0f}%" if tot else "-"
+
+        lines.append(f"| `{fn}` | {pct(s)} | {pct(i)} | {pct(a)} | {tot} |")
+        snap_total += s
+        intg_total += i
+        all_total += a
+        exec_total += tot
+
+    def total_pct(x: int) -> str:
+        return f"{100.0 * x / exec_total:.1f}%" if exec_total else "-"
+
+    lines.append(
+        f"| **total** | **{total_pct(snap_total)}** | **{total_pct(intg_total)}** | "
+        f"**{total_pct(all_total)}** | **{exec_total}** |"
+    )
+    lines.append("")
+    lines.append("Notes to avoid misreading the 0%/100% rows:")
+    lines.append("")
+    lines.append("- A 0% in **snap%** does NOT mean nothing covers that code — it")
+    lines.append("  means snapshots don't. The in-source `dockerfile_tests` etc. do")
+    lines.append("  exercise their matching `languages/<x>.rs`, but in a separate")
+    lines.append("  test binary not shown in the snap column.")
+    lines.append("- Each `languages/<x>.rs` file shows **3 executable lines** because")
+    lines.append("  the snapshot/integration binaries compile the library *without*")
+    lines.append("  `#[cfg(test)]`, exposing only the production `impl CommentParser`")
+    lines.append("  body. Measuring against the in-source test binary instead would")
+    lines.append("  show ~120 lines per language file (production + test-mod).")
+    lines.append("- `shell/sql/toml/yaml.rs` are at intg% = 0% / all% = 100%: only")
+    lines.append("  their in-source unit tests reach them. Deleting those tests would")
+    lines.append("  leave those parsers with no test coverage at all.")
     lines.append("")
     lines.append("## Distribution of overlap ratio across non-snapshot tests")
     lines.append("")

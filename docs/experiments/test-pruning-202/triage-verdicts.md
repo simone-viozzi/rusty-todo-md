@@ -1,10 +1,18 @@
 # Stage 3 subagent triage — verdicts
 
+> **Hand-assembled file.** Each row was emitted verbatim by a Sonnet
+> subagent invoked from the implementation session; the table here is a
+> manual transcription of the 28 verdicts. Re-running the experiment
+> would re-derive the verdicts but not regenerate this exact file. The
+> per-candidate prompts the subagents read are reproducible from
+> `scripts/build_subagent_prompts.py` against `overlap-data.json`.
+
 One Sonnet subagent per `tests/*.rs` candidate with overlap ≥ 0.70.
-Shared rubric: `prompt-test-pruning-subsumption-review.md` (KEEP bias by
-design). Per-candidate prompts live under
-`coverage/subagent-prompts/<name>.md` and bundle the rubric, a static
-snapshot-corpus digest, and the candidate test's source + overlap data.
+Shared rubric: subsumption-review (KEEP bias by design — see the QA in
+`arch-review` for why). Per-candidate prompts (generated at experiment
+time under `coverage/subagent-prompts/`, not tracked) bundle the rubric,
+a static snapshot-corpus digest, and the candidate test's source +
+overlap data.
 
 Result: **28 candidates reviewed, 0 DELETE, 28 KEEP.** No `tests/*.rs`
 file is deleted in this PR. The honest reading is that the current
