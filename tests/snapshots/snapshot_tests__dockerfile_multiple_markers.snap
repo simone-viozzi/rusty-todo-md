@@ -1,0 +1,14 @@
+---
+source: tests/snapshot_tests.rs
+expression: out.todo_md
+---
+# FIXME
+## Dockerfile
+* [Dockerfile:8](Dockerfile#L8): Pin package versions for reproducibility
+# HACK
+## Dockerfile
+* [Dockerfile:13](Dockerfile#L13): Temporary workaround for build issues
+# TODO
+## Dockerfile
+* [Dockerfile:3](Dockerfile#L3): Optimize base image size
+* [Dockerfile:16](Dockerfile#L16): Add health check endpoint

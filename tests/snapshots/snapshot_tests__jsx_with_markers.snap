@@ -1,0 +1,10 @@
+---
+source: tests/snapshot_tests.rs
+expression: out.todo_md
+---
+# FIXME
+## component.jsx
+* [component.jsx:4](component.jsx#L4): extract this into its own module
+# TODO
+## component.jsx
+* [component.jsx:1](component.jsx#L1): Add prop validation

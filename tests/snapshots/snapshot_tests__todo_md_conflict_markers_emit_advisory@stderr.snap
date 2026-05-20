@@ -1,0 +1,8 @@
+---
+source: tests/snapshot_tests.rs
+expression: stderr
+---
+rusty-todo-md: detected conflict markers in TODO.md.
+  - To rebuild TODO.md from source now: rusty-todo-md --regenerate
+  - To eliminate this conflict shape in future rebases: rusty-todo-md --install-merge-driver
+rusty-todo-md: skipping TODO.md: contains conflict markers

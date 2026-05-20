@@ -1,0 +1,11 @@
+---
+source: tests/snapshot_tests.rs
+expression: stderr
+---
+<TS> ERROR [rusty_todo_md::cli - src/cli.rs:<LINE>] Error: error: empty TODO comment found
+  --> sample.rs:3
+
+error: empty FIXME comment found
+  --> sample.rs:4
+
+Please add descriptions to the empty TODO comments above.
