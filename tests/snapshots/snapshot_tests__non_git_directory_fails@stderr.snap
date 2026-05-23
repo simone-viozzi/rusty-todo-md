@@ -1,5 +1,0 @@
----
-source: tests/snapshot_tests.rs
-expression: stderr
----
-<TS> ERROR [rusty_todo_md::cli - src/cli.rs:<LINE>] Error: Error opening repository: could not find repository at '.'; class=Repository (6); code=NotFound (-3)

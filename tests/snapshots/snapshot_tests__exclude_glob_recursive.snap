@@ -1,7 +1,0 @@
----
-source: tests/snapshot_tests.rs
-expression: out.todo_md
----
-# TODO
-## tests/test.rs
-* [tests/test.rs:1](tests/test.rs#L1): tests/ is NOT excluded — this must appear

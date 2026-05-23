@@ -1,7 +1,0 @@
----
-source: tests/snapshot_tests.rs
-expression: out.todo_md
----
-# TODO
-## lib.rs
-* [lib.rs:1](lib.rs#L1): lib.rs at root — NOT excluded
