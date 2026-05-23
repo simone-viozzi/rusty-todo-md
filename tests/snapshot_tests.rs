@@ -169,7 +169,7 @@ impl Scenario {
     }
 
     /// Override the CLI args (everything before the file list, unless
-    /// `pass_files(false)` is also set in which case this is the full CLI).
+    /// `no_file_args()` is also set in which case this is the full CLI).
     pub fn args<I, S>(mut self, args: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -242,9 +242,9 @@ impl Scenario {
         if let Some(step2) = step2_dir {
             apply_overlay(temp.path(), &step2);
             let run2_files = if self.pass_files {
-                // Pass all current top-level files (excluding TODO.md and
-                // .git) — mirrors how pre-commit would invoke us on the
-                // changed file set.
+                // Pass every current source file (recursively, excluding
+                // TODO.md and .git) — mirrors how pre-commit would invoke us
+                // on the changed file set.
                 let all = gather_run2_files(temp.path(), &initial_files);
                 filter_source_files(&all, self.todo_path)
             } else {
@@ -492,10 +492,9 @@ fn custom_markers_only_todo() {
 
 #[test]
 fn custom_todo_path() {
-    // `--todo-path` writes to a non-default location. The fixture seeds an
-    // empty `todos/` directory placeholder so the parent path exists; the
-    // harness reads from the custom location to verify the binary wrote
-    // there. Mirrors `integration::test_markers_arg_parsing` /
+    // `--todo-path` writes to a non-default location. The harness points
+    // `Scenario::todo_path` at the same name so it reads back the file the
+    // binary just wrote. Mirrors `integration::test_markers_arg_parsing` /
     // `test_process_files_list_single_run`.
     let out = Scenario::new("custom_todo_path")
         .args(["--todo-path", "MY_TODO.md", "--markers", "TODO", "--"])
@@ -696,9 +695,12 @@ fn source_file_with_conflict_markers_is_skipped() {
 /// edited), so we replace them with stable placeholders. The level and
 /// the human-readable message text are preserved verbatim.
 fn scrub_stderr(s: &str) -> String {
-    let ts_re = regex::Regex::new(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z").unwrap();
-    let line_re = regex::Regex::new(r"(\.rs):\d+\]").unwrap();
-    let mut out = ts_re.replace_all(s, "<TS>").into_owned();
-    out = line_re.replace_all(&out, "$1:<LINE>]").into_owned();
+    static TS_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z").unwrap()
+    });
+    static LINE_RE: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"(\.rs):\d+\]").unwrap());
+    let mut out = TS_RE.replace_all(s, "<TS>").into_owned();
+    out = LINE_RE.replace_all(&out, "$1:<LINE>]").into_owned();
     out
 }
