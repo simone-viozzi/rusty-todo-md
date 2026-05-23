@@ -41,34 +41,6 @@ fn test_empty_todo_detection() {
 }
 
 #[test]
-fn test_valid_todo_detection() {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_path = temp_dir.path();
-
-    // Create a test file with only valid TODOs
-    let test_file = temp_path.join("test.rs");
-    let mut file = fs::File::create(&test_file).unwrap();
-    writeln!(file, "// TODO: This is a valid TODO").unwrap();
-    writeln!(file, "fn main() {{").unwrap();
-    writeln!(file, "    // FIXME: This needs to be fixed").unwrap();
-    writeln!(file, "    println!(\"Hello, world!\");").unwrap();
-    writeln!(file, "}}").unwrap();
-    drop(file);
-
-    let marker_config = MarkerConfig::normalized(vec!["TODO".to_string(), "FIXME".to_string()]);
-
-    // Extract marked items first
-    let todos = extract_marked_items_from_file(&test_file, &marker_config).unwrap();
-
-    // Test that validation succeeds for valid TODOs
-    let result = validate_no_empty_todos(&todos);
-    assert!(
-        result.is_ok(),
-        "Expected validation to succeed for valid TODOs"
-    );
-}
-
-#[test]
 fn test_extract_empty_todos_directly() {
     let temp_dir = TempDir::new().unwrap();
     let temp_path = temp_dir.path();

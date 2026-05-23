@@ -24,8 +24,15 @@ repos:
     hooks:
       - id: rusty-todo-md
         # Snapshot-test fixtures intentionally contain TODO/FIXME/HACK
-        # markers; they are inputs to tests, not real TODOs.
-        exclude: ^tests/fixtures/snapshots/
+        # markers; they are inputs to tests, not real TODOs. The issue
+        # #202 prompt builder embeds the same fixture content verbatim
+        # in its corpus digest for subagent review — those are also
+        # data, not actionable TODOs.
+        exclude: |
+          (?x)^(
+            tests/fixtures/snapshots/.*
+            | docs/experiments/test-pruning-202/.*
+          )$
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
