@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_tests.rs
+expression: stderr
+---
+rusty-todo-md: skipping a.rs: contains conflict markers

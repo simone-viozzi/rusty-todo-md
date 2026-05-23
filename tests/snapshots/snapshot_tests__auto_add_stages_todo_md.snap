@@ -1,0 +1,7 @@
+---
+source: tests/snapshot_tests.rs
+expression: out.todo_md
+---
+# TODO
+## sample.rs
+* [sample.rs:1](sample.rs#L1): trigger --auto-add staging

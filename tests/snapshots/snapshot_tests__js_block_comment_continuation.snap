@@ -1,0 +1,11 @@
+---
+source: tests/snapshot_tests.rs
+expression: out.todo_md
+---
+# FIXME
+## complex.js
+* [complex.js:3](complex.js#L3): Handle edge cases such as null responses
+# TODO
+## complex.js
+* [complex.js:1](complex.js#L1): Refactor this function
+* [complex.js:11](complex.js#L11): Add error handling

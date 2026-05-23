@@ -1,0 +1,6 @@
+[env]
+# Redirect LLVM coverage raw profiles into target/ instead of polluting the
+# repo root with default_*.profraw files. cargo-llvm-cov sets its own
+# LLVM_PROFILE_FILE per-invocation, which overrides this, so this only kicks
+# in for plain `cargo test` runs against an already-instrumented build.
+LLVM_PROFILE_FILE = { value = "target/llvm-cov-target/profraw/%p-%m.profraw", relative = true }
