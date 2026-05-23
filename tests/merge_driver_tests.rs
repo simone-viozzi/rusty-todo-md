@@ -72,69 +72,6 @@ fn read(p: &Path) -> String {
 }
 
 #[test]
-fn regenerate_wipes_conflict_markers() {
-    let dir = init_repo();
-    let repo = dir.path();
-
-    fs::write(
-        repo.join("a.rs"),
-        "// TODO: one\nfn main(){}\n// TODO: two\n",
-    )
-    .unwrap();
-    git_must(repo, &["add", "."]);
-    git_must(repo, &["commit", "-q", "-m", "src"]);
-
-    // Pollute TODO.md with conflict markers.
-    let todo = repo.join("TODO.md");
-    fs::write(
-        &todo,
-        "<<<<<<< HEAD\n# TODO\n## a.rs\n* [a.rs:1](a.rs#L1): old-ours\n=======\n# TODO\n## a.rs\n* [a.rs:1](a.rs#L1): old-theirs\n>>>>>>> branch\n",
-    )
-    .unwrap();
-
-    AssertCommand::new(bin())
-        .current_dir(repo)
-        .arg("--regenerate")
-        .assert()
-        .success();
-
-    let content = read(&todo);
-    assert!(
-        !content.contains("<<<<<<<"),
-        "regenerate must strip conflict markers, got:\n{content}"
-    );
-    assert!(content.contains("one"), "regenerate should re-find TODOs");
-    assert!(content.contains("two"));
-}
-
-#[test]
-fn regenerate_advisory_printed_when_todo_md_has_conflict_markers() {
-    let dir = init_repo();
-    let repo = dir.path();
-
-    fs::write(repo.join("a.rs"), "// TODO: one\n").unwrap();
-    git_must(repo, &["add", "."]);
-    git_must(repo, &["commit", "-q", "-m", "src"]);
-
-    fs::write(
-        repo.join("TODO.md"),
-        "<<<<<<< HEAD\nblah\n=======\nblah\n>>>>>>> branch\n",
-    )
-    .unwrap();
-
-    AssertCommand::new(bin())
-        .current_dir(repo)
-        .arg("--")
-        .arg("a.rs")
-        // The default flow fails because TODO.md fails validation; we only
-        // care that the advisory is emitted to stderr before that.
-        .assert()
-        .stderr(predicates::str::contains(
-            "detected conflict markers in TODO.md",
-        ));
-}
-
-#[test]
 fn install_merge_driver_writes_config_and_gitattributes() {
     let dir = init_repo();
     let repo = dir.path();

@@ -63,7 +63,7 @@ while IFS= read -r bin; do
     llvm-cov export --format=text \
       --instr-profile="$profdata" "$bin" \
       --object "$MAIN_BIN" \
-      --sources "$ROOT/src" \
+      --sources "$REPO_ROOT/src" \
       > "$json"
     count=$((count + 1))
   done < <("$bin" --list --format=terse 2>/dev/null | sed -n 's/: test$//p')

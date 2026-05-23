@@ -1,102 +1,113 @@
-# Stage 3 subagent triage — verdicts
+# Stage 3 subagent triage — verdicts (re-run against expanded snapshot corpus)
 
 > **Hand-assembled file.** Each row was emitted verbatim by a Sonnet
 > subagent invoked from the implementation session; the table here is a
-> manual transcription of the 28 verdicts. Re-running the experiment
+> manual transcription of the 32 verdicts. Re-running the experiment
 > would re-derive the verdicts but not regenerate this exact file. The
 > per-candidate prompts the subagents read are reproducible from
 > `scripts/build_subagent_prompts.py` against `overlap-data.json`.
 
 One Sonnet subagent per `tests/*.rs` candidate with overlap ≥ 0.70.
-Shared rubric: subsumption-review (KEEP bias by design — see the QA in
-`arch-review` for why). Per-candidate prompts (generated at experiment
-time under `coverage/subagent-prompts/`, not tracked) bundle the rubric,
-a static snapshot-corpus digest, and the candidate test's source +
-overlap data.
+Shared rubric: strict subsumption review with a KEEP bias (uncertainty
+defaults to KEEP). Per-candidate prompts (generated at experiment time
+under `coverage/subagent-prompts/`, not tracked) bundle the rubric, a
+**data-driven** snapshot-corpus digest (one section per `#[test] fn` in
+`tests/snapshot_tests.rs`, with the actual `.snap` body inlined), and
+the candidate test's source + overlap data.
 
-Result: **28 candidates reviewed, 0 DELETE, 28 KEEP.** No `tests/*.rs`
-file is deleted in this PR. The honest reading is that the current
-snapshot corpus — five fixtures, all happy-path, fixed `--markers TODO
-FIXME HACK --` flags, no error paths, no flag combinations — does not
-yet subsume any integration test. Every `tests/*.rs` candidate reaches
-either an error path, a CLI flag combo, a multi-run / file-removal
-update, merge-driver behavior, or an internal invariant that no
-snapshot would fail on.
+Result: **32 candidates reviewed, 11 DELETE, 21 KEEP.** The 11 deleted
+tests are removed in this PR. The 21 retained tests assert on
+something the snapshot corpus still can't reach.
 
-Calibration was done on `multi_language_tests::test_js_with_fixme_markers`
-(line overlap 1.0000): the test asserts that a `/* FIXME: ...\n   ... */`
-JS block-comment marker is captured AND joined with a single space, but
-the snapshot corpus contains no fixture that asserts on multi-line
-block-comment continuation in any language. A regression there would
-not fail any snapshot. Verdict: KEEP. The rubric handled this exactly
-as intended, so I proceeded to fan out the remaining 27 candidates.
+## Why the result flipped (vs. the first pass)
 
-## What every verdict tells us
+The first pass against a 5-fixture corpus returned 28 KEEP / 0 DELETE
+because the corpus did not exercise error paths, custom flags, glob
+excludes, multi-language parsers, second-run merging, or conflict
+markers. PR #207 added all of those (corpus went from 5 → 23 fixtures
+and snapshot-only `src/` coverage from 46% → 65%). The expanded corpus
+now subsumes — on both stdout and stderr — every `tests/*.rs`
+candidate that asserts only on those user-visible behaviors. What's
+left in the KEEP column is exactly the set of behaviors snapshots
+*still* don't model.
 
-The subagent verdicts converge on a small set of reasons:
+## What the KEEP verdicts converge on
 
 | Reason | Where it shows up |
 |---|---|
-| stderr / error-message text | `cli_error_tests::*`, `merge_driver_tests::regenerate_advisory_*`, `merge_driver_tests::source_files_with_conflict_markers_are_skipped` |
-| non-zero exit / error paths | `cli_error_tests::test_run_cli_in_non_git_directory`, `cli_error_tests::test_run_cli_with_unreadable_file` |
-| custom `--markers` / `--todo-path` / `--auto-add` flags | `integration::test_markers_*`, `integration::test_process_files_list_single_run`, `integration::test_auto_add_functionality`, several `multi_language_tests::*` |
-| `--exclude` / `--exclude-dir` glob handling | `glob_exclude_tests::*`, `integration::test_exclude_files_with_glob_patterns` |
-| language parsers not in snapshot corpus (Go, Dockerfile, JSX) | `multi_language_tests::test_go_*`, `multi_language_tests::test_dockerfile_*`, `multi_language_tests::test_mixed_language_*` |
-| multi-line block comment continuation | `multi_language_tests::test_js_with_fixme_markers` |
-| second-run merge / file-removal / file-change update | `integration::test_multiple_runs_update`, `integration::test_update_todo_md_on_file_removal`, `integration::test_update_todo_md_on_file_change`, `integration::test_multiple_files_update` |
-| empty-TODO validation (`validate_no_empty_todos`) | `empty_todo_validation_tests::*` |
-| merge-driver install / reconcile / self-heal | `merge_driver_tests::auto_install_*`, `merge_driver_tests::regenerate_*` |
-| stdout / git-config side-effects | `merge_driver_tests::auto_install_*` |
+| Internal-API invariants (calls library functions directly) | `empty_todo_validation_tests::*` (the surviving three call `validate_no_empty_todos` directly with field-level assertions on the returned items) |
+| Stderr/exit-code combinations the snapshot fixture doesn't cover end-to-end | `cli_error_tests::*` (non-git directory, unreadable file, corrupted-TODO.md fallback) |
+| CLI no-files no-op exit | `cli_no_files_tests::test_run_cli_no_files` |
+| Git-index introspection beyond `--auto-add` | `git_tests::*`, `integration::test_auto_add_functionality` (asserts on `is_wt_new` / `is_index_new` index bits no snapshot captures) |
+| Multi-step second-run / file-removal with different flag combos | `integration::test_multiple_runs_update`, `test_multiple_files_update`, `test_update_todo_md_on_file_removal` |
+| `--exclude` glob combos the snapshots only sample | `glob_exclude_tests::*`, `integration::test_exclude_files_with_glob_patterns` |
+| Merge-driver install / auto-install / self-heal / rebase-without-driver | all surviving `merge_driver_tests::*` |
+| Per-entry exclusion assertion (skip logic at item granularity) | `merge_driver_tests::source_files_with_conflict_markers_are_skipped` |
 
-Each is a distinct gap in the snapshot corpus. Closing any of them
-opens a deletion candidate; that work belongs in a follow-up that
-expands the fixture set — explicitly **out of scope** for this PR per
-the handover.
+Each is a residual gap in the snapshot corpus. Closing any of them
+opens further deletion candidates, but that work is **out of scope**
+for this PR.
 
 ## Per-candidate verdicts
 
 | overlap | candidate | verdict |
 |---|---|---|
-| 1.0000 | `multi_language_tests::test_js_with_fixme_markers` | KEEP: snapshot corpus never asserts multi-line JS block-comment continuation is captured and joined; a regression there would not fail any snapshot. |
-| 1.0000 | `empty_todo_validation_tests::test_valid_todo_detection` | KEEP: asserts on `validate_no_empty_todos` internal invariant not covered by any snapshot fixture. |
-| 1.0000 | `empty_todo_validation_tests::test_extract_empty_todos_directly` | KEEP: asserts on empty-message internal invariant not observable from TODO.md snapshot output |
-| 0.9891 | `multi_language_tests::test_go_with_mixed_comments` | KEEP: exercises Go parser + custom --markers + custom --todo-path + multi-line block comment joining, none snapshot-covered |
-| 0.9888 | `multi_language_tests::test_mixed_language_todo_extraction` | KEEP: exercises Go + JSX languages and custom --todo-path, none covered by snapshots |
-| 0.9774 | `multi_language_tests::test_dockerfile_with_multiple_markers` | KEEP: exercises Dockerfile language parser + custom --markers/--todo-path, both outside snapshot corpus |
-| 0.9519 | `integration::test_markers_arg_parsing` | KEEP: exercises custom --todo-path flag, which no snapshot fixture covers. |
-| 0.9518 | `integration::test_process_files_list_single_run` | KEEP: uses custom `--todo-path` flag not exercised by any snapshot fixture. |
-| 0.9450 | `empty_todo_validation_tests::test_empty_todo_detection` | KEEP: asserts on stderr error-message text and validate_no_empty_todos path not covered by snapshots |
-| 0.9450 | `empty_todo_validation_tests::test_python_empty_todos` | KEEP: asserts on empty-comment error paths and stderr-like error text not covered by snapshots |
-| 0.9246 | `cli_no_files_tests::test_run_cli_no_files` | KEEP: asserts exit-code 0 on no-files path; no snapshot exercises missing-file-args branch. |
-| 0.9214 | `cli_error_tests::test_run_cli_with_unreadable_file` | KEEP: asserts stderr text and non-zero-success error path not covered by any snapshot fixture |
-| 0.9138 | `merge_driver_tests::regenerate_advisory_printed_when_todo_md_has_conflict_markers` | KEEP: asserts stderr text ("detected conflict markers in TODO.md") — not covered by snapshots |
-| 0.9137 | `integration::test_markers_with_separator` | KEEP: exercises `--` separator CLI parsing; no snapshot covers custom `--todo-path` + separator combo. |
-| 0.9096 | `glob_exclude_tests::test_glob_exclude_recursive_wildcard` | KEEP: exercises glob-exclude CLI flag + recursive wildcard logic not covered by any snapshot fixture |
-| 0.9040 | `glob_exclude_tests::test_glob_multiple_exclude_patterns` | KEEP: exercises --exclude flag with multiple patterns; glob-exclude logic not covered by any snapshot fixture. |
-| 0.9017 | `merge_driver_tests::regenerate_wipes_conflict_markers` | KEEP: exercises --regenerate flag + conflict-marker git-state edge case; no snapshot covers this |
-| 0.8883 | `integration::test_multiple_runs_update` | KEEP: second-run merge & file-removal update paths not covered by any snapshot fixture |
-| 0.8883 | `integration::test_update_todo_md_on_file_removal` | KEEP: second-run merging / file-removal update path explicitly excluded from snapshot corpus |
-| 0.8875 | `integration::test_update_todo_md_on_file_change` | KEEP: exercises second-run merging into an existing TODO.md, not covered by snapshots |
-| 0.8862 | `integration::test_multiple_files_update` | KEEP: exercises second-run merge/update and file-removal from TODO.md — not covered by snapshots |
-| 0.8860 | `integration::test_exclude_files_with_glob_patterns` | KEEP: exercises --exclude/--exclude-dir flags and src/exclusion.rs lines not covered by snapshots |
-| 0.8516 | `cli_error_tests::test_run_cli_in_non_git_directory` | KEEP: asserts non-zero exit + stderr error text; error paths not covered by snapshots. |
-| 0.8464 | `integration::test_auto_add_functionality` | KEEP: asserts --auto-add git-staging side-effect and --auto-add CLI flag, not covered by snapshots |
-| 0.8449 | `cli_error_tests::test_sync_todo_file_fallback_mechanism` | KEEP: exercises corrupted-TODO.md fallback path and file-removal/second-run merging, not covered by snapshots. |
-| 0.8395 | `merge_driver_tests::source_files_with_conflict_markers_are_skipped` | KEEP: asserts stderr text ("contains conflict markers") and non-zero-exit-free skip logic not covered by snapshots |
-| 0.7247 | `merge_driver_tests::auto_install_flag_registers_driver_on_first_run_then_silent` | KEEP: asserts stdout content ("reconciling…" text) and silent-on-second-run; neither path is snapshot-covered. |
-| 0.7143 | `merge_driver_tests::auto_install_self_heals_on_args_change` | KEEP: asserts stdout text + git config content for merge-driver self-heal; not covered by snapshots. |
+| 1.0000 | `multi_language_tests::test_go_with_mixed_comments` | DELETE |
+| 1.0000 | `multi_language_tests::test_js_with_fixme_markers` | DELETE |
+| 1.0000 | `multi_language_tests::test_mixed_language_todo_extraction` | DELETE |
+| 1.0000 | `multi_language_tests::test_dockerfile_with_multiple_markers` | DELETE |
+| 1.0000 | `merge_driver_tests::regenerate_advisory_printed_when_todo_md_has_conflict_markers` | DELETE |
+| 1.0000 | `merge_driver_tests::regenerate_wipes_conflict_markers` | DELETE |
+| 1.0000 | `merge_driver_tests::source_files_with_conflict_markers_are_skipped` | KEEP: snapshot only asserts the "all TODOs skipped" output; candidate uniquely checks per-entry exclusion logic |
+| 1.0000 | `empty_todo_validation_tests::test_empty_todo_detection` | KEEP: asserts directly on `validate_no_empty_todos` return value and error text, not via CLI/snapshot |
+| 1.0000 | `empty_todo_validation_tests::test_python_empty_todos` | KEEP: asserts on internal `validate_no_empty_todos` API and error text not covered by CLI snapshot stderr path |
+| 1.0000 | `empty_todo_validation_tests::test_valid_todo_detection` | DELETE |
+| 1.0000 | `empty_todo_validation_tests::test_extract_empty_todos_directly` | KEEP: asserts internal item count and per-item fields (marker, line_number) not visible in snapshot output |
+| 0.9892 | `cli_error_tests::test_run_cli_with_unreadable_file` | KEEP: asserts stderr warning text for unreadable-file path — not covered by any snapshot |
+| 0.9888 | `integration::test_auto_add_functionality` | KEEP: asserts git index state (`is_wt_new`, `is_index_new`) not captured by snapshot `git_index` diff |
+| 0.9881 | `integration::test_multiple_files_update` | KEEP: second-run update + removal scenario not covered by any snapshot fixture |
+| 0.9880 | `integration::test_multiple_runs_update` | KEEP: `second_run_message_changes` covers update only; candidate also tests removal (run 3) and the no-TODO-remains assertion |
+| 0.9880 | `integration::test_update_todo_md_on_file_removal` | KEEP: `second_run_file_no_longer_has_todo` uses `--markers TODO` but candidate uses default markers with custom `--todo-path` — different CLI path |
+| 0.9879 | `integration::test_exclude_files_with_glob_patterns` | KEEP: `--exclude` + `--exclude-dir` combo; `exclude_dir_flag` snapshot uses different flags/files |
+| 0.9879 | `integration::test_update_todo_md_on_file_change` | DELETE |
+| 0.9878 | `glob_exclude_tests::test_glob_multiple_exclude_patterns` | KEEP: multiple `--exclude` flags combo not exercised by any snapshot fixture |
+| 0.9870 | `integration::test_markers_arg_parsing` | DELETE |
+| 0.9870 | `integration::test_process_files_list_single_run` | DELETE |
+| 0.9869 | `cli_no_files_tests::test_run_cli_no_files` | KEEP: CLI no-files no-op exit path explicitly listed as not covered by snapshot corpus |
+| 0.9859 | `integration::test_markers_with_separator` | DELETE |
+| 0.9840 | `glob_exclude_tests::test_glob_exclude_recursive_wildcard` | KEEP: exercises `src/**` recursive-wildcard with multi-level nesting not present in snapshot fixture |
+| 0.9780 | `cli_error_tests::test_run_cli_in_non_git_directory` | KEEP: snapshot covers stderr text but not the non-zero exit code; candidate explicitly checks `.failure()` |
+| 0.9669 | `cli_error_tests::test_sync_todo_file_fallback_mechanism` | KEEP: corrupted-TODO.md fallback path not covered by any snapshot fixture |
+| 0.8718 | `git_tests::test_get_tracked_files` | KEEP: git-state invariant (no double slashes in paths) not covered by any snapshot fixture |
+| 0.8718 | `git_tests::test_get_tracked_files_includes_staged_but_uncommitted` | KEEP: git-index staged-but-uncommitted path in `git_utils.rs` not exercised by snapshots |
+| 0.8500 | `git_tests::test_get_tracked_files_deduplicates_conflict_stages` | KEEP: conflict-stage dedup in index not modeled by any snapshot fixture |
+| 0.8017 | `merge_driver_tests::rebase_without_driver_conflicts_with_driver_clean` | KEEP: merge-driver git-state edge case not covered by any snapshot fixture |
+| 0.7781 | `merge_driver_tests::auto_install_flag_registers_driver_on_first_run_then_silent` | KEEP: `--auto-install-merge-driver` flag and idempotent stdout behaviour not in snapshot corpus |
+| 0.7668 | `merge_driver_tests::auto_install_self_heals_on_args_change` | KEEP: stdout reconciliation message + git config args update not covered by snapshots |
 
-## In-source `#[cfg(test)]` candidates — parked, no subagent fan-out this PR
+## What was deleted
+
+11 test functions across 4 files. Per-binary breakdown after deletion:
+
+| binary | tests before | tests after | deleted |
+|---|---:|---:|---:|
+| `tests/cli_error_tests.rs` | 3 | 3 | 0 |
+| `tests/cli_no_files_tests.rs` | 1 | 1 | 0 |
+| `tests/empty_todo_validation_tests.rs` | 4 | 3 | 1 (`test_valid_todo_detection`) |
+| `tests/git_tests.rs` | 4 | 4 | 0 |
+| `tests/glob_exclude_tests.rs` | 2 | 2 | 0 |
+| `tests/integration.rs` | 9 | 5 | 4 (`test_markers_arg_parsing`, `test_markers_with_separator`, `test_process_files_list_single_run`, `test_update_todo_md_on_file_change`) |
+| `tests/merge_driver_tests.rs` | 9 | 7 | 2 (`regenerate_advisory_*`, `regenerate_wipes_conflict_markers`) |
+| `tests/multi_language_tests.rs` | 4 | — | **whole file removed** |
+| **total** | **36** | **25** | **11** |
+
+`tests/snapshot_tests.rs` (23 tests) is untouched — it's the new
+primary signal, not in scope for deletion.
+
+## In-source `#[cfg(test)]` candidates — still parked
 
 The handover puts in-source tests on FLAG-ONLY status: deletion is
-deferred until after #190 (aggregator decomposition) lands, when a
-re-measurement on the post-refactor code will show which in-source
-tests actually caught regressions. Running 111 in-source uniqueness
-subagents now would consume agent budget producing verdicts that the
-post-#190 second pass plans to re-derive against fresh code. The
-overlap-report table itself *is* the flag-only list — entries with
-ratio ≥ 0.70 are the candidates the second pass will visit.
-
-In other words, the data was captured (every in-source test ran with
-LLVM coverage, every JSON is in `coverage/per-test-json/`), but the
-eyeball step is parked along with the deletion decision.
+deferred until after #190 (aggregator decomposition) lands. The data
+is captured (every in-source test ran with LLVM coverage, every JSON
+is in `coverage/per-test-json/`), but the eyeball step is still
+parked along with the deletion decision.

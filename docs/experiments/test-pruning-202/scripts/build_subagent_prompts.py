@@ -53,96 +53,138 @@ When the candidate and a snapshot fixture cover the same scenario with different
 A single line: `DELETE` or `KEEP: <reason ≤80 chars>`. No preamble, no markdown.
 """
 
-# The corpus digest reproduces snapshot output that contains literal
-# `__TOK__` / `__FIX__` / `__HAK__` section headers. Those would trip the
-# project's own rusty-todo-md pre-commit hook when scanning this file,
-# so we keep sentinel tokens in source and substitute them at module
-# load. The rendered prompt strings are unaffected.
-_DIGEST_TOK = "# T" + "ODO"
-_DIGEST_FIX = "# F" + "IXME"
-_DIGEST_HAK = "# H" + "ACK"
+SNAP_DIR = ROOT / "tests" / "snapshots"
+SNAPSHOT_TESTS_RS = ROOT / "tests" / "snapshot_tests.rs"
 
-_CORPUS_DIGEST_TEMPLATE = """## Snapshot corpus — what the snapshot suite actually asserts on
 
-The harness in `tests/snapshot_tests.rs` runs the binary via `assert_cmd::Command::cargo_bin` against a tempdir copy of each fixture, with `--markers TODO FIXME HACK --`, and snapshots the resulting `TODO.md` (or `<no TODO.md generated>` when none is produced). All five fixtures share the same flags; no fixture exercises custom `--todo-path`, glob excludes, error paths, or empty-message validation.
+def _strip_snap_header(text: str) -> str:
+    """Drop the `---\n…\n---\n` insta YAML header; return the asserted body."""
+    if not text.startswith("---"):
+        return text.rstrip("\n")
+    parts = text.split("---\n", 2)
+    if len(parts) < 3:
+        return text.rstrip("\n")
+    return parts[2].rstrip("\n")
 
-### Fixture: rust_basic — single Rust file with simple TODO/FIXME line comments
-Snapshot output asserts on grouped sections by marker, listed file + line.
 
-### Fixture: python_basic — single Python file with `#`-prefix comments
-Snapshot output asserts on Python comment extraction + section rendering.
+def _parse_snapshot_tests() -> list[dict]:
+    """Walk `tests/snapshot_tests.rs` and pull one entry per `#[test] fn`.
 
-### Fixture: mixed_languages — main.rs, app.py, script.js
-```
-__FIX__
-## main.rs
-* [main.rs:3](main.rs#L3): panic on bad input
+    Each entry carries the test's fixture name (the first `Scenario::new(..)`
+    argument inside the body), the args list (best-effort), and the body
+    text — enough for the digest builder to attach the matching .snap
+    contents and to surface which integration test the snapshot mirrors
+    (via the `Mirrors …` doc-comment convention).
+    """
+    text = SNAPSHOT_TESTS_RS.read_text()
+    entries: list[dict] = []
+    fn_re = re.compile(
+        r"#\[test\][^\n]*\n((?:\s*//[^\n]*\n)*)\s*fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*\)\s*\{",
+        re.MULTILINE,
+    )
+    for m in fn_re.finditer(text):
+        comments = m.group(1) or ""
+        fn_name = m.group(2)
+        # Find the function body by brace-balancing.
+        i = m.end() - 1
+        depth = 0
+        start = m.end()
+        body_end = None
+        while i < len(text):
+            c = text[i]
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    body_end = i
+                    break
+            i += 1
+        if body_end is None:
+            continue
+        body = text[start:body_end]
+        # First "Scenario::new(\"<name>\")" → fixture name.
+        fixture_m = re.search(r'Scenario::new\(\s*"([^"]+)"\s*\)', body)
+        fixture = fixture_m.group(1) if fixture_m else fn_name
+        # Collect any `.args([...])` arguments so the digest shows the flags.
+        args_m = re.search(r"\.args\(\[([^\]]*)\]\)", body, re.DOTALL)
+        args = ""
+        if args_m:
+            args = re.sub(r"\s+", " ", args_m.group(1).strip())
+        comment_one_line = " ".join(
+            line.strip().lstrip("/").strip() for line in comments.splitlines() if line.strip()
+        )
+        entries.append(
+            {
+                "fn": fn_name,
+                "fixture": fixture,
+                "args": args,
+                "comment": comment_one_line,
+            }
+        )
+    return entries
 
-## script.js
-* [script.js:3](script.js#L3): race condition under load
-__HAK__
-## app.py
-* [app.py:3](app.py#L3): short timeout for now
-__TOK__
-## app.py
-* [app.py:1](app.py#L1): switch to async client
 
-## main.rs
-* [main.rs:1](main.rs#L1): wire up cli
+def _build_corpus_digest() -> str:
+    """Read the live snapshot suite + .snap files and assemble a digest.
 
-## script.js
-* [script.js:1](script.js#L1): validate input
-```
-This is the *only* snapshot that proves multi-file + multi-language rendering. All TODO messages are single-line.
+    The digest lists every snapshot scenario with the assertions it makes
+    (todo_md body, stderr body, git_index body). The subagent compares
+    these directly against the candidate's assertions.
+    """
+    entries = _parse_snapshot_tests()
+    lines: list[str] = []
+    lines.append("## Snapshot corpus — what the snapshot suite actually asserts on")
+    lines.append("")
+    lines.append(
+        f"The harness in `tests/snapshot_tests.rs` runs the binary via `assert_cmd::Command::cargo_bin` "
+        f"against a tempdir copy of each fixture under `tests/fixtures/snapshots/<fixture>/`. "
+        f"Default args are `--markers TODO FIXME HACK --`; overrides are noted per scenario. "
+        f"The captured `TODO.md` (or the literal sentinel `<no TODO.md generated>` when the binary writes nothing) "
+        f"is compared to a checked-in `.snap` file; some scenarios additionally snapshot stderr "
+        f"(env_logger output, with timestamps and `file:line` scrubbed) and/or the post-run "
+        f"`git diff --cached --name-only`. **{len(entries)}** scenarios total."
+    )
+    lines.append("")
+    for e in entries:
+        lines.append(f"### `{e['fn']}` — fixture `{e['fixture']}`")
+        if e["comment"]:
+            lines.append(f"_{e['comment']}_")
+        if e["args"]:
+            lines.append(f"Args: `{e['args']}`")
+        # Attach every .snap file matching this test fn.
+        for snap in sorted(SNAP_DIR.glob(f"snapshot_tests__{e['fn']}*.snap")):
+            kind = "todo_md"
+            if "@" in snap.stem:
+                kind = snap.stem.split("@", 1)[1]
+            body = _strip_snap_header(snap.read_text())
+            lines.append(f"<details><summary>{kind}</summary>")
+            lines.append("")
+            lines.append("```")
+            lines.append(body)
+            lines.append("```")
+            lines.append("")
+            lines.append("</details>")
+        lines.append("")
+    lines.append("## What the snapshot corpus still does NOT cover")
+    lines.append(
+        "- Merge-driver install / auto-install / self-heal-on-args-change "
+        "(`install_merge_driver_*`, `auto_install_*`, `rebase_without_driver_*`)."
+    )
+    lines.append(
+        "- Git index introspection beyond `--auto-add` "
+        "(staged-vs-tracked distinctions, conflict-stage dedup)."
+    )
+    lines.append(
+        "- Unreadable-file / corrupted-TODO.md fallback paths."
+    )
+    lines.append(
+        "- The CLI no-files no-op exit (no fixture omits file args)."
+    )
+    return "\n".join(lines)
 
-### Fixture: awkward_positions — single Rust file `quirks.rs`
-Fixture content:
-```rust
-fn outer() {
-    // top-level normal
-            // TODO: deeply indented marker
-    let x = 1; // FIXME: trailing end-of-line marker
-    /*
-     * HACK: marker inside a multi-line
-     *       star-prefixed block comment
-     */
-    let _ = x;
-}
-```
-Snapshot:
-```
-__FIX__
-## quirks.rs
-* [quirks.rs:4](quirks.rs#L4): trailing end-of-line marker
-__TOK__
-## quirks.rs
-* [quirks.rs:3](quirks.rs#L3): deeply indented marker
-```
-Note: the multi-line star-prefixed `* HACK:` block is NOT in the snapshot — a regression in multi-line block-comment joining would not fail any snapshot.
 
-### Fixture: no_markers — control file with no markers
-Snapshot asserts the `<no TODO.md generated>` sentinel.
-
-## What the snapshot corpus does NOT cover
-- Custom `--markers` (always TODO+FIXME+HACK).
-- Custom `--todo-path` (always default).
-- Glob excludes (`--exclude`, `--exclude-dir`).
-- Multi-line block comment continuation (joined with single space).
-- File-removal updates / second-run merging into an existing TODO.md.
-- Empty TODO comment detection (`validate_no_empty_todos`).
-- Error paths (non-git directory, unreadable file, missing args).
-- Stderr content / non-zero exit codes.
-- Git index semantics (staged vs tracked, conflict-stage dedup).
-- Merge driver behavior (install_driver / reconcile / merge subcommand).
-- Auto-install of the merge driver / self-heal on args drift.
-- Conflict-marker handling in TODO.md or in source files.
-"""
-
-CORPUS_DIGEST = (
-    _CORPUS_DIGEST_TEMPLATE.replace("__TOK__", _DIGEST_TOK)
-    .replace("__FIX__", _DIGEST_FIX)
-    .replace("__HAK__", _DIGEST_HAK)
-)
+CORPUS_DIGEST = _build_corpus_digest()
 
 
 def file_for_test(name: str, binary: str) -> tuple[str | None, str]:
