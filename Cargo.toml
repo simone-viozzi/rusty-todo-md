@@ -11,7 +11,7 @@ documentation = "https://github.com/simone-viozzi/rusty-todo-md"
 
 [dependencies]
 clap = { version = "4.5.27", features = ["derive"] }
-git2 = { version = "0.20", default-features = false, features = [
+git2 = { version = "0.21", default-features = false, features = [
     "vendored-openssl",
     "vendored-libgit2",
 ] }
