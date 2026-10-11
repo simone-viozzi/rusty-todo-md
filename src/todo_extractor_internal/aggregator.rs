@@ -95,7 +95,6 @@ fn extract_comment_from_pair(
     pair: pest::iterators::Pair<impl pest::RuleType>,
 ) -> Option<CommentLine> {
     let span = pair.as_span();
-    let base_line = span.start_pos().line_col().0; // Get line number
     let text = span.as_str().trim(); // Extract the comment text
 
     let rule_name = format!("{:?}", pair.as_rule()).to_lowercase();
@@ -103,6 +102,9 @@ fn extract_comment_from_pair(
     if rule_name.contains("non_comment") {
         return None;
     }
+    // `Pair::line_col` uses pest's precomputed line index; `Position::line_col`
+    // rescans from the start of the input, which is quadratic over a file.
+    let base_line = pair.line_col().0;
     // Accept tokens if they are a comment or a docstring
     if (rule_name.contains("comment") || rule_name.contains("docstring")) && !text.is_empty() {
         Some(CommentLine {
@@ -1036,6 +1038,51 @@ fn some_function() {
         assert!(
             elapsed.as_secs() < 1,
             "marker-free fast path took too long: {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn test_large_marker_bearing_file_parses_in_linear_time() {
+        use std::io::Write;
+        use std::time::Instant;
+        use tempfile::Builder;
+
+        init_logger();
+
+        // A large file with one marker passes the prefilter and goes through
+        // the full pest parse. Computing `line_col()` for every pair (one per
+        // byte of non-comment code) made this quadratic: a 7k-line Python
+        // file took ~40s in release (#193).
+        let mut temp_file = Builder::new()
+            .suffix(".py")
+            .tempfile()
+            .expect("Failed to create temp file");
+        let line = "value = compute(alpha, beta, gamma)  # plain trailing comment\n";
+        let line_count = 8_000;
+        for _ in 0..line_count {
+            temp_file
+                .write_all(line.as_bytes())
+                .expect("Failed to write");
+        }
+        temp_file
+            .write_all(b"# TODO: the only marker\n")
+            .expect("Failed to write");
+        temp_file.flush().expect("Failed to flush");
+
+        let config = MarkerConfig {
+            markers: vec!["TODO".to_string()],
+        };
+
+        let start = Instant::now();
+        let result = extract_marked_items_from_file(temp_file.path(), &config)
+            .expect("extract should succeed");
+        let elapsed = start.elapsed();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].line_number, line_count + 1);
+        assert!(
+            elapsed.as_secs() < 5,
+            "large marker-bearing file took too long: {elapsed:?}"
         );
     }
 
