@@ -69,7 +69,7 @@ pub fn validate_no_empty_todos(new_todos: &[MarkedItem]) -> Result<(), String> {
 ///
 /// Each top-level invocation lands in exactly one variant; `Scan` is the
 /// default when no mode-selecting flag is present and is the only mode that
-/// honors `auto_add` / `auto_install_merge_driver`.
+/// honors `auto_add` and reconciles the merge driver registration.
 enum Mode {
     Scan,
     Regenerate,
@@ -90,7 +90,6 @@ struct ParsedArgs {
     exclusion_rules: Vec<ExclusionRule>,
     files: Vec<PathBuf>,
     auto_add: bool,
-    auto_install_merge_driver: bool,
 }
 
 impl ParsedArgs {
@@ -147,7 +146,6 @@ impl ParsedArgs {
             exclusion_rules,
             files,
             auto_add: matches.get_flag("auto_add"),
-            auto_install_merge_driver: matches.get_flag("auto_install_merge_driver"),
         })
     }
 }
@@ -171,18 +169,28 @@ fn dispatch(args: &ParsedArgs, git_ops: &dyn GitOpsTrait) -> Result<(), String> 
 mod mode {
     use super::*;
 
-    /// Default mode: process the files pre-commit passed us, merge into the
-    /// existing TODO.md, optionally auto-add it back to the index, and
-    /// optionally self-install the merge driver.
+    /// Default mode: when run by pre-commit, keep this clone's merge driver
+    /// registration in sync; then process the files pre-commit passed us,
+    /// merge into the existing TODO.md, and optionally auto-add it back to
+    /// the index.
     pub(super) fn scan(
         args: &ParsedArgs,
         repo: Repository,
         git_ops: &dyn GitOpsTrait,
     ) -> Result<(), String> {
-        ensure_todo_path_exists(&args.todo_path)?;
-        if args.auto_install_merge_driver {
-            maybe_auto_install(args, &repo);
+        // pre-commit sets PRE_COMMIT=1 for hooks. Gating on it keeps manual
+        // runs from another install (pip, uvx) from re-pointing the driver.
+        if std::env::var_os("PRE_COMMIT").is_some_and(|v| v == "1") {
+            reconcile_merge_driver(args, &repo)?;
         }
+        // pre-commit passes no files in the `pre-rebase` stage, and on
+        // commits with no matching files (the hook is `always_run`). Git
+        // refuses to rebase a dirty tree, so such a run must not touch
+        // TODO.md.
+        if args.files.is_empty() {
+            return Ok(());
+        }
+        ensure_todo_path_exists(&args.todo_path)?;
         warn_if_todo_md_has_conflict_markers(&args.todo_path);
         process_files(args, repo, git_ops)
     }
@@ -209,6 +217,7 @@ mod mode {
             &args.exclude_patterns,
             &args.exclude_dir_patterns,
             &args.todo_path,
+            &current_exe()?,
         )
         .map_err(|e| format!("Error installing merge driver: {e}"))?;
         print!("{}", merge_driver::format_install_summary(&summary));
@@ -234,35 +243,45 @@ mod mode {
         Ok(())
     }
 
-    /// Auto-install side-effect. Only called from scan mode when
-    /// `--auto-install-merge-driver` is set. Reconciles the registered
-    /// driver against the current invocation's args: silent no-op when
-    /// already in sync, loud summary when it has to write. Non-fatal on
-    /// failure — a flaky install must never block the actual pre-commit
-    /// work.
-    fn maybe_auto_install(args: &ParsedArgs, repo: &Repository) {
-        match merge_driver::reconcile(
+    /// When `.gitattributes` routes TODO.md to the merge driver (the
+    /// maintainer's committed opt-in), make this clone's `.git/config`
+    /// register it with this binary and these args. Silent when not routed
+    /// or already in sync.
+    ///
+    /// Fails after writing, like a formatter that changed files: pre-commit
+    /// only shows the output of failing hooks, and git reads merge drivers
+    /// when it starts, so a rebase whose `pre-rebase` hook registered the
+    /// driver would still use the text merge. Failing aborts that rebase
+    /// (or commit) with an explanation; the re-run picks the driver up.
+    /// Also fails when the write itself fails: the team opted in, and a
+    /// clone without the driver silently falls back to git's text merge.
+    fn reconcile_merge_driver(args: &ParsedArgs, repo: &Repository) -> Result<(), String> {
+        let summary = merge_driver::reconcile(
             repo,
             &args.marker_config,
             &args.exclude_patterns,
             &args.exclude_dir_patterns,
             &args.todo_path,
-        ) {
-            Ok(None) => {
-                // Already in sync — say nothing.
-            }
-            Ok(Some(summary)) => {
-                println!(
-                    "rusty-todo-md: --auto-install-merge-driver reconciling merge driver registration."
-                );
-                print!("{}", merge_driver::format_install_summary(&summary));
-            }
-            Err(e) => {
-                eprintln!(
-                    "rusty-todo-md: --auto-install-merge-driver: failed to reconcile driver: {e}"
-                );
-            }
+            &current_exe()?,
+        )
+        .map_err(|e| {
+            format!(
+                "rusty-todo-md: .gitattributes routes {} to the merge driver, but registering it in .git/config failed: {e}",
+                args.todo_path.display()
+            )
+        })?;
+        if let Some(summary) = summary {
+            eprint!("{}", merge_driver::format_install_summary(&summary));
+            return Err(format!(
+                "registered the TODO.md merge driver for this clone, because .gitattributes routes {} to it. Git reads merge drivers only when it starts: re-run your commit or rebase.",
+                args.todo_path.display()
+            ));
         }
+        Ok(())
+    }
+
+    fn current_exe() -> Result<PathBuf, String> {
+        std::env::current_exe().map_err(|e| format!("cannot locate the rusty-todo-md binary: {e}"))
     }
 }
 
@@ -293,7 +312,7 @@ fn warn_if_todo_md_has_conflict_markers(todo_path: &Path) {
         if content.lines().any(|l| l.starts_with("<<<<<<<")) {
             eprintln!("rusty-todo-md: detected conflict markers in TODO.md.");
             eprintln!("  - To rebuild TODO.md from source now: rusty-todo-md --regenerate");
-            eprintln!("  - To eliminate this conflict shape in future rebases: rusty-todo-md --install-merge-driver");
+            eprintln!("  - To eliminate this conflict shape in future rebases: rusty-todo-md --install-merge-driver (or uvx rusty-todo-md --install-merge-driver), then commit .gitattributes");
         }
     }
 }
@@ -460,12 +479,6 @@ fn build_cli() -> Command {
                 .global(true),
         )
         .arg(
-            Arg::new("auto_install_merge_driver")
-                .long("auto-install-merge-driver")
-                .help("Opt-in: on first run per clone, register the TODO.md merge driver in .git/config and append a line to .gitattributes. Prints a loud summary of what changed. Intended for repo maintainers to put in pre-commit args.")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
             Arg::new("regenerate")
                 .long("regenerate")
                 .help("Re-scan all tracked files and rewrite TODO.md from scratch. Wipes any existing content (including conflict markers).")
@@ -475,7 +488,7 @@ fn build_cli() -> Command {
         .arg(
             Arg::new("install_merge_driver")
                 .long("install-merge-driver")
-                .help("Register the TODO.md merge driver in .git/config and append a line to .gitattributes.")
+                .help("Register the TODO.md merge driver in .git/config and add the routing rule to .gitattributes. Commit .gitattributes to opt the whole team in: every pre-commit run then registers the driver in each collaborator's clone.")
                 .action(ArgAction::SetTrue)
                 .conflicts_with_all(["regenerate", "merge_driver"]),
         )

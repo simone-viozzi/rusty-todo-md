@@ -634,7 +634,7 @@ fn second_run_file_deleted() {
 
 // ---------------------------------------------------------------------------
 // Reason-class 9 (partial): conflict markers in pre-shipped files
-// (auto_install_* merge-driver fixtures are EXCLUDED by design)
+// (merge-driver registration is covered by tests/merge_driver_tests.rs)
 // ---------------------------------------------------------------------------
 
 #[test]

@@ -201,95 +201,198 @@ fn install_merge_driver_rewrites_block_on_drift() {
     );
 }
 
-#[test]
-fn auto_install_flag_registers_driver_on_first_run_then_silent() {
-    let dir = init_repo();
-    let repo = dir.path();
-    fs::write(repo.join("a.rs"), "// TODO: one\n").unwrap();
-    git_must(repo, &["add", "."]);
-    git_must(repo, &["commit", "-q", "-m", "src"]);
+const REGISTERED: &str = "registered the TODO.md merge driver for this clone";
 
-    // First run: registers the driver, prints loud summary.
-    AssertCommand::new(bin())
-        .current_dir(repo)
-        .arg("--auto-install-merge-driver")
-        .arg("--")
-        .arg("a.rs")
-        .assert()
+/// Read `merge.rusty-todo-md.driver` from this clone's config, if set.
+fn registered_driver(repo: &Path) -> Option<String> {
+    let out = git(repo, &["config", "--get", "merge.rusty-todo-md.driver"]);
+    out.status
         .success()
-        .stdout(predicates::str::contains(
-            "reconciling merge driver registration",
-        ));
-
-    // Second run: driver already in sync, no reconcile message.
-    AssertCommand::new(bin())
-        .current_dir(repo)
-        .arg("--auto-install-merge-driver")
-        .arg("--")
-        .arg("a.rs")
-        .assert()
-        .success()
-        .stdout(predicates::str::contains("reconciling merge driver registration").not());
+        .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-/// Drift through pre-commit args: simulates the scenario where someone
-/// changes `--markers` in `.pre-commit-config.yaml`. The next auto-install
-/// run detects the mismatch in `.git/config` and rewrites the driver
-/// command; the run after that is silent again.
+/// A repo whose committed `.gitattributes` routes TODO.md to the driver —
+/// the maintainer's opt-in — with no driver in `.git/config` yet, i.e. a
+/// collaborator's fresh clone.
+fn routed_repo() -> TempDir {
+    let dir = init_repo();
+    let repo = dir.path();
+    fs::write(repo.join(".gitattributes"), "TODO.md merge=rusty-todo-md\n").unwrap();
+    fs::write(repo.join("a.rs"), "// TODO: one\n").unwrap();
+    git_must(repo, &["add", "."]);
+    git_must(repo, &["commit", "-q", "-m", "src"]);
+    dir
+}
+
+/// The binary as pre-commit runs it: `PRE_COMMIT=1` in the environment.
+fn hook(repo: &Path) -> AssertCommand {
+    let mut cmd = AssertCommand::new(bin());
+    cmd.current_dir(repo).env("PRE_COMMIT", "1");
+    cmd
+}
+
+/// A hook run that has to (re-)register the driver writes it and then
+/// fails, so pre-commit shows why and the user re-runs. Git reads merge
+/// drivers only when it starts.
+fn hook_registers(repo: &Path, args: &[&str]) {
+    hook(repo)
+        .args(args)
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(REGISTERED))
+        .stderr(predicates::str::contains("re-run your commit or rebase"));
+}
+
+/// A hook run with the registration already in sync: succeeds, says nothing
+/// about the driver.
+fn hook_in_sync(repo: &Path, args: &[&str]) {
+    hook(repo)
+        .args(args)
+        .assert()
+        .success()
+        .stderr(predicates::str::contains(REGISTERED).not());
+}
+
 #[test]
-fn auto_install_self_heals_on_args_change() {
+fn hook_run_registers_driver_when_routed_then_passes() {
+    let dir = routed_repo();
+    let repo = dir.path();
+
+    hook_registers(repo, &["--", "a.rs"]);
+    let driver = registered_driver(repo).expect("driver must be registered");
+    let bin_str = bin().display().to_string();
+    assert!(
+        driver.contains(&bin_str),
+        "driver must use this binary's absolute path ({bin_str}), got: {driver}"
+    );
+
+    hook_in_sync(repo, &["--", "a.rs"]);
+}
+
+#[test]
+fn hook_run_does_nothing_without_routing() {
     let dir = init_repo();
     let repo = dir.path();
     fs::write(repo.join("a.rs"), "// TODO: one\n").unwrap();
     git_must(repo, &["add", "."]);
     git_must(repo, &["commit", "-q", "-m", "src"]);
 
-    // First run: defaults (TODO only).
+    hook(repo).args(["--", "a.rs"]).assert().success();
+
+    assert_eq!(registered_driver(repo), None);
+    assert!(!repo.join(".gitattributes").exists());
+}
+
+#[test]
+fn manual_run_does_not_register_driver() {
+    // Without PRE_COMMIT=1 (e.g. a pip or uvx install run by hand), the
+    // registration is left alone even when routed, so two installs can't
+    // keep re-pointing the driver at each other.
+    let dir = routed_repo();
+    let repo = dir.path();
+
     AssertCommand::new(bin())
         .current_dir(repo)
-        .arg("--auto-install-merge-driver")
-        .arg("--")
-        .arg("a.rs")
+        .env_remove("PRE_COMMIT")
+        .args(["--", "a.rs"])
         .assert()
         .success();
-    let driver_v1 = read(&repo.join(".git").join("config"));
-    assert!(
-        driver_v1.contains("--markers TODO"),
-        "v1 driver should bake the default marker verbatim:\n{driver_v1}"
-    );
 
-    // Second run: pre-commit args changed to include FIXME.
-    AssertCommand::new(bin())
-        .current_dir(repo)
-        .arg("--markers")
-        .arg("TODO")
-        .arg("FIXME")
-        .arg("--auto-install-merge-driver")
-        .arg("--")
-        .arg("a.rs")
-        .assert()
-        .success()
-        .stdout(predicates::str::contains(
-            "reconciling merge driver registration",
-        ));
-    let driver_v2 = read(&repo.join(".git").join("config"));
-    assert!(
-        driver_v2.contains("--markers TODO FIXME"),
-        "v2 driver should bake the new markers:\n{driver_v2}"
-    );
+    assert_eq!(registered_driver(repo), None);
+}
 
-    // Third run with same v2 args: silent.
-    AssertCommand::new(bin())
+/// Drift through pre-commit args or a moved binary: someone changes
+/// `--markers` in `.pre-commit-config.yaml`, or `pre-commit autoupdate`
+/// installs the hook into a new virtualenv. The next hook run rewrites the
+/// driver command; the run after that passes again.
+#[test]
+fn hook_run_self_heals_on_args_or_binary_change() {
+    let dir = routed_repo();
+    let repo = dir.path();
+
+    hook_registers(repo, &["--", "a.rs"]);
+    let v1 = registered_driver(repo).unwrap();
+    assert!(v1.contains("--markers TODO "), "v1: {v1}");
+
+    let v2_args = ["--markers", "TODO", "FIXME", "--", "a.rs"];
+    hook_registers(repo, &v2_args);
+    let v2 = registered_driver(repo).unwrap();
+    assert!(v2.contains("--markers TODO FIXME "), "v2: {v2}");
+
+    // Simulate a stale path left behind by a garbage-collected virtualenv.
+    git_must(
+        repo,
+        &[
+            "config",
+            "merge.rusty-todo-md.driver",
+            &v2.replace(&bin().display().to_string(), "/gone/venv/bin/rusty-todo-md"),
+        ],
+    );
+    hook_registers(repo, &v2_args);
+    assert_eq!(registered_driver(repo).unwrap(), v2);
+
+    hook_in_sync(repo, &v2_args);
+}
+
+/// pre-commit passes zero files in the `pre-rebase` stage. That run must
+/// register the driver and fail (aborting the rebase, which could not use
+/// a driver registered after it started), without touching TODO.md: git
+/// refuses to rebase a dirty tree. The committed TODO.md here is
+/// deliberately not in the current format, which would otherwise trigger a
+/// full rebuild. Once registered, the zero-file run passes.
+#[test]
+fn zero_file_hook_run_registers_driver_and_leaves_tree_clean() {
+    let dir = routed_repo();
+    let repo = dir.path();
+    let stale = "# TODO\n## a.rs\n* [a.rs:1](a.rs#L1): one\n";
+    fs::write(repo.join("TODO.md"), stale).unwrap();
+    git_must(repo, &["add", "TODO.md"]);
+    git_must(repo, &["commit", "-q", "-m", "todo"]);
+
+    hook_registers(repo, &[]);
+    assert!(
+        registered_driver(repo).is_some(),
+        "driver must be registered"
+    );
+    hook_in_sync(repo, &[]);
+
+    assert_eq!(read(&repo.join("TODO.md")), stale);
+    let status = git_must(repo, &["status", "--porcelain"]);
+    assert!(
+        status.stdout.is_empty(),
+        "tree must stay clean, got:\n{}",
+        String::from_utf8_lossy(&status.stdout)
+    );
+}
+
+/// If neither the registered binary nor `rusty-todo-md` on PATH exists,
+/// the driver must fail with an actionable message, not a bare
+/// "command not found".
+#[test]
+fn driver_command_reports_missing_binary() {
+    let dir = routed_repo();
+    let repo = dir.path();
+    hook_registers(repo, &["--", "a.rs"]);
+    let driver = registered_driver(repo).unwrap();
+    let broken = driver
+        .replace(&bin().display().to_string(), "/gone/venv/bin/rusty-todo-md")
+        .replace("%O %A %B", "base ours theirs");
+
+    // Absolute `sh`: PATH is emptied below so the PATH fallback finds nothing.
+    let out = Command::new("/bin/sh")
         .current_dir(repo)
-        .arg("--markers")
-        .arg("TODO")
-        .arg("FIXME")
-        .arg("--auto-install-merge-driver")
-        .arg("--")
-        .arg("a.rs")
-        .assert()
-        .success()
-        .stdout(predicates::str::contains("reconciling merge driver registration").not());
+        .args(["-c", &broken])
+        .env("PATH", "/nonexistent")
+        .output()
+        .expect("sh failed to spawn");
+
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("merge driver binary not found")
+            && stderr.contains("pre-commit run rusty-todo-md --all-files"),
+        "stderr: {stderr}"
+    );
 }
 
 #[test]
@@ -342,28 +445,18 @@ fn rebase_without_driver_conflicts_with_driver_clean() {
         git_must(repo, &["commit", "-q", "-m", "base"]);
 
         if with_driver {
+            // Maintainer opt-in: install, then commit .gitattributes so the
+            // routing is on both branches.
             AssertCommand::new(bin())
                 .current_dir(repo)
                 .arg("--install-merge-driver")
                 .assert()
                 .success();
-            // The installed driver uses the bare command name `rusty-todo-md`,
-            // resolved via PATH. In tests we can't assume PATH points at the
-            // freshly-built test binary (a stale system install often shadows
-            // it), so rewrite the driver registration to the absolute path of
-            // the test binary.
-            let bin_str = bin().display().to_string();
-            git_must(
-                repo,
-                &[
-                    "config",
-                    "merge.rusty-todo-md.driver",
-                    &format!("{bin_str} --merge-driver %O %A %B"),
-                ],
-            );
-            // Re-commit .gitattributes so it's on both branches.
             git_must(repo, &["add", ".gitattributes"]);
             git_must(repo, &["commit", "-q", "-m", "add gitattr"]);
+            // Collaborator's fresh clone: routing inherited, driver not yet
+            // registered.
+            git_must(repo, &["config", "--remove-section", "merge.rusty-todo-md"]);
         }
 
         // Branch feat-a: insert lines above alpha, shift everything down.
@@ -388,6 +481,14 @@ fn rebase_without_driver_conflicts_with_driver_clean() {
         run_tool_on(repo, &["a.rs"]);
         git_must(repo, &["add", "."]);
         git_must(repo, &["commit", "-q", "-m", "feat-b"]);
+
+        if with_driver {
+            // What the `pre-rebase` hook stage does: a zero-file run that
+            // registers the driver (with this binary's absolute path, so no
+            // PATH lookup is needed when git invokes it) and aborts that
+            // first rebase. The user's re-run starts with the driver loaded.
+            hook_registers(repo, &[]);
+        }
 
         // Rebase feat-b onto feat-a. Without the driver, this conflicts on
         // TODO.md (and on a.rs — that's a real semantic conflict we must

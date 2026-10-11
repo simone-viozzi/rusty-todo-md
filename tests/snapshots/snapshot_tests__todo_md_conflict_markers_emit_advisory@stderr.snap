@@ -4,5 +4,5 @@ expression: stderr
 ---
 rusty-todo-md: detected conflict markers in TODO.md.
   - To rebuild TODO.md from source now: rusty-todo-md --regenerate
-  - To eliminate this conflict shape in future rebases: rusty-todo-md --install-merge-driver
+  - To eliminate this conflict shape in future rebases: rusty-todo-md --install-merge-driver (or uvx rusty-todo-md --install-merge-driver), then commit .gitattributes
 rusty-todo-md: skipping TODO.md: contains conflict markers

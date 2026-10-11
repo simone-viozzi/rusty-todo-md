@@ -2,9 +2,11 @@
 //!
 //! Derive the expected state from the user's current CLI args, then write
 //! `.git/config` and `.gitattributes` to match. Two callers:
-//! [`install_driver`] (explicit `--install-merge-driver`) always reports a
-//! summary; [`reconcile`] (auto-install) skips silently when state already
-//! matches and only writes on drift.
+//! [`install_driver`] (explicit `--install-merge-driver`, the maintainer's
+//! one-time opt-in) writes both and always reports a summary;
+//! [`reconcile`] (every pre-commit run) only fixes this clone's
+//! `.git/config`, and only when the committed `.gitattributes` already
+//! routes TODO.md to the driver.
 //!
 //! The `.gitattributes` rule lives in a `# BEGIN/END rusty-todo-md` block
 //! that we rewrite as a unit. Rules outside the block are preserved
@@ -14,10 +16,12 @@
 //! Args are baked into the driver command (`--markers …`, `--exclude …`)
 //! because git invokes the driver as a plain subprocess with no awareness
 //! of CLI flags the user passed elsewhere — the registration has to be
-//! self-contained.
+//! self-contained. So is the binary's absolute path: pre-commit installs
+//! the binary in a private virtualenv that is not on the PATH git's shell
+//! sees.
 
 use crate::MarkerConfig;
-use git2::Repository;
+use git2::{AttrCheckFlags, Repository};
 use std::path::{Path, PathBuf};
 
 const BLOCK_BEGIN: &str = "# BEGIN rusty-todo-md (managed; do not edit between markers)";
@@ -34,11 +38,14 @@ pub struct Expected {
     pub gitattributes_block: String,
 }
 
+/// `exe` is the binary the driver should run, normally
+/// `std::env::current_exe()` of the invocation doing the install.
 pub fn build_expected(
     markers: &MarkerConfig,
     exclude_patterns: &[String],
     exclude_dir_patterns: &[String],
     todo_path: &Path,
+    exe: &Path,
 ) -> Result<Expected, String> {
     if todo_path.is_absolute() {
         return Err(format!(
@@ -46,8 +53,13 @@ pub fn build_expected(
             todo_path.display()
         ));
     }
-    let driver_command =
-        build_driver_command(markers, exclude_patterns, exclude_dir_patterns, todo_path);
+    let driver_command = build_driver_command(
+        markers,
+        exclude_patterns,
+        exclude_dir_patterns,
+        todo_path,
+        exe,
+    );
     let pattern = quote_for_gitattributes(&todo_path.display().to_string());
     let gitattributes_block =
         format!("{BLOCK_BEGIN}\n{pattern} merge=rusty-todo-md\n{BLOCK_END}\n");
@@ -66,15 +78,10 @@ pub struct InstallSummary {
     pub was_in_sync: bool,
 }
 
-/// Whether the registration in this repo matches what `build_expected`
-/// would install for the same args. Used by `reconcile` to skip work when
-/// nothing has drifted.
-pub fn matches_expected(repo: &Repository, expected: &Expected) -> bool {
-    let Some(workdir) = repo.workdir() else {
-        return false;
-    };
-    let config_ok = repo
-        .config()
+/// Whether this clone's `.git/config` registers exactly the expected
+/// driver command (including the binary path).
+fn config_matches(repo: &Repository, expected: &Expected) -> bool {
+    repo.config()
         .ok()
         .and_then(|c| {
             Some((
@@ -82,29 +89,68 @@ pub fn matches_expected(repo: &Repository, expected: &Expected) -> bool {
                 c.get_string(CONFIG_KEY_DRIVER).ok()?,
             ))
         })
-        .is_some_and(|(name, driver)| name == DRIVER_NAME && driver == expected.driver_command);
-    if !config_ok {
+        .is_some_and(|(name, driver)| name == DRIVER_NAME && driver == expected.driver_command)
+}
+
+/// Whether the registration in this repo matches what `build_expected`
+/// would install for the same args: both `.git/config` and the managed
+/// `.gitattributes` block.
+pub fn matches_expected(repo: &Repository, expected: &Expected) -> bool {
+    let Some(workdir) = repo.workdir() else {
+        return false;
+    };
+    if !config_matches(repo, expected) {
         return false;
     }
     let gitattributes = std::fs::read_to_string(workdir.join(".gitattributes")).unwrap_or_default();
     extract_block(&gitattributes).as_deref() == Some(expected.gitattributes_block.as_str())
 }
 
-/// Auto-install entry point. Installs only if state has drifted from
-/// expected; safe to call on every invocation. Returns `Ok(None)` when
-/// nothing changed.
+/// Whether `.gitattributes` routes `todo_path` to the driver. This is the
+/// team-level opt-in: a maintainer commits the rule once, and every clone
+/// that inherits it needs the driver registered. If the rule is present but
+/// the driver isn't defined, git silently falls back to its text merge.
+pub fn is_routed(repo: &Repository, todo_path: &Path) -> bool {
+    matches!(
+        repo.get_attr(todo_path, "merge", AttrCheckFlags::FILE_THEN_INDEX),
+        Ok(Some("rusty-todo-md"))
+    )
+}
+
+/// Per-run entry point. When `.gitattributes` routes TODO.md to the driver,
+/// make this clone's `.git/config` register it with `exe` and the current
+/// args. Never touches `.gitattributes` (a tracked file). Returns
+/// `Ok(None)` when not routed or already in sync.
 pub fn reconcile(
     repo: &Repository,
     markers: &MarkerConfig,
     exclude_patterns: &[String],
     exclude_dir_patterns: &[String],
     todo_path: &Path,
+    exe: &Path,
 ) -> Result<Option<InstallSummary>, String> {
-    let expected = build_expected(markers, exclude_patterns, exclude_dir_patterns, todo_path)?;
-    if matches_expected(repo, &expected) {
+    if !is_routed(repo, todo_path) {
         return Ok(None);
     }
-    Ok(Some(install_to_match(repo, &expected, false)?))
+    let expected = build_expected(
+        markers,
+        exclude_patterns,
+        exclude_dir_patterns,
+        todo_path,
+        exe,
+    )?;
+    if config_matches(repo, &expected) {
+        return Ok(None);
+    }
+    write_config(repo, &expected)?;
+    let workdir = repo
+        .workdir()
+        .ok_or_else(|| "repository has no working directory".to_string())?;
+    Ok(Some(InstallSummary {
+        driver_command: expected.driver_command,
+        gitattributes_path: workdir.join(".gitattributes"),
+        was_in_sync: false,
+    }))
 }
 
 /// `--install-merge-driver` entry point. Always reports a summary (even
@@ -116,10 +162,29 @@ pub fn install_driver(
     exclude_patterns: &[String],
     exclude_dir_patterns: &[String],
     todo_path: &Path,
+    exe: &Path,
 ) -> Result<InstallSummary, String> {
-    let expected = build_expected(markers, exclude_patterns, exclude_dir_patterns, todo_path)?;
+    let expected = build_expected(
+        markers,
+        exclude_patterns,
+        exclude_dir_patterns,
+        todo_path,
+        exe,
+    )?;
     let was_in_sync = matches_expected(repo, &expected);
     install_to_match(repo, &expected, was_in_sync)
+}
+
+fn write_config(repo: &Repository, expected: &Expected) -> Result<(), String> {
+    let mut config = repo
+        .config()
+        .map_err(|e| format!("failed to open git config: {e}"))?;
+    config
+        .set_str(CONFIG_KEY_NAME, DRIVER_NAME)
+        .map_err(|e| format!("failed to write {CONFIG_KEY_NAME}: {e}"))?;
+    config
+        .set_str(CONFIG_KEY_DRIVER, &expected.driver_command)
+        .map_err(|e| format!("failed to write {CONFIG_KEY_DRIVER}: {e}"))
 }
 
 fn install_to_match(
@@ -140,15 +205,7 @@ fn install_to_match(
         });
     }
 
-    let mut config = repo
-        .config()
-        .map_err(|e| format!("failed to open git config: {e}"))?;
-    config
-        .set_str(CONFIG_KEY_NAME, DRIVER_NAME)
-        .map_err(|e| format!("failed to write {CONFIG_KEY_NAME}: {e}"))?;
-    config
-        .set_str(CONFIG_KEY_DRIVER, &expected.driver_command)
-        .map_err(|e| format!("failed to write {CONFIG_KEY_DRIVER}: {e}"))?;
+    write_config(repo, expected)?;
 
     let existing = std::fs::read_to_string(&gitattributes_path).unwrap_or_default();
     let new_gitattributes = rewrite_block(&existing, &expected.gitattributes_block);
@@ -164,16 +221,39 @@ fn install_to_match(
     })
 }
 
+/// Shown on stderr when git runs the driver but neither the registered
+/// binary nor a `rusty-todo-md` on PATH exists (e.g. pre-commit
+/// garbage-collected the virtualenv). Running the hook once re-registers
+/// the driver with the current binary.
+const DRIVER_NOT_FOUND: &str = "rusty-todo-md: TODO.md merge driver binary not found. Run: pre-commit run rusty-todo-md --all-files (or rusty-todo-md --install-merge-driver), then retry.";
+
 /// Build the `driver = ...` command. Bakes in non-default markers,
 /// exclusion patterns, and the TODO.md path so the driver runs with the
 /// same configuration the user installed.
+///
+/// Git runs the command through `sh` (Git for Windows ships one), so it can
+/// resolve the binary the way pre-commit's own `.git/hooks` scripts do: the
+/// absolute path first, then `rusty-todo-md` on PATH, else a clear error
+/// instead of a bare "command not found".
 fn build_driver_command(
     markers: &MarkerConfig,
     exclude_patterns: &[String],
     exclude_dir_patterns: &[String],
     todo_path: &Path,
+    exe: &Path,
 ) -> String {
-    let mut cmd = String::from("rusty-todo-md");
+    let exe = exe.display().to_string();
+    // `sh` on Windows handles forward slashes in drive paths reliably.
+    let exe = if cfg!(windows) {
+        exe.replace('\\', "/")
+    } else {
+        exe
+    };
+    let mut cmd = format!(
+        "p={}; [ -x \"$p\" ] || p=$(command -v rusty-todo-md) || {{ echo {} >&2; exit 1; }}; \"$p\"",
+        quote_for_shell(&exe),
+        quote_for_shell(DRIVER_NOT_FOUND),
+    );
 
     // Always emit --markers when non-empty. We previously omitted it for the
     // "default" case (single marker case-insensitively equal to "TODO") to
@@ -345,7 +425,13 @@ mod tests {
     #[test]
     fn build_expected_rejects_absolute_todo_path() {
         let markers = MarkerConfig::normalized(vec!["TODO".to_string()]);
-        let result = build_expected(&markers, &[], &[], Path::new("/abs/TODO.md"));
+        let result = build_expected(
+            &markers,
+            &[],
+            &[],
+            Path::new("/abs/TODO.md"),
+            Path::new("/bin/rtm"),
+        );
         let Err(msg) = result else {
             panic!("expected Err");
         };
@@ -355,7 +441,14 @@ mod tests {
     #[test]
     fn build_expected_quotes_path_with_specials() {
         let markers = MarkerConfig::normalized(vec!["TODO".to_string()]);
-        let expected = build_expected(&markers, &[], &[], Path::new("docs/my todos.md")).unwrap();
+        let expected = build_expected(
+            &markers,
+            &[],
+            &[],
+            Path::new("docs/my todos.md"),
+            Path::new("/bin/rtm"),
+        )
+        .unwrap();
         assert!(
             expected
                 .gitattributes_block
@@ -373,12 +466,30 @@ mod tests {
             &["*.log".to_string()],
             &["vendor".to_string()],
             Path::new("docs/T.md"),
+            Path::new("/opt/venv/bin/rusty-todo-md"),
         );
+        assert!(cmd.starts_with("p=/opt/venv/bin/rusty-todo-md; [ -x \"$p\" ] || "));
         assert!(cmd.contains("--markers TODO FIXME"));
         assert!(cmd.contains("--exclude '*.log'"));
         assert!(cmd.contains("--exclude-dir vendor"));
         assert!(cmd.contains("--todo-path docs/T.md"));
         assert!(cmd.ends_with("--merge-driver %O %A %B"));
+    }
+
+    #[test]
+    fn build_driver_command_quotes_exe_path_with_spaces() {
+        let markers = MarkerConfig::normalized(vec!["TODO".to_string()]);
+        let cmd = build_driver_command(
+            &markers,
+            &[],
+            &[],
+            Path::new("TODO.md"),
+            Path::new("/home/a user/venv/bin/rusty-todo-md"),
+        );
+        assert!(
+            cmd.starts_with("p='/home/a user/venv/bin/rusty-todo-md'; "),
+            "cmd: {cmd}"
+        );
     }
 
     #[test]
