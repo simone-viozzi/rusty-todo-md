@@ -234,9 +234,7 @@ Pass `--todo-path` if `TODO.md` lives elsewhere. This writes:
    ```
 2. `merge.rusty-todo-md.name` and `merge.rusty-todo-md.driver` in `.git/config` (clone-local; not committed).
 
-**Collaborators don't need to set anything up.** Whenever pre-commit runs the hook and `.gitattributes` routes `TODO.md` to the driver, the hook makes sure that clone's `.git/config` registers the driver, pointing at the hook's own binary (by absolute path) with the hook's `--markers` / `--exclude` / `--exclude-dir` / `--todo-path` args. Without the routing rule, the hook never touches `.git/config`.
-
-When the hook has to write the registration (a fresh clone, changed `args:`, or a new version after `pre-commit autoupdate`), it prints what it changed and **fails once**, like a formatter that rewrote a file: just re-run the commit. Failing makes the change visible (pre-commit hides the output of passing hooks), and it matters for rebases: git reads merge drivers only when it starts.
+**Collaborators don't need to set anything up.** Whenever pre-commit runs the hook and `.gitattributes` routes `TODO.md` to the driver, the hook makes sure that clone's `.git/config` registers the driver, pointing at the hook's own binary (by absolute path) with the hook's `--markers` / `--exclude` / `--exclude-dir` / `--todo-path` args. This happens on a clone's first commit, and again after you change the hook's `args:` or `pre-commit autoupdate` installs a new version. Commits and CI runs pass as usual (pre-commit shows the registration message only with `verbose: true`). Without the routing rule, the hook never touches `.git/config`.
 
 To also cover a rebase in a fresh clone before its first commit, enable the `pre-rebase` hook type in `.pre-commit-config.yaml` and re-run `pre-commit install`:
 
@@ -244,7 +242,7 @@ To also cover a rebase in a fresh clone before its first commit, enable the `pre
 default_install_hook_types: [pre-commit, pre-rebase]
 ```
 
-If the driver isn't registered yet, the hook registers it and aborts that rebase with a message; re-run the rebase and the driver is active. A `pre-rebase` run gets no files from pre-commit and never modifies `TODO.md`.
+If the driver isn't registered yet when you start a rebase, the hook registers it and **aborts that rebase** with a message, because git reads merge drivers only when it starts. Re-run the rebase and the driver is active. A `pre-rebase` run gets no files from pre-commit and never modifies `TODO.md`.
 
 **What happens during a rebase, with the driver installed:**
 
@@ -257,9 +255,9 @@ If the driver isn't registered yet, the hook registers it and aborts that rebase
 ### Failure modes
 
 - **Source file in a conflicted state when the merge driver runs** (e.g., a rebase that left `<<<<<<<` in some `.rs` file you haven't resolved yet). The extractor skips that file with a stderr warning rather than emitting garbled TODOs. `TODO.md` is then approximate until you resolve the source conflicts and re-run `rusty-todo-md --regenerate` to canonicalize.
-- **Pre-commit hooks do not run during `git rebase` or `git rebase --continue`.** The driver runs because git invokes it directly for the `TODO.md` file. Only after the rebase finishes (and you make a regular commit) does the pre-commit pipeline run again.
+- **The `pre-commit` stage does not run while commits are replayed by `git rebase` or `git rebase --continue`.** The driver runs because git invokes it directly for the `TODO.md` file. Only after the rebase finishes (and you make a regular commit) does the `pre-commit` stage run again. The optional `pre-rebase` stage (above) runs once, before the rebase starts.
 - **The registered binary is gone** (e.g. `pre-commit gc` removed an old virtualenv and no commit has re-registered the driver since). The driver falls back to `rusty-todo-md` on `PATH`; if that is missing too, it fails with a message telling you to run `pre-commit run rusty-todo-md --all-files`, which re-registers it. Enabling the `pre-rebase` hook type (above) prevents this for rebases.
-- **`.git/config` can't be written** while `.gitattributes` routes `TODO.md` to the driver. The hook fails with the underlying error rather than silently leaving the clone on git's text merge.
+- **`.git/config` can't be written** while `.gitattributes` routes `TODO.md` to the driver. The hook fails with the underlying error rather than silently leaving the clone on git's text merge. Fix the cause, then run `pre-commit run rusty-todo-md --all-files`.
 
 ---
 

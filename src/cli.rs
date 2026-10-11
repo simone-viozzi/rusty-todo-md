@@ -180,14 +180,23 @@ mod mode {
     ) -> Result<(), String> {
         // pre-commit sets PRE_COMMIT=1 for hooks. Gating on it keeps manual
         // runs from another install (pip, uvx) from re-pointing the driver.
-        if std::env::var_os("PRE_COMMIT").is_some_and(|v| v == "1") {
-            reconcile_merge_driver(args, &repo)?;
-        }
+        let registered = std::env::var_os("PRE_COMMIT").is_some_and(|v| v == "1")
+            && reconcile_merge_driver(args, &repo)?;
         // pre-commit passes no files in the `pre-rebase` stage, and on
         // commits with no matching files (the hook is `always_run`). Git
         // refuses to rebase a dirty tree, so such a run must not touch
         // TODO.md.
         if args.files.is_empty() {
+            if registered {
+                // Git reads merge drivers when it starts, so the rebase
+                // running this `pre-rebase` hook would still use the text
+                // merge. Abort it; the re-run picks the driver up. (Failing
+                // also makes pre-commit show the registration summary.)
+                return Err(format!(
+                    "registered the TODO.md merge driver for this clone, because .gitattributes routes {} to it. Git reads merge drivers only when it starts: re-run your rebase.",
+                    args.todo_path.display()
+                ));
+            }
             return Ok(());
         }
         ensure_todo_path_exists(&args.todo_path)?;
@@ -245,17 +254,15 @@ mod mode {
 
     /// When `.gitattributes` routes TODO.md to the merge driver (the
     /// maintainer's committed opt-in), make this clone's `.git/config`
-    /// register it with this binary and these args. Silent when not routed
-    /// or already in sync.
+    /// register it with this binary and these args. Returns whether it
+    /// wrote; silent when not routed or already in sync. The summary goes
+    /// to stderr, which pre-commit shows only for failing (or `verbose`)
+    /// hooks. Commits and CI runs (always a fresh clone) don't need the
+    /// driver, so registering there must not fail them.
     ///
-    /// Fails after writing, like a formatter that changed files: pre-commit
-    /// only shows the output of failing hooks, and git reads merge drivers
-    /// when it starts, so a rebase whose `pre-rebase` hook registered the
-    /// driver would still use the text merge. Failing aborts that rebase
-    /// (or commit) with an explanation; the re-run picks the driver up.
-    /// Also fails when the write itself fails: the team opted in, and a
-    /// clone without the driver silently falls back to git's text merge.
-    fn reconcile_merge_driver(args: &ParsedArgs, repo: &Repository) -> Result<(), String> {
+    /// Fails when the write itself fails: the team opted in, and a clone
+    /// without the driver silently falls back to git's text merge.
+    fn reconcile_merge_driver(args: &ParsedArgs, repo: &Repository) -> Result<bool, String> {
         let summary = merge_driver::reconcile(
             repo,
             &args.marker_config,
@@ -266,18 +273,17 @@ mod mode {
         )
         .map_err(|e| {
             format!(
-                "rusty-todo-md: .gitattributes routes {} to the merge driver, but registering it in .git/config failed: {e}",
+                "rusty-todo-md: .gitattributes routes {} to the merge driver, but registering it in .git/config failed: {e}. Fix the cause, then run: pre-commit run rusty-todo-md --all-files",
                 args.todo_path.display()
             )
         })?;
-        if let Some(summary) = summary {
-            eprint!("{}", merge_driver::format_install_summary(&summary));
-            return Err(format!(
-                "registered the TODO.md merge driver for this clone, because .gitattributes routes {} to it. Git reads merge drivers only when it starts: re-run your commit or rebase.",
-                args.todo_path.display()
-            ));
+        match summary {
+            Some(summary) => {
+                eprint!("{}", merge_driver::format_reconcile_summary(&summary));
+                Ok(true)
+            }
+            None => Ok(false),
         }
-        Ok(())
     }
 
     fn current_exe() -> Result<PathBuf, String> {

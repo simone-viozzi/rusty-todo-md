@@ -395,6 +395,17 @@ pub fn format_install_summary(s: &InstallSummary) -> String {
     )
 }
 
+/// Render what [`reconcile`] changed. Reconcile only writes this clone's
+/// `.git/config`; the `.gitattributes` routing is the team's committed
+/// opt-in, so it isn't offered for undoing here.
+pub fn format_reconcile_summary(s: &InstallSummary) -> String {
+    format!(
+        "rusty-todo-md: registered the TODO.md merge driver in this clone's .git/config ({} routes TODO.md to it).\n  {CONFIG_KEY_DRIVER} = {}\n",
+        s.gitattributes_path.display(),
+        s.driver_command,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -505,6 +516,19 @@ mod tests {
         assert_eq!(quote_for_shell("*.log"), "'*.log'");
         assert_eq!(quote_for_shell("a'b"), "'a'\\''b'");
         assert_eq!(quote_for_shell(""), "''");
+    }
+
+    #[test]
+    fn format_reconcile_summary_reports_config_only() {
+        let out = format_reconcile_summary(&InstallSummary {
+            driver_command: "p=/v/rusty-todo-md; \"$p\" --merge-driver %O %A %B".into(),
+            gitattributes_path: PathBuf::from("/x/.gitattributes"),
+            was_in_sync: false,
+        });
+        assert!(out.contains(".git/config"), "{out}");
+        assert!(out.contains("--merge-driver %O %A %B"), "{out}");
+        // The routing block is the team's opt-in; never suggest removing it.
+        assert!(!out.contains("remove the"), "{out}");
     }
 
     #[test]

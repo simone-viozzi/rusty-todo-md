@@ -201,7 +201,7 @@ fn install_merge_driver_rewrites_block_on_drift() {
     );
 }
 
-const REGISTERED: &str = "registered the TODO.md merge driver for this clone";
+const REGISTERED: &str = "registered the TODO.md merge driver";
 
 /// Read `merge.rusty-todo-md.driver` from this clone's config, if set.
 fn registered_driver(repo: &Path) -> Option<String> {
@@ -231,16 +231,26 @@ fn hook(repo: &Path) -> AssertCommand {
     cmd
 }
 
-/// A hook run that has to (re-)register the driver writes it and then
-/// fails, so pre-commit shows why and the user re-runs. Git reads merge
-/// drivers only when it starts.
+/// A hook run with files (a commit, or `pre-commit run --all-files` in CI,
+/// which is always a fresh clone) that has to (re-)register the driver:
+/// writes it and still passes, since a commit doesn't need the driver.
 fn hook_registers(repo: &Path, args: &[&str]) {
     hook(repo)
         .args(args)
         .assert()
+        .success()
+        .stderr(predicates::str::contains(REGISTERED));
+}
+
+/// A zero-file hook run (pre-commit's `pre-rebase` stage) that has to
+/// register the driver: writes it and fails, aborting the rebase. Git reads
+/// merge drivers only when it starts, so that rebase couldn't use it.
+fn hook_registers_and_aborts_rebase(repo: &Path) {
+    hook(repo)
+        .assert()
         .failure()
         .stderr(predicates::str::contains(REGISTERED))
-        .stderr(predicates::str::contains("re-run your commit or rebase"));
+        .stderr(predicates::str::contains("re-run your rebase"));
 }
 
 /// A hook run with the registration already in sync: succeeds, says nothing
@@ -254,7 +264,7 @@ fn hook_in_sync(repo: &Path, args: &[&str]) {
 }
 
 #[test]
-fn hook_run_registers_driver_when_routed_then_passes() {
+fn hook_run_registers_driver_when_routed() {
     let dir = routed_repo();
     let repo = dir.path();
 
@@ -334,6 +344,19 @@ fn hook_run_self_heals_on_args_or_binary_change() {
     hook_in_sync(repo, &v2_args);
 }
 
+/// CI runs `pre-commit run --all-files` in a fresh clone every time. In an
+/// opted-in repo that run registers the driver, and must still pass and
+/// produce TODO.md, or every CI run would fail.
+#[test]
+fn ci_run_in_fresh_clone_passes() {
+    let dir = routed_repo();
+    let repo = dir.path();
+
+    hook_registers(repo, &["--", ".gitattributes", "a.rs"]);
+
+    assert!(read(&repo.join("TODO.md")).contains("one"));
+}
+
 /// pre-commit passes zero files in the `pre-rebase` stage. That run must
 /// register the driver and fail (aborting the rebase, which could not use
 /// a driver registered after it started), without touching TODO.md: git
@@ -349,7 +372,7 @@ fn zero_file_hook_run_registers_driver_and_leaves_tree_clean() {
     git_must(repo, &["add", "TODO.md"]);
     git_must(repo, &["commit", "-q", "-m", "todo"]);
 
-    hook_registers(repo, &[]);
+    hook_registers_and_aborts_rebase(repo);
     assert!(
         registered_driver(repo).is_some(),
         "driver must be registered"
@@ -487,7 +510,7 @@ fn rebase_without_driver_conflicts_with_driver_clean() {
             // registers the driver (with this binary's absolute path, so no
             // PATH lookup is needed when git invokes it) and aborts that
             // first rebase. The user's re-run starts with the driver loaded.
-            hook_registers(repo, &[]);
+            hook_registers_and_aborts_rebase(repo);
         }
 
         // Rebase feat-b onto feat-a. Without the driver, this conflicts on
