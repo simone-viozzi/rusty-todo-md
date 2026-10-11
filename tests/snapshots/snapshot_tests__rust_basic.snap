@@ -2,13 +2,17 @@
 source: tests/snapshot_tests.rs
 expression: out
 ---
-# FIXME
-## sample.rs
+# TODOs
+
+## FIXME
+### sample.rs
 * [sample.rs:4](sample.rs#L4): Handle error cases properly
-# HACK
-## sample.rs
+
+## HACK
+### sample.rs
 * [sample.rs:12](sample.rs#L12): temporary stub
-# TODO
-## sample.rs
+
+## TODO
+### sample.rs
 * [sample.rs:1](sample.rs#L1): Implement user authentication
 * [sample.rs:7](sample.rs#L7): Add logging functionality for better debugging

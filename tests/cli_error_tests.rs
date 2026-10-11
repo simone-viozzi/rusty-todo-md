@@ -205,9 +205,12 @@ Just plain text that should trigger validation failure
     );
 
     // Verify the file has proper markdown structure
-    assert!(final_content.contains("# TODO"), "Should have TODO header");
     assert!(
-        final_content.contains("## test.rs"),
+        final_content.contains("## TODO\n"),
+        "Should have TODO header"
+    );
+    assert!(
+        final_content.contains("### test.rs"),
         "Should have file section header"
     );
 

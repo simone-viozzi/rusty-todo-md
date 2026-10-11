@@ -2,6 +2,8 @@
 source: tests/snapshot_tests.rs
 expression: out.todo_md
 ---
-# TODO
-## file1.rs
+# TODOs
+
+## TODO
+### file1.rs
 * [file1.rs:1](file1.rs#L1): Updated Feature A

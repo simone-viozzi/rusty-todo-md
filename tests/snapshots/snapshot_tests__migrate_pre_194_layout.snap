@@ -1,0 +1,12 @@
+---
+source: tests/snapshot_tests.rs
+expression: out.todo_md
+---
+# TODOs
+
+## TODO
+### a.rs
+* [a.rs:1](a.rs#L1): listed in the old TODO.md
+
+### b.rs
+* [b.rs:1](b.rs#L1): missing from the old TODO.md
