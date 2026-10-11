@@ -212,7 +212,10 @@ fn process_files(
     validate_no_empty_todos(&new_todos)?;
 
     if let Err(err) = todo_md::sync_todo_file(&args.todo_path, new_todos, filtered_files) {
-        info!("There was an error updating TODO.md: {err}");
+        eprintln!(
+            "rusty-todo-md: rebuilding {} from all tracked files: {err}",
+            args.todo_path.display()
+        );
         sync_fallback_full_rescan(args, &repo, git_ops);
     }
     info!("TODO.md successfully updated.");

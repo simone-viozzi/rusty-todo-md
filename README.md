@@ -204,9 +204,19 @@ rusty-todo-md \
 
 Each `TODO.md` bullet embeds the line number twice — once in the label and once in the link anchor (`* [file:line](file#L<line>)`). When two branches both shift the same TODO to different line numbers, git's line-by-line text merge sees the same physical `TODO.md` line edited differently on each side and produces a conflict — at **every replayed commit** during a rebase. The user did not meaningfully edit `TODO.md`; the line numbers just moved.
 
-### What to do
+### Fix: one line in `.gitattributes`
 
-When `TODO.md` conflicts, resolve it any way you like (or keep the conflict markers) and continue. The next time the hook runs, a `TODO.md` with conflict markers fails validation and is rebuilt from all tracked files. To rebuild it right away:
+Commit this to your repository:
+
+```
+TODO.md merge=union
+```
+
+`union` is built into git, so there is nothing to install or configure per clone. Git then merges `TODO.md` by keeping the lines from both sides instead of stopping with a conflict, so rebases and merges never stop on `TODO.md`.
+
+The merged `TODO.md` is temporarily wrong (old and new line numbers side by side, out of order), and that's expected. Whenever the hook reads a `TODO.md` that isn't exactly what it would write itself (merge leftovers, conflict markers, hand edits), it rebuilds it from all tracked files. So the next normal commit fixes it, whatever files it touches. Commits replayed during the rebase keep the approximate `TODO.md`, because git doesn't run hooks during a rebase.
+
+Without the `.gitattributes` line, resolve a `TODO.md` conflict any way you like; the next hook run rebuilds it the same way. To rebuild it right away:
 
 ```sh
 rusty-todo-md --regenerate

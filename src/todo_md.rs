@@ -1,6 +1,6 @@
 use crate::todo_md_internal::TodoCollection;
 use crate::MarkedItem;
-use log::{debug, info, warn};
+use log::debug;
 use regex::Regex;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -35,129 +35,50 @@ impl From<io::Error> for TodoError {
     }
 }
 
-pub fn validate_todo_file(todo_path: &std::path::Path) -> bool {
-    // TODO: add tests for this function
-    match fs::read_to_string(todo_path) {
-        Ok(content) => {
-            if content.is_empty() {
-                info!("Empty TODO.md file");
-                return true;
-            }
-            // Expected patterns for the title, a marker header, a file section header,
-            // and a TODO item line.
-            let marker_re = Regex::new(r"^##\s+\w+").unwrap();
-            let section_re = Regex::new(r"^###\s+(.*)$").unwrap();
-            let todo_re = Regex::new(r"^\*\s+\[(.+):(\d+)\]\(.+#L\d+\):\s*(.+)$").unwrap();
-            // Check the order as well as each line: title, then per marker a
-            // `##` header followed by `###` file sections, each with items. A
-            // TODO.md in the pre-#194 layout (marker as H1, file as H2) fails
-            // here, which makes the CLI rebuild it from scratch. Checking lines
-            // in isolation is not enough: an old file whose marker is `TODOs`
-            // starts with a line equal to the title, and its `## file` lines
-            // look like marker headers.
-            #[derive(PartialEq)]
-            enum Prev {
-                Start,
-                Title,
-                Marker,
-                File,
-                Item,
-            }
-            let mut prev = Prev::Start;
-            for (i, line) in content.lines().enumerate() {
-                let line = line.trim();
-                if line.is_empty() {
-                    continue;
-                }
-                let next = if line == TITLE {
-                    (prev == Prev::Start).then_some(Prev::Title)
-                } else if marker_re.is_match(line) {
-                    matches!(prev, Prev::Title | Prev::Item).then_some(Prev::Marker)
-                } else if section_re.is_match(line) {
-                    matches!(prev, Prev::Marker | Prev::Item).then_some(Prev::File)
-                } else if todo_re.is_match(line) {
-                    matches!(prev, Prev::File | Prev::Item).then_some(Prev::Item)
-                } else {
-                    None
-                };
-                if let Some(next) = next {
-                    prev = next;
-                } else {
-                    warn!(
-                        "Invalid format on line {line_num}: {line}",
-                        line_num = i + 1,
-                        line = line
-                    );
-                    return false;
-                }
-            }
-            true
-        }
-        Err(e) => {
-            warn!(
-                "Failed to read {path}: {e}",
-                path = todo_path.display(),
-                e = e
-            );
-            false
-        }
-    }
-}
-
-/// Reads the existing TODO.md file (in the new sectioned format) and returns a vector of `MarkedItem`s.
+/// Reads the existing TODO.md and returns its entries.
 ///
-/// The new format groups TODO items under marker (`## <marker>`) and file section
-/// headers of the form:
-///
-/// ```markdown
-/// ### <file-path>
-/// * [<file-path>:<line_number>](<file-path>#L<line_number>): <message>
-/// ```
-///
-/// This function uses regex to detect section headers to set the current file context, and then
-/// parses subsequent todo item lines accordingly.
+/// Fails unless the file is exactly what [`write_todo_file`] would write
+/// for those entries. That one rule rejects everything the incremental
+/// merge must not build on: conflict markers, `merge=union` leftovers
+/// (duplicate or out-of-order entries), hand edits, and older layouts. The
+/// CLI then rebuilds TODO.md from all tracked files.
 pub fn read_todo_file(todo_path: &Path) -> Result<Vec<MarkedItem>, TodoError> {
-    if !validate_todo_file(todo_path) {
-        return Err(TodoError::Parse("TODO.md validation failed".to_string()));
-    }
-
     let content = fs::read_to_string(todo_path)?;
 
+    let marker_re = Regex::new(r"^## (.+)$").unwrap();
+    let section_re = Regex::new(r"^### (.+)$").unwrap();
+    let todo_re = Regex::new(r"^\* \[(.+):(\d+)\]\(.+#L\d+\): (.+)$").unwrap();
     let mut todos = Vec::new();
-    let marker_re = Regex::new(r"^##\s+(\w+)").unwrap();
-    let section_re = Regex::new(r"^###\s+(.*)$").unwrap();
-    let todo_re = Regex::new(r"^\*\s+\[(.+):(\d+)\]\(.+#L\d+\):\s*(.+)$").unwrap();
-    let mut current_file: Option<String> = None;
     let mut current_marker: Option<String> = None;
+    let mut current_file: Option<String> = None;
     for line in content.lines() {
-        let line = line.trim();
         if line.is_empty() || line == TITLE {
             continue;
         }
-        // If the line is a marker header, update the current marker
         if let Some(caps) = marker_re.captures(line) {
             current_marker = Some(caps[1].to_string());
+            current_file = None;
             continue;
         }
-        // If the line is a section header, update the current file context.
         if let Some(caps) = section_re.captures(line) {
-            current_file = Some(caps[1].trim().to_string());
+            current_file = Some(caps[1].to_string());
             continue;
         }
-        // If the line matches a TODO item, parse it.
-        if let Some(caps) = todo_re.captures(line) {
-            let file_path_str = current_file.clone().unwrap_or_else(|| caps[1].to_string());
-            let file_path = PathBuf::from(file_path_str);
-            let line_number = caps[2].parse::<usize>().unwrap_or(0);
-            let message = caps[3].to_string();
-            let marker = current_marker.clone().unwrap_or_else(|| "TODO".to_string());
-            todos.push(MarkedItem {
-                file_path,
-                line_number,
-                message,
-                marker,
-            });
+        match (todo_re.captures(line), &current_marker, &current_file) {
+            (Some(caps), Some(marker), Some(file)) => todos.push(MarkedItem {
+                file_path: PathBuf::from(file),
+                line_number: caps[2].parse::<usize>().unwrap_or(0),
+                message: caps[3].to_string(),
+                marker: marker.clone(),
+            }),
+            _ => return Err(TodoError::Parse(format!("unexpected line: {line}"))),
         }
+    }
+
+    if render_todo_md(todos.clone()) != content {
+        return Err(TodoError::Parse(
+            "not in the form rusty-todo-md writes (merge leftovers or hand edits)".to_string(),
+        ));
     }
     Ok(todos)
 }
@@ -226,6 +147,11 @@ pub fn sync_todo_file(
 ///
 /// An empty item list produces an empty file.
 pub fn write_todo_file(todo_path: &Path, todos: Vec<MarkedItem>) -> std::io::Result<()> {
+    fs::write(todo_path, render_todo_md(todos))
+}
+
+/// The exact TODO.md content for `todos`; see [`write_todo_file`].
+fn render_todo_md(todos: Vec<MarkedItem>) -> String {
     // Group by marker, then by file using BTreeMap for sorted output
     let mut marker_map: BTreeMap<String, BTreeMap<PathBuf, Vec<MarkedItem>>> = BTreeMap::new();
     for item in todos {
@@ -251,9 +177,11 @@ pub fn write_todo_file(todo_path: &Path, todos: Vec<MarkedItem>) -> std::io::Res
         let file_entries: Vec<_> = files.into_iter().collect();
         for (i, (file, items)) in file_entries.iter().enumerate() {
             content.push_str(&format!("### {file}\n", file = file.display()));
-            // Sort items by line number for consistency
+            // Sort items by line number for consistency. Identical entries
+            // can't come from a scan, only from a merge; drop them.
             let mut sorted_items = items.clone();
             sorted_items.sort_by_key(|item| item.line_number);
+            sorted_items.dedup();
             for item in sorted_items.iter() {
                 content.push_str(&format!(
                     "* [{file}:{line}]({file}#L{line}): {message}\n",
@@ -268,8 +196,7 @@ pub fn write_todo_file(todo_path: &Path, todos: Vec<MarkedItem>) -> std::io::Res
             }
         }
     }
-    // Write the final content to the TODO.md file
-    fs::write(todo_path, content)
+    content
 }
 
 #[cfg(test)]
@@ -333,11 +260,11 @@ mod tests {
         let existing_content = r#"# TODOs
 
 ## TODO
-### src/existing.rs
-* [src/existing.rs:10](src/existing.rs#L10): This file exists
-
 ### src/deleted.rs
 * [src/deleted.rs:5](src/deleted.rs#L5): This file does not exist
+
+### src/existing.rs
+* [src/existing.rs:10](src/existing.rs#L10): This file exists
 "#;
         fs::write(&todo_path, existing_content).unwrap();
 
@@ -387,11 +314,11 @@ mod tests {
         let content = r#"# TODOs
 
 ## TODO
-### src/main.rs
-* [src/main.rs:12](src/main.rs#L12): Refactor this function
-
 ### src/lib.rs
 * [src/lib.rs:5](src/lib.rs#L5): Add error handling
+
+### src/main.rs
+* [src/main.rs:12](src/main.rs#L12): Refactor this function
 "#;
 
         let temp_dir = tempdir().unwrap();
@@ -410,21 +337,58 @@ mod tests {
         assert_eq!(
             todos[0],
             MarkedItem {
-                file_path: PathBuf::from("src/main.rs"),
-                line_number: 12,
-                message: "Refactor this function".to_string(),
-                marker: "TODO".to_string(),
-            }
-        );
-        assert_eq!(
-            todos[1],
-            MarkedItem {
                 file_path: PathBuf::from("src/lib.rs"),
                 line_number: 5,
                 message: "Add error handling".to_string(),
                 marker: "TODO".to_string(),
             }
         );
+        assert_eq!(
+            todos[1],
+            MarkedItem {
+                file_path: PathBuf::from("src/main.rs"),
+                line_number: 12,
+                message: "Refactor this function".to_string(),
+                marker: "TODO".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn test_read_rejects_content_we_would_not_write() {
+        // Each of these must make the CLI rebuild TODO.md instead of merging
+        // into it. The union case is what `TODO.md merge=union` leaves
+        // after both sides of a rebase moved the same TODOs.
+        init_logger();
+        let head = "# TODOs\n\n## TODO\n### a.rs\n";
+        let cases = [
+            (
+                "merge=union leftovers (both sides, out of order)",
+                format!("{head}* [a.rs:3](a.rs#L3): alpha\n* [a.rs:1](a.rs#L1): alpha\n"),
+            ),
+            (
+                "duplicate entry",
+                format!("{head}* [a.rs:1](a.rs#L1): alpha\n* [a.rs:1](a.rs#L1): alpha\n"),
+            ),
+            (
+                "conflict markers",
+                format!("{head}<<<<<<< HEAD\n* [a.rs:1](a.rs#L1): alpha\n=======\n* [a.rs:3](a.rs#L3): alpha\n>>>>>>> b\n"),
+            ),
+            (
+                "hand-written note",
+                format!("{head}* [a.rs:1](a.rs#L1): alpha\nremember to ask Bob\n"),
+            ),
+            (
+                "missing title",
+                "## TODO\n### a.rs\n* [a.rs:1](a.rs#L1): alpha\n".to_string(),
+            ),
+        ];
+        let temp_dir = tempdir().unwrap();
+        let todo_path = temp_dir.path().join("TODO.md");
+        for (case, content) in cases {
+            fs::write(&todo_path, &content).unwrap();
+            assert!(read_todo_file(&todo_path).is_err(), "{case}:\n{content}");
+        }
     }
 
     #[test]
@@ -512,7 +476,6 @@ mod tests {
         )
         .unwrap();
 
-        assert!(!validate_todo_file(&todo_path));
         assert!(read_todo_file(&todo_path).is_err());
     }
 
@@ -520,9 +483,7 @@ mod tests {
     fn test_pre_194_layout_with_todos_marker_fails_validation() {
         // An old file whose only marker is `TODOs` starts with a line equal to
         // the new title, and its `## file` lines look like marker headers.
-        // Each line matches some pattern on its own; only the order (items
-        // directly under a `##` header) gives it away. Accepting it would
-        // re-read `src` as the marker.
+        // Accepting it would re-read `src/main.rs` as the marker.
         init_logger();
         let temp_dir = tempdir().unwrap();
         let todo_path = temp_dir.path().join("TODO.md");
@@ -532,7 +493,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(!validate_todo_file(&todo_path));
+        assert!(read_todo_file(&todo_path).is_err());
     }
 
     #[test]
