@@ -299,13 +299,17 @@ Entries in `TODO.md` use this format:
 
 This format is stable and designed for easy linking to code in hosted repos.
 
-Example:
+The file has a single `# TODOs` title, one `##` section per marker and one `###` subsection per file:
 
 ```
-# TODO
-## src/main.rs
+# TODOs
+
+## TODO
+### src/main.rs
 * [src/main.rs:10](src/main.rs#L10): Refactor initialization logic
 ```
+
+A `TODO.md` written by a version before 1.11 (markers as `#`, files as `##`) is rebuilt automatically, from all tracked files, the first time the hook runs.
 
 ---
 

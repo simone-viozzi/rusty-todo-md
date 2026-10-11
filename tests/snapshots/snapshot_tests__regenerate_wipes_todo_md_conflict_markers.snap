@@ -2,7 +2,9 @@
 source: tests/snapshot_tests.rs
 expression: out.todo_md
 ---
-# TODO
-## a.rs
+# TODOs
+
+## TODO
+### a.rs
 * [a.rs:1](a.rs#L1): one
 * [a.rs:3](a.rs#L3): two

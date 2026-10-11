@@ -79,24 +79,26 @@ cat TODO.md
 ```
 
 ### Expected TODO.md Output Format
-The tool should generate a TODO.md file with sections organized by marker type, then by file:
+The tool should generate a TODO.md file with a `# TODOs` title, then sections organized by marker type (`##`), then by file (`###`):
 ```markdown
-# FIXME
-## sample.py
+# TODOs
+
+## FIXME
+### sample.py
 * [sample.py:4](sample.py#L4): This function needs proper documentation
 
-## sample.rs
+### sample.rs
 * [sample.rs:5](sample.rs#L5): Handle error cases properly
 
-# HACK
-## sample.py
+## HACK
+### sample.py
 * [sample.py:14](sample.py#L14): Using hardcoded values for now
 
-# TODO
-## sample.py
+## TODO
+### sample.py
 * [sample.py:1](sample.py#L1): Add comprehensive error handling
 
-## sample.rs
+### sample.rs
 * [sample.rs:1](sample.rs#L1): Implement user authentication
 * [sample.rs:9](sample.rs#L9): Add logging functionality for better debugging
 ```
