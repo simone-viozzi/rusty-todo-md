@@ -117,6 +117,66 @@ pub fn is_routed(repo: &Repository, todo_path: &Path) -> bool {
     )
 }
 
+/// Result of [`check`]: can this clone run the driver `.gitattributes`
+/// asks for?
+pub enum Check {
+    NotRouted,
+    Ready,
+    NotRegistered,
+    /// Registered with a binary that no longer exists, e.g. a pre-commit
+    /// virtualenv removed by `pre-commit gc`.
+    BinaryMissing(PathBuf),
+}
+
+/// Read-only counterpart of [`reconcile`], for the pre-rebase hook. It
+/// doesn't compare args: only the main hook knows them, and it re-registers
+/// on the next commit anyway.
+pub fn check(repo: &Repository, todo_path: &Path) -> Check {
+    if !is_routed(repo, todo_path) {
+        return Check::NotRouted;
+    }
+    let driver = repo
+        .config()
+        .ok()
+        .and_then(|c| c.get_string(CONFIG_KEY_DRIVER).ok());
+    let Some(driver) = driver else {
+        return Check::NotRegistered;
+    };
+    match registered_exe(&driver) {
+        Some(exe) if !exe.exists() => Check::BinaryMissing(exe),
+        _ => Check::Ready,
+    }
+}
+
+/// The binary path baked into a command built by [`build_driver_command`]
+/// (the `p=...;` prefix). `None` for any other command, e.g. one written
+/// by hand.
+fn registered_exe(driver_command: &str) -> Option<PathBuf> {
+    let rest = driver_command.strip_prefix("p=")?;
+    let path = match rest.strip_prefix('\'') {
+        // Undo `quote_for_shell`: single-quoted, with `'` written as `'\''`.
+        Some(quoted) => {
+            let mut path = String::new();
+            let mut rest = quoted;
+            loop {
+                let end = rest.find('\'')?;
+                path.push_str(&rest[..end]);
+                rest = &rest[end + 1..];
+                match rest.strip_prefix("\\''") {
+                    Some(after) => {
+                        path.push('\'');
+                        rest = after;
+                    }
+                    None => break,
+                }
+            }
+            path
+        }
+        None => rest.split(';').next()?.to_string(),
+    };
+    Some(PathBuf::from(path))
+}
+
 /// Per-run entry point. When `.gitattributes` routes TODO.md to the driver,
 /// make this clone's `.git/config` register it with `exe` and the current
 /// args. Never touches `.gitattributes` (a tracked file). Returns
@@ -500,6 +560,25 @@ mod tests {
         assert!(
             cmd.starts_with("p='/home/a user/venv/bin/rusty-todo-md'; "),
             "cmd: {cmd}"
+        );
+    }
+
+    #[test]
+    fn registered_exe_reads_back_the_path_build_driver_command_wrote() {
+        let markers = MarkerConfig::normalized(vec!["TODO".to_string()]);
+        for exe in [
+            "/opt/venv/bin/rusty-todo-md",
+            "/home/a user/venv/bin/rusty-todo-md",
+            "/home/o'brien/it's here/rusty-todo-md",
+        ] {
+            let cmd =
+                build_driver_command(&markers, &[], &[], Path::new("TODO.md"), Path::new(exe));
+            assert_eq!(registered_exe(&cmd), Some(PathBuf::from(exe)), "cmd: {cmd}");
+        }
+        // A hand-written driver isn't ours to second-guess.
+        assert_eq!(
+            registered_exe("rusty-todo-md --merge-driver %O %A %B"),
+            None
         );
     }
 

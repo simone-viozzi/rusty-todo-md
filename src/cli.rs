@@ -74,6 +74,7 @@ enum Mode {
     Scan,
     Regenerate,
     Install,
+    CheckMergeDriver,
     MergeDriver { ours: PathBuf },
 }
 
@@ -133,6 +134,8 @@ impl ParsedArgs {
             Mode::Regenerate
         } else if matches.get_flag("install_merge_driver") {
             Mode::Install
+        } else if matches.get_flag("check_merge_driver") {
+            Mode::CheckMergeDriver
         } else {
             Mode::Scan
         };
@@ -158,6 +161,7 @@ fn dispatch(args: &ParsedArgs, git_ops: &dyn GitOpsTrait) -> Result<(), String> 
         Mode::MergeDriver { ours } => mode::merge_driver(args, &repo, git_ops, ours),
         Mode::Regenerate => mode::regenerate(args, &repo, git_ops),
         Mode::Install => mode::install(args, &repo),
+        Mode::CheckMergeDriver => mode::check_merge_driver(args, &repo),
         Mode::Scan => mode::scan(args, repo, git_ops),
     }
 }
@@ -180,24 +184,8 @@ mod mode {
     ) -> Result<(), String> {
         // pre-commit sets PRE_COMMIT=1 for hooks. Gating on it keeps manual
         // runs from another install (pip, uvx) from re-pointing the driver.
-        let registered = std::env::var_os("PRE_COMMIT").is_some_and(|v| v == "1")
-            && reconcile_merge_driver(args, &repo)?;
-        // pre-commit passes no files in the `pre-rebase` stage, and on
-        // commits with no matching files (the hook is `always_run`). Git
-        // refuses to rebase a dirty tree, so such a run must not touch
-        // TODO.md.
-        if args.files.is_empty() {
-            if registered {
-                // Git reads merge drivers when it starts, so the rebase
-                // running this `pre-rebase` hook would still use the text
-                // merge. Abort it; the re-run picks the driver up. (Failing
-                // also makes pre-commit show the registration summary.)
-                return Err(format!(
-                    "registered the TODO.md merge driver for this clone, because .gitattributes routes {} to it. Git reads merge drivers only when it starts: re-run your rebase.",
-                    args.todo_path.display()
-                ));
-            }
-            return Ok(());
+        if std::env::var_os("PRE_COMMIT").is_some_and(|v| v == "1") {
+            reconcile_merge_driver(args, &repo)?;
         }
         ensure_todo_path_exists(&args.todo_path)?;
         warn_if_todo_md_has_conflict_markers(&args.todo_path);
@@ -252,17 +240,35 @@ mod mode {
         Ok(())
     }
 
+    /// `--check-merge-driver`, run by the `rusty-todo-md-pre-rebase` hook.
+    /// Read-only: registering needs the user's `--markers`/`--exclude` args,
+    /// which only the main hook has. Fails (aborting the rebase) when
+    /// `.gitattributes` routes TODO.md to the driver but this clone can't
+    /// run it: git would silently fall back to its text merge.
+    pub(super) fn check_merge_driver(args: &ParsedArgs, repo: &Repository) -> Result<(), String> {
+        match merge_driver::check(repo, &args.todo_path) {
+            merge_driver::Check::NotRouted | merge_driver::Check::Ready => Ok(()),
+            merge_driver::Check::NotRegistered => Err(format!(
+                "{} is routed to the TODO.md merge driver, but this clone hasn't registered it. Run `pre-commit run rusty-todo-md --all-files` to register it, then re-run your rebase.",
+                args.todo_path.display()
+            )),
+            merge_driver::Check::BinaryMissing(path) => Err(format!(
+                "the TODO.md merge driver is registered with {}, which no longer exists. Run `pre-commit run rusty-todo-md --all-files` to re-register it, then re-run your rebase.",
+                path.display()
+            )),
+        }
+    }
+
     /// When `.gitattributes` routes TODO.md to the merge driver (the
     /// maintainer's committed opt-in), make this clone's `.git/config`
-    /// register it with this binary and these args. Returns whether it
-    /// wrote; silent when not routed or already in sync. The summary goes
-    /// to stderr, which pre-commit shows only for failing (or `verbose`)
-    /// hooks. Commits and CI runs (always a fresh clone) don't need the
-    /// driver, so registering there must not fail them.
+    /// register it with this binary and these args. Silent when not routed
+    /// or already in sync; the summary goes to stderr, which pre-commit
+    /// shows only for failing (or `verbose`) hooks. A commit doesn't need
+    /// the driver, so registering never fails the run.
     ///
     /// Fails when the write itself fails: the team opted in, and a clone
     /// without the driver silently falls back to git's text merge.
-    fn reconcile_merge_driver(args: &ParsedArgs, repo: &Repository) -> Result<bool, String> {
+    fn reconcile_merge_driver(args: &ParsedArgs, repo: &Repository) -> Result<(), String> {
         let summary = merge_driver::reconcile(
             repo,
             &args.marker_config,
@@ -277,13 +283,10 @@ mod mode {
                 args.todo_path.display()
             )
         })?;
-        match summary {
-            Some(summary) => {
-                eprint!("{}", merge_driver::format_reconcile_summary(&summary));
-                Ok(true)
-            }
-            None => Ok(false),
+        if let Some(summary) = summary {
+            eprint!("{}", merge_driver::format_reconcile_summary(&summary));
         }
+        Ok(())
     }
 
     fn current_exe() -> Result<PathBuf, String> {
@@ -497,6 +500,13 @@ fn build_cli() -> Command {
                 .help("Register the TODO.md merge driver in .git/config and add the routing rule to .gitattributes. Commit .gitattributes to opt the whole team in: every pre-commit run then registers the driver in each collaborator's clone.")
                 .action(ArgAction::SetTrue)
                 .conflicts_with_all(["regenerate", "merge_driver"]),
+        )
+        .arg(
+            Arg::new("check_merge_driver")
+                .long("check-merge-driver")
+                .help("Fail if .gitattributes routes TODO.md to the merge driver but this clone has not registered it (or its binary is gone). Run by the rusty-todo-md-pre-rebase hook; never writes anything.")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["regenerate", "install_merge_driver", "merge_driver"]),
         )
         .arg(
             Arg::new("merge_driver")

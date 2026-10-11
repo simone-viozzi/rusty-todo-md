@@ -242,15 +242,9 @@ fn hook_registers(repo: &Path, args: &[&str]) {
         .stderr(predicates::str::contains(REGISTERED));
 }
 
-/// A zero-file hook run (pre-commit's `pre-rebase` stage) that has to
-/// register the driver: writes it and fails, aborting the rebase. Git reads
-/// merge drivers only when it starts, so that rebase couldn't use it.
-fn hook_registers_and_aborts_rebase(repo: &Path) {
-    hook(repo)
-        .assert()
-        .failure()
-        .stderr(predicates::str::contains(REGISTERED))
-        .stderr(predicates::str::contains("re-run your rebase"));
+/// What the `rusty-todo-md-pre-rebase` hook runs.
+fn check(repo: &Path) -> assert_cmd::assert::Assert {
+    hook(repo).arg("--check-merge-driver").assert()
 }
 
 /// A hook run with the registration already in sync: succeeds, says nothing
@@ -357,59 +351,100 @@ fn ci_run_in_fresh_clone_passes() {
     assert!(read(&repo.join("TODO.md")).contains("one"));
 }
 
-/// pre-commit passes zero files in the `pre-rebase` stage. That run must
-/// register the driver and fail (aborting the rebase, which could not use
-/// a driver registered after it started), without touching TODO.md: git
-/// refuses to rebase a dirty tree. The committed TODO.md here is
-/// deliberately not in the current format, which would otherwise trigger a
-/// full rebuild. Once registered, the zero-file run passes.
 #[test]
-fn zero_file_hook_run_registers_driver_and_leaves_tree_clean() {
-    let dir = routed_repo();
-    let repo = dir.path();
-    let stale = "# TODO\n## a.rs\n* [a.rs:1](a.rs#L1): one\n";
-    fs::write(repo.join("TODO.md"), stale).unwrap();
-    git_must(repo, &["add", "TODO.md"]);
-    git_must(repo, &["commit", "-q", "-m", "todo"]);
-
-    hook_registers_and_aborts_rebase(repo);
-    assert!(
-        registered_driver(repo).is_some(),
-        "driver must be registered"
-    );
-    hook_in_sync(repo, &[]);
-
-    assert_eq!(read(&repo.join("TODO.md")), stale);
-    let status = git_must(repo, &["status", "--porcelain"]);
-    assert!(
-        status.stdout.is_empty(),
-        "tree must stay clean, got:\n{}",
-        String::from_utf8_lossy(&status.stdout)
-    );
+fn check_passes_without_routing() {
+    let dir = init_repo();
+    check(dir.path()).success();
 }
 
-/// If neither the registered binary nor `rusty-todo-md` on PATH exists,
-/// the driver must fail with an actionable message, not a bare
-/// "command not found".
+/// A collaborator's fresh clone: routed, nothing registered. The check
+/// fails (aborting the rebase, since git would silently use its text merge)
+/// and points at the command that registers the driver; it never writes
+/// anything itself, because only the main hook has the user's args.
 #[test]
-fn driver_command_reports_missing_binary() {
+fn check_fails_until_driver_is_registered() {
+    let dir = routed_repo();
+    let repo = dir.path();
+
+    check(repo)
+        .failure()
+        .stderr(predicates::str::contains("hasn't registered it"))
+        .stderr(predicates::str::contains(
+            "pre-commit run rusty-todo-md --all-files",
+        ));
+    assert_eq!(registered_driver(repo), None, "the check must not write");
+
+    hook_registers(repo, &["--", "a.rs"]);
+    check(repo).success();
+}
+
+/// `pre-commit gc` can delete the virtualenv the driver was registered
+/// with; git would then fail the merge instead of running the driver.
+#[test]
+fn check_fails_when_registered_binary_is_gone() {
     let dir = routed_repo();
     let repo = dir.path();
     hook_registers(repo, &["--", "a.rs"]);
     let driver = registered_driver(repo).unwrap();
-    let broken = driver
-        .replace(&bin().display().to_string(), "/gone/venv/bin/rusty-todo-md")
-        .replace("%O %A %B", "base ours theirs");
+    git_must(
+        repo,
+        &[
+            "config",
+            "merge.rusty-todo-md.driver",
+            &driver.replace(&bin().display().to_string(), "/gone/venv/bin/rusty-todo-md"),
+        ],
+    );
 
-    // Absolute `sh`: PATH is emptied below so the PATH fallback finds nothing.
-    let out = Command::new("/bin/sh")
+    check(repo)
+        .failure()
+        .stderr(predicates::str::contains("/gone/venv/bin/rusty-todo-md"))
+        .stderr(predicates::str::contains("no longer exists"));
+}
+
+/// If neither the registered binary nor `rusty-todo-md` on PATH exists when
+/// git runs the driver, the user must see an actionable message, not a bare
+/// "command not found". Driven through a real `git merge`, which runs the
+/// driver command through git's own shell on every platform.
+#[test]
+fn driver_reports_missing_binary_during_merge() {
+    let dir = routed_repo();
+    let repo = dir.path();
+    fs::write(repo.join("TODO.md"), "base\n").unwrap();
+    git_must(repo, &["add", "TODO.md"]);
+    git_must(repo, &["commit", "-q", "-m", "todo"]);
+    hook_registers(repo, &["--", "a.rs"]);
+    let driver = registered_driver(repo).unwrap();
+    git_must(
+        repo,
+        &[
+            "config",
+            "merge.rusty-todo-md.driver",
+            &driver.replace(&bin().display().to_string(), "/gone/venv/bin/rusty-todo-md"),
+        ],
+    );
+    // Both sides change TODO.md, so git has to call the driver.
+    git_must(repo, &["checkout", "-q", "-b", "side"]);
+    fs::write(repo.join("TODO.md"), "side\n").unwrap();
+    git_must(repo, &["commit", "-q", "-am", "side"]);
+    git_must(repo, &["checkout", "-q", "main"]);
+    fs::write(repo.join("TODO.md"), "main\n").unwrap();
+    git_must(repo, &["commit", "-q", "-am", "main"]);
+
+    // Keep git on PATH but drop any directory with a `rusty-todo-md`, so
+    // the driver's PATH fallback finds nothing.
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let path = std::env::join_paths(std::env::split_paths(&path).filter(|dir| {
+        !dir.join("rusty-todo-md").exists() && !dir.join("rusty-todo-md.exe").exists()
+    }))
+    .unwrap();
+    let out = Command::new("git")
         .current_dir(repo)
-        .args(["-c", &broken])
-        .env("PATH", "/nonexistent")
+        .args(["merge", "-q", "side"])
+        .env("PATH", path)
         .output()
-        .expect("sh failed to spawn");
+        .expect("git failed to spawn");
 
-    assert!(!out.status.success());
+    assert!(!out.status.success(), "merge must not succeed");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains("merge driver binary not found")
@@ -506,11 +541,13 @@ fn rebase_without_driver_conflicts_with_driver_clean() {
         git_must(repo, &["commit", "-q", "-m", "feat-b"]);
 
         if with_driver {
-            // What the `pre-rebase` hook stage does: a zero-file run that
-            // registers the driver (with this binary's absolute path, so no
-            // PATH lookup is needed when git invokes it) and aborts that
-            // first rebase. The user's re-run starts with the driver loaded.
-            hook_registers_and_aborts_rebase(repo);
+            // The pre-rebase check refuses the rebase in this unregistered
+            // clone; the user runs the main hook (which registers the driver
+            // with this binary's absolute path, so git needs no PATH lookup)
+            // and re-runs the rebase, which the check now lets through.
+            check(repo).failure();
+            hook_registers(repo, &["--", "a.rs"]);
+            check(repo).success();
         }
 
         // Rebase feat-b onto feat-a. Without the driver, this conflicts on
