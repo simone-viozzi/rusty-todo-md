@@ -1,7 +1,6 @@
 use crate::exclusion::{build_exclusion_matcher, filter_excluded_files, ExclusionRule};
 use crate::git_utils::GitOps;
 use crate::git_utils::GitOpsTrait;
-use crate::merge_driver;
 use crate::todo_md;
 use crate::{extract_marked_items_from_file, MarkedItem, MarkerConfig};
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -65,32 +64,16 @@ pub fn validate_no_empty_todos(new_todos: &[MarkedItem]) -> Result<(), String> {
 // Parsed args + mode dispatch
 // ---------------------------------------------------------------------------
 
-/// What the four mutually-exclusive operating modes do.
-///
-/// Each top-level invocation lands in exactly one variant; `Scan` is the
-/// default when no mode-selecting flag is present and is the only mode that
-/// honors `auto_add` / `auto_install_merge_driver`.
-enum Mode {
-    Scan,
-    Regenerate,
-    Install,
-    MergeDriver { ours: PathBuf },
-}
-
-/// Everything the CLI needs after parsing. Kept as a flat struct (rather
-/// than one-per-mode) because most fields are mode-agnostic (markers,
-/// exclusions, todo-path) and the cost of a few unused fields per mode is
-/// smaller than the cost of variant duplication.
+/// Everything the CLI needs after parsing. `regenerate` selects the
+/// `--regenerate` mode; otherwise the default scan mode runs, which is the
+/// only one that honors `auto_add`.
 struct ParsedArgs {
-    mode: Mode,
+    regenerate: bool,
     todo_path: PathBuf,
     marker_config: MarkerConfig,
-    exclude_patterns: Vec<String>,
-    exclude_dir_patterns: Vec<String>,
     exclusion_rules: Vec<ExclusionRule>,
     files: Vec<PathBuf>,
     auto_add: bool,
-    auto_install_merge_driver: bool,
 }
 
 impl ParsedArgs {
@@ -115,39 +98,21 @@ impl ParsedArgs {
             .get_many::<String>("exclude_dir")
             .map(|vals| vals.cloned().collect())
             .unwrap_or_default();
-        let exclusion_rules =
-            build_exclusion_matcher(exclude_patterns.clone(), exclude_dir_patterns.clone())
-                .map_err(|e| format!("Error building exclusion patterns: {e}"))?;
+        let exclusion_rules = build_exclusion_matcher(exclude_patterns, exclude_dir_patterns)
+            .map_err(|e| format!("Error building exclusion patterns: {e}"))?;
 
         let files: Vec<PathBuf> = matches
             .get_many::<String>("files")
             .map(|vals| vals.map(PathBuf::from).collect())
             .unwrap_or_default();
 
-        let mode = if let Some(vals) = matches.get_many::<String>("merge_driver") {
-            // git passes %O %A %B; OURS is the second value and the only one
-            // the driver writes to.
-            let triple: Vec<&String> = vals.collect();
-            let ours = PathBuf::from(triple[1]);
-            Mode::MergeDriver { ours }
-        } else if matches.get_flag("regenerate") {
-            Mode::Regenerate
-        } else if matches.get_flag("install_merge_driver") {
-            Mode::Install
-        } else {
-            Mode::Scan
-        };
-
         Ok(ParsedArgs {
-            mode,
+            regenerate: matches.get_flag("regenerate"),
             todo_path,
             marker_config,
-            exclude_patterns,
-            exclude_dir_patterns,
             exclusion_rules,
             files,
             auto_add: matches.get_flag("auto_add"),
-            auto_install_merge_driver: matches.get_flag("auto_install_merge_driver"),
         })
     }
 }
@@ -156,11 +121,10 @@ fn dispatch(args: &ParsedArgs, git_ops: &dyn GitOpsTrait) -> Result<(), String> 
     let repo = git_ops
         .open_repository(Path::new("."))
         .map_err(|e| format!("Error opening repository: {e}"))?;
-    match &args.mode {
-        Mode::MergeDriver { ours } => mode::merge_driver(args, &repo, git_ops, ours),
-        Mode::Regenerate => mode::regenerate(args, &repo, git_ops),
-        Mode::Install => mode::install(args, &repo),
-        Mode::Scan => mode::scan(args, repo, git_ops),
+    if args.regenerate {
+        mode::regenerate(args, &repo, git_ops)
+    } else {
+        mode::scan(args, repo, git_ops)
     }
 }
 
@@ -172,18 +136,13 @@ mod mode {
     use super::*;
 
     /// Default mode: process the files pre-commit passed us, merge into the
-    /// existing TODO.md, optionally auto-add it back to the index, and
-    /// optionally self-install the merge driver.
+    /// existing TODO.md, and optionally auto-add it back to the index.
     pub(super) fn scan(
         args: &ParsedArgs,
         repo: Repository,
         git_ops: &dyn GitOpsTrait,
     ) -> Result<(), String> {
         ensure_todo_path_exists(&args.todo_path)?;
-        if args.auto_install_merge_driver {
-            maybe_auto_install(args, &repo);
-        }
-        warn_if_todo_md_has_conflict_markers(&args.todo_path);
         process_files(args, repo, git_ops)
     }
 
@@ -194,75 +153,9 @@ mod mode {
         git_ops: &dyn GitOpsTrait,
     ) -> Result<(), String> {
         ensure_todo_path_exists(&args.todo_path)?;
-        regenerate_todo_md(args, repo, git_ops, &args.todo_path, true)?;
+        regenerate_todo_md(args, repo, git_ops)?;
         info!("TODO.md successfully regenerated.");
         Ok(())
-    }
-
-    /// `--install-merge-driver`: register the driver in `.git/config` and
-    /// `.gitattributes`. Convergent — running it twice with the same args is
-    /// a no-op on disk.
-    pub(super) fn install(args: &ParsedArgs, repo: &Repository) -> Result<(), String> {
-        let summary = merge_driver::install_driver(
-            repo,
-            &args.marker_config,
-            &args.exclude_patterns,
-            &args.exclude_dir_patterns,
-            &args.todo_path,
-        )
-        .map_err(|e| format!("Error installing merge driver: {e}"))?;
-        print!("{}", merge_driver::format_install_summary(&summary));
-        Ok(())
-    }
-
-    /// Git merge-driver entry point. Ignores BASE/THEIRS — at invocation
-    /// time the working tree's source files already reflect the cumulative
-    /// state of all replayed commits (for files that didn't themselves
-    /// conflict), so a fresh scan produces canonical TODO.md by
-    /// construction. Skips empty-TODO validation: a half-merged source file
-    /// (with conflict markers) is already skipped at the extractor level,
-    /// and failing the merge here would just surface the conflict back to
-    /// the user instead of resolving it.
-    pub(super) fn merge_driver(
-        args: &ParsedArgs,
-        repo: &Repository,
-        git_ops: &dyn GitOpsTrait,
-        ours: &Path,
-    ) -> Result<(), String> {
-        regenerate_todo_md(args, repo, git_ops, ours, false)?;
-        info!("TODO.md merge driver wrote canonical output to {ours:?}.");
-        Ok(())
-    }
-
-    /// Auto-install side-effect. Only called from scan mode when
-    /// `--auto-install-merge-driver` is set. Reconciles the registered
-    /// driver against the current invocation's args: silent no-op when
-    /// already in sync, loud summary when it has to write. Non-fatal on
-    /// failure — a flaky install must never block the actual pre-commit
-    /// work.
-    fn maybe_auto_install(args: &ParsedArgs, repo: &Repository) {
-        match merge_driver::reconcile(
-            repo,
-            &args.marker_config,
-            &args.exclude_patterns,
-            &args.exclude_dir_patterns,
-            &args.todo_path,
-        ) {
-            Ok(None) => {
-                // Already in sync — say nothing.
-            }
-            Ok(Some(summary)) => {
-                println!(
-                    "rusty-todo-md: --auto-install-merge-driver reconciling merge driver registration."
-                );
-                print!("{}", merge_driver::format_install_summary(&summary));
-            }
-            Err(e) => {
-                eprintln!(
-                    "rusty-todo-md: --auto-install-merge-driver: failed to reconcile driver: {e}"
-                );
-            }
-        }
     }
 }
 
@@ -288,38 +181,22 @@ fn ensure_todo_path_exists(todo_path: &Path) -> Result<(), String> {
     std::fs::write(todo_path, "").map_err(|e| format!("Error creating TODO.md: {e}"))
 }
 
-fn warn_if_todo_md_has_conflict_markers(todo_path: &Path) {
-    if let Ok(content) = std::fs::read_to_string(todo_path) {
-        if content.lines().any(|l| l.starts_with("<<<<<<<")) {
-            eprintln!("rusty-todo-md: detected conflict markers in TODO.md.");
-            eprintln!("  - To rebuild TODO.md from source now: rusty-todo-md --regenerate");
-            eprintln!("  - To eliminate this conflict shape in future rebases: rusty-todo-md --install-merge-driver");
-        }
-    }
-}
-
-/// Re-scan the current index and rewrite TODO.md from scratch.
-///
-/// Shared by the `--regenerate` user command and the `--merge-driver` git
-/// entry point. Bypasses `sync_todo_file`'s read-merge-write step on
-/// purpose: writing from scratch is what wipes prior conflict markers.
+/// Re-scan the current index and rewrite TODO.md from scratch. Bypasses
+/// `sync_todo_file`'s read-merge-write step on purpose: writing from scratch
+/// is what wipes prior conflict markers.
 fn regenerate_todo_md(
     args: &ParsedArgs,
     repo: &Repository,
     git_ops: &dyn GitOpsTrait,
-    output_path: &Path,
-    validate_empty: bool,
 ) -> Result<(), String> {
     let all_files = git_ops
         .get_tracked_files(repo)
         .map_err(|e| format!("failed to enumerate tracked files: {e}"))?;
     let filtered = filter_excluded_files(all_files, &args.exclusion_rules);
     let todos = extract_todos_from_files(&filtered, &args.marker_config);
-    if validate_empty {
-        validate_no_empty_todos(&todos)?;
-    }
-    todo_md::write_todo_file(output_path, todos)
-        .map_err(|e| format!("failed to write {}: {e}", output_path.display()))?;
+    validate_no_empty_todos(&todos)?;
+    todo_md::write_todo_file(&args.todo_path, todos)
+        .map_err(|e| format!("failed to write {}: {e}", args.todo_path.display()))?;
     Ok(())
 }
 
@@ -460,31 +337,9 @@ fn build_cli() -> Command {
                 .global(true),
         )
         .arg(
-            Arg::new("auto_install_merge_driver")
-                .long("auto-install-merge-driver")
-                .help("Opt-in: on first run per clone, register the TODO.md merge driver in .git/config and append a line to .gitattributes. Prints a loud summary of what changed. Intended for repo maintainers to put in pre-commit args.")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
             Arg::new("regenerate")
                 .long("regenerate")
                 .help("Re-scan all tracked files and rewrite TODO.md from scratch. Wipes any existing content (including conflict markers).")
-                .action(ArgAction::SetTrue)
-                .conflicts_with_all(["install_merge_driver", "merge_driver"]),
-        )
-        .arg(
-            Arg::new("install_merge_driver")
-                .long("install-merge-driver")
-                .help("Register the TODO.md merge driver in .git/config and append a line to .gitattributes.")
-                .action(ArgAction::SetTrue)
-                .conflicts_with_all(["regenerate", "merge_driver"]),
-        )
-        .arg(
-            Arg::new("merge_driver")
-                .long("merge-driver")
-                .value_names(["BASE", "OURS", "THEIRS"])
-                .num_args(3)
-                .help("Git merge-driver entry point. Invoked by git as `--merge-driver %O %A %B`; regenerates TODO.md from working-tree source and writes it to OURS.")
-                .conflicts_with_all(["regenerate", "install_merge_driver"]),
+                .action(ArgAction::SetTrue),
         )
 }

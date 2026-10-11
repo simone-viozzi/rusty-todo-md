@@ -4,7 +4,6 @@ pub mod cli;
 pub mod exclusion;
 pub mod git_utils;
 pub mod logger;
-pub mod merge_driver;
 pub mod todo_md;
 pub mod todo_md_internal;
 

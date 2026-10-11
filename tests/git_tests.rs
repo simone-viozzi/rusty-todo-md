@@ -50,8 +50,9 @@ fn test_get_tracked_files() {
 
 /// During an unresolved merge, the index holds the same path at multiple
 /// stages (1 = ancestor, 2 = ours, 3 = theirs). We must return each path
-/// exactly once — otherwise the merge driver re-scans the same source file
-/// up to three times and emits duplicate warnings.
+/// exactly once — otherwise a full rescan (e.g. `--regenerate` mid-merge)
+/// scans the same source file up to three times and emits duplicate
+/// warnings.
 #[test]
 fn test_get_tracked_files_deduplicates_conflict_stages() {
     init_logger();
@@ -92,8 +93,8 @@ fn test_get_tracked_files_deduplicates_conflict_stages() {
 }
 
 /// `get_tracked_files` must reflect the current index, not the HEAD tree:
-/// during a rebase/merge-driver invocation files added in the replayed commit
-/// are in the index but not yet in HEAD.
+/// during a pre-commit run, files added in the commit being made are in the
+/// index but not yet in HEAD.
 #[test]
 fn test_get_tracked_files_includes_staged_but_uncommitted() {
     init_logger();

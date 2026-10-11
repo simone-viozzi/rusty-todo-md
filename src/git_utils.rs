@@ -63,11 +63,10 @@ impl GitOpsTrait for GitOps {
     /// current index. Equivalent to `git ls-files`.
     ///
     /// We deliberately read the index rather than walking the HEAD tree:
-    /// during `git rebase` (and during a partial-commit pre-commit run) the
-    /// index reflects the state being committed, while HEAD still points at
-    /// the previous commit. The merge driver invoked mid-rebase needs the
-    /// index view, otherwise files added by the replayed commit are missed
-    /// and their TODOs silently disappear from TODO.md.
+    /// during a pre-commit run the index reflects the state being committed,
+    /// while HEAD still points at the previous commit. A full rescan from
+    /// HEAD would miss files added in this commit, and their TODOs would
+    /// silently disappear from TODO.md.
     ///
     /// During an unresolved merge, the index can hold multiple entries for
     /// the same path — one per conflict stage (1 = ancestor, 2 = ours,
