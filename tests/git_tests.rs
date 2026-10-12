@@ -2,8 +2,6 @@ use log::info;
 use log::LevelFilter;
 use rusty_todo_md::git_utils::{GitOps, GitOpsTrait};
 use rusty_todo_md::logger;
-use std::fs::File;
-use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Once;
@@ -113,27 +111,4 @@ fn test_get_tracked_files_includes_staged_but_uncommitted() {
         tracked.contains(&PathBuf::from("freshly_staged.rs")),
         "expected staged-but-uncommitted file in tracked list, got: {tracked:?}"
     );
-}
-
-#[test]
-fn test_get_staged_files() {
-    init_logger();
-    info!("Starting test_get_staged_files");
-    let (temp_dir, repo) = init_repo().unwrap();
-
-    // Modify the file to simulate staged changes.
-    let file_path = temp_dir.path().join("test.txt");
-    {
-        let mut file = File::create(&file_path).unwrap();
-        writeln!(file, "modified content").unwrap();
-    }
-
-    // Stage the modified file.
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new("test.txt")).unwrap();
-    index.write().unwrap();
-
-    let staged = GitOps.get_staged_files(&repo).unwrap();
-    assert!(staged.contains(&PathBuf::from("test.txt")));
-    info!("Completed test_get_staged_files");
 }

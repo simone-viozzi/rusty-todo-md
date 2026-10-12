@@ -1,11 +1,10 @@
-use git2::{DiffOptions, Error as GitError, Repository};
+use git2::{Error as GitError, Repository};
 use log::{debug, info};
 use std::path::{Path, PathBuf};
 
 /// Trait that abstracts the Git operations.
 pub trait GitOpsTrait {
     fn open_repository(&self, repo_path: &Path) -> Result<Repository, GitError>;
-    fn get_staged_files(&self, repo: &Repository) -> Result<Vec<PathBuf>, GitError>;
     fn get_tracked_files(&self, repo: &Repository) -> Result<Vec<PathBuf>, GitError>;
     fn add_file_to_index(&self, repo: &Repository, file_path: &Path) -> Result<(), GitError>;
 }
@@ -21,42 +20,6 @@ impl GitOpsTrait for GitOps {
         let repo = Repository::open(repo_path)?;
         info!("Successfully opened repository at path: {repo_path:?}",);
         Ok(repo)
-    }
-
-    /// Retrieves the list of staged files that contain meaningful content changes.
-    /// Uses DiffOptions to optimize for the intended use case, ignoring irrelevant changes.
-    fn get_staged_files(&self, repo: &Repository) -> Result<Vec<PathBuf>, GitError> {
-        debug!("Retrieving staged files with meaningful content changes");
-        let mut diff_opts = DiffOptions::new();
-        diff_opts
-            .ignore_whitespace(true)
-            .ignore_whitespace_change(true)
-            .ignore_whitespace_eol(true)
-            .include_untracked(false)
-            .force_text(true)
-            .skip_binary_check(true);
-
-        let head_tree = repo.head()?.peel_to_tree()?;
-        let diff = repo.diff_tree_to_index(Some(&head_tree), None, Some(&mut diff_opts))?;
-
-        let mut staged_files = Vec::new();
-        diff.foreach(
-            &mut |delta, _| {
-                if let Some(path) = delta.new_file().path() {
-                    debug!("Staged file added/modified: {path:?}",);
-                    staged_files.push(path.to_path_buf());
-                }
-                true
-            },
-            None,
-            None,
-            None,
-        )?;
-        info!(
-            "Found {staged_files_len} staged files",
-            staged_files_len = staged_files.len()
-        );
-        Ok(staged_files)
     }
 
     /// Retrieves all files git considers tracked **right now** — i.e. the

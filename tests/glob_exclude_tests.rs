@@ -68,8 +68,7 @@ mod glob_exclude_tests {
         ];
 
         let (temp_dir_git, repo) = init_repo().expect("Failed to init repo");
-        let staged_files = vec![file1, file2, file3, file4.clone()];
-        let fake_git_ops = FakeGitOps::new(repo, temp_dir_git, staged_files, vec![]);
+        let fake_git_ops = FakeGitOps::new(repo, temp_dir_git, vec![]);
 
         run_cli_with_args(args, &fake_git_ops);
 
@@ -125,8 +124,7 @@ mod glob_exclude_tests {
         ];
 
         let (temp_dir_git, repo) = init_repo().expect("Failed to init repo");
-        let staged_files = vec![file1, file2, file3.clone(), file4.clone()];
-        let fake_git_ops = FakeGitOps::new(repo, temp_dir_git, staged_files, vec![]);
+        let fake_git_ops = FakeGitOps::new(repo, temp_dir_git, vec![]);
 
         run_cli_with_args(args, &fake_git_ops);
 
