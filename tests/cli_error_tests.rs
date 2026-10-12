@@ -144,7 +144,7 @@ Just plain text that should trigger validation failure
     fs::write(&todo_path, corrupted_content).expect("failed to write corrupted TODO.md");
     debug!("Created corrupted TODO.md at: {:?}", todo_path);
 
-    // Stage and commit the test file so it appears in tracked files for the fallback
+    // Stage and commit the test file, as it would be in a real repository.
     // Use git2 library directly like other tests to avoid CI/CD environment issues
     let mut index = repo.index().expect("Failed to get index");
     index
@@ -186,7 +186,7 @@ Just plain text that should trigger validation failure
     let final_content = fs::read_to_string(&todo_path).expect("failed to read final TODO.md");
     debug!("Final TODO.md content: {}", final_content);
 
-    // Verify the fallback worked by checking for expected TODO items
+    // Verify the TODO.md was rebuilt from the passed file
     assert!(
         final_content.contains("implement feature A"),
         "Should contain TODO from test file"

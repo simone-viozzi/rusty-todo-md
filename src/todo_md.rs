@@ -15,11 +15,8 @@ const TITLE: &str = "# TODOs";
 /// every entry line and ignores everything else, so conflict markers,
 /// `merge=union` leftovers (old and new line numbers side by side),
 /// duplicates, hand edits and older layouts all still yield the right
-/// files. A missing or unreadable TODO.md lists nothing.
-pub fn listed_files(todo_path: &Path) -> BTreeSet<PathBuf> {
-    let Ok(content) = fs::read_to_string(todo_path) else {
-        return BTreeSet::new();
-    };
+/// files.
+pub fn listed_files(content: &str) -> BTreeSet<PathBuf> {
     let entry_re = Regex::new(r"^\* \[(.+):\d+\]\(").unwrap();
     content
         .lines()
@@ -100,10 +97,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn listed(content: &str) -> Vec<String> {
-        let temp_dir = tempdir().unwrap();
-        let todo_path = temp_dir.path().join("TODO.md");
-        fs::write(&todo_path, content).unwrap();
-        listed_files(&todo_path)
+        listed_files(content)
             .into_iter()
             .map(|p| p.display().to_string())
             .collect()
@@ -130,13 +124,6 @@ mod tests {
 
         let union = "# TODOs\n\n## TODO\n### a.rs\n* [a.rs:10](a.rs#L10): alpha\n* [a.rs:11](a.rs#L11): alpha\nremember to ask Bob\n";
         assert_eq!(listed(union), ["a.rs"]);
-    }
-
-    #[test]
-    fn test_listed_files_of_missing_file_is_empty() {
-        init_logger();
-        let temp_dir = tempdir().unwrap();
-        assert!(listed_files(&temp_dir.path().join("TODO.md")).is_empty());
     }
 
     #[test]

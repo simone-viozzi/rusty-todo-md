@@ -1,13 +1,14 @@
 use crate::exclusion::{build_exclusion_matcher, filter_excluded_files, ExclusionRule};
 use crate::git_utils::GitOps;
 use crate::git_utils::GitOpsTrait;
+use crate::todo_extractor_internal::aggregator::content_has_conflict_markers;
 use crate::todo_md;
 use crate::{extract_marked_items_from_file, MarkedItem, MarkerConfig};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use git2::Repository;
 use log::{error, info};
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 // ---------------------------------------------------------------------------
 // Public entry points
@@ -136,8 +137,9 @@ fn dispatch(args: &ParsedArgs, git_ops: &dyn GitOpsTrait) -> Result<(), String> 
 mod mode {
     use super::*;
 
-    /// Default mode: process the files pre-commit passed us, merge into the
-    /// existing TODO.md, and optionally auto-add it back to the index.
+    /// Default mode: rebuild TODO.md from the files pre-commit passed us
+    /// plus the files it already lists, and optionally auto-add it back to
+    /// the index.
     pub(super) fn scan(
         args: &ParsedArgs,
         repo: Repository,
@@ -212,7 +214,7 @@ fn process_files(
     let todo_content_before = std::fs::read_to_string(&args.todo_path).ok();
     if todo_content_before
         .as_deref()
-        .is_some_and(|content| content.lines().any(|l| l.starts_with("<<<<<<<")))
+        .is_some_and(content_has_conflict_markers)
     {
         print_merge_union_hint(&args.todo_path, &repo);
     }
@@ -237,7 +239,7 @@ fn process_files(
         .into_iter()
         .collect();
     let passed: BTreeSet<PathBuf> = passed.into_iter().collect();
-    let listed: Vec<PathBuf> = todo_md::listed_files(&args.todo_path)
+    let listed: Vec<PathBuf> = todo_md::listed_files(todo_content_before.as_deref().unwrap_or(""))
         .into_iter()
         .map(normalize)
         .filter(|file| tracked.contains(file) && file.exists() && !passed.contains(file))
@@ -271,7 +273,9 @@ fn print_merge_union_hint(todo_path: &Path, repo: &Repository) {
                     .chars()
                     .any(|c| c.is_whitespace() || matches!(c, '*' | '?' | '[' | '\\' | '"' | '#')) =>
         {
-            eprintln!("hint: add \"{p} merge=union\" to .gitattributes to avoid conflicts in it");
+            // Leading `/` anchors the pattern; without it the rule would
+            // also apply to every same-named file in any subdirectory.
+            eprintln!("hint: add \"/{p} merge=union\" to .gitattributes to avoid conflicts in it");
         }
         _ => eprintln!(
             "hint: add a \"merge=union\" rule for {} to .gitattributes to avoid conflicts in it (see the README)",
@@ -288,7 +292,19 @@ fn repo_relative(path: &Path, repo: &Repository) -> Option<PathBuf> {
     } else {
         workdir.join(path)
     };
-    absolute.strip_prefix(workdir).ok().map(Path::to_path_buf)
+    let relative = absolute
+        .strip_prefix(workdir)
+        .ok()
+        .map(Path::to_path_buf)
+        .or_else(|| {
+            // libgit2 resolves symlinks in the workdir, so a path typed
+            // through a symlink only matches once it's resolved too.
+            let resolved = absolute.canonicalize().ok()?;
+            let workdir = workdir.canonicalize().ok()?;
+            resolved.strip_prefix(workdir).ok().map(Path::to_path_buf)
+        })?;
+    // `workdir/../x` still starts with `workdir`; it isn't inside it.
+    (!relative.components().any(|c| c == Component::ParentDir)).then_some(relative)
 }
 
 fn maybe_stage_todo_file(

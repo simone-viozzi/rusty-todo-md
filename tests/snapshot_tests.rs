@@ -652,12 +652,17 @@ fn migrate_pre_194_layout() {
 #[test]
 fn todo_md_with_conflict_markers_is_rebuilt() {
     // A committed TODO.md left with `<<<<<<<` markers by a merge or rebase
-    // fails validation, so the default scan rebuilds it from every tracked
-    // file instead of merging into it.
+    // is never merged into: the scan rebuilds it from the passed files plus
+    // the files it lists (none here, the markers hold no entries).
     let out = Scenario::new("todo_md_with_conflict_markers_is_rebuilt")
         .args(["--"])
         .run();
     insta::assert_snapshot!(out.todo_md);
+    // ...and suggests the anchored `merge=union` rule.
+    insta::with_settings!({snapshot_suffix => "stderr"}, {
+        let stderr = scrub_stderr(&out.stderr);
+        insta::assert_snapshot!(stderr);
+    });
 }
 
 #[test]

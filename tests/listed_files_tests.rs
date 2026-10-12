@@ -172,6 +172,27 @@ fn absolute_paths_are_recorded_relative_and_kept() {
     assert!(todo.contains("* [b.rs:1](b.rs#L1): beta"), "{todo}");
 }
 
+/// An absolute path typed through a symlink to the repository is recorded
+/// repository-relative too (libgit2 reports the resolved workdir).
+#[cfg(unix)]
+#[test]
+fn absolute_paths_through_a_symlink_are_recorded_relative() {
+    let parent = tempdir().unwrap();
+    let real = parent.path().join("real");
+    fs::create_dir(&real).unwrap();
+    git(&real, &["init", "-q", "-b", "main"]);
+    fs::write(real.join("a.rs"), "// TODO: alpha\n").unwrap();
+    git(&real, &["add", "a.rs"]);
+    git(&real, &["commit", "-q", "-m", "src"]);
+    let link = parent.path().join("link");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+
+    hook(&link, &[link.join("a.rs").to_str().unwrap()]);
+
+    let todo = fs::read_to_string(real.join("TODO.md")).unwrap();
+    assert!(todo.contains("* [a.rs:1](a.rs#L1): alpha"), "{todo}");
+}
+
 /// A crafted TODO.md must not make the hook read files outside what git
 /// tracks: not a path outside the repository, and not an untracked file
 /// inside it. Otherwise their TODO lines would be copied into TODO.md.

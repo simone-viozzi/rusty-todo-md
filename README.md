@@ -209,14 +209,16 @@ Each `TODO.md` bullet embeds the line number twice — once in the label and onc
 Commit this to your repository. If you use `--todo-path`, write that path instead of `TODO.md`, relative to the repository root (`.gitattributes` patterns are repository-relative); a path containing spaces or `*`, `?`, `[`, `#`, `"`, `\`, or starting with `!`, needs [gitattributes quoting/escaping](https://git-scm.com/docs/gitattributes):
 
 ```
-TODO.md merge=union
+/TODO.md merge=union
 ```
+
+(The leading `/` anchors the rule to the root `TODO.md`; without it, it would also apply to any other file named `TODO.md` in a subdirectory.)
 
 `union` is built into git, so there is nothing to install or configure per clone. Git then merges `TODO.md` by keeping the lines from both sides instead of stopping with a conflict, so rebases and merges never stop on `TODO.md`.
 
 The merged `TODO.md` is temporarily wrong (old and new line numbers side by side, out of order), and that's expected. Each hook run rebuilds `TODO.md` from the files being committed **plus every file `TODO.md` already lists**, so the next normal commit replaces whatever the merge left, whatever files it touches. Commits replayed during the rebase keep the approximate `TODO.md`, because git doesn't run hooks during a rebase.
 
-Without the `.gitattributes` line, resolve a `TODO.md` conflict any way you like (even leaving the markers); the next hook run rebuilds it the same way, and prints a hint with the exact `merge=union` line for your path (or points here when the path needs escaping). To rebuild it right away:
+Without the `.gitattributes` line, resolve a `TODO.md` conflict by keeping both sides (leaving the conflict markers in is fine too); the next hook run rebuilds it the same way, and prints a hint with the exact `merge=union` line for your path (or points here when the path needs escaping). Don't resolve it by taking only one side (e.g. `git checkout --ours TODO.md`): the files listed only on the other side would no longer be listed, so their TODOs would not come back until those files change or you run `--regenerate`. To rebuild it right away:
 
 ```sh
 rusty-todo-md --regenerate

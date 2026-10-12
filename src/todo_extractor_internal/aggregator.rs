@@ -330,9 +330,9 @@ fn content_may_contain_marker(content: &str, markers: &[String]) -> bool {
 ///
 /// Pre-commit doesn't run during `git rebase` / `git rebase --continue`, so
 /// this check is **not** for the normal pre-commit invocation. It is for
-/// full rescans (`--regenerate`, or rebuilding a TODO.md that isn't in
-/// canonical form) run while some source file still holds unresolved
-/// conflict markers from a merge or rebase.
+/// rescans (`--regenerate`, or a hook run that rescans the files TODO.md
+/// lists) while some source file still holds unresolved conflict markers
+/// from a merge or rebase. The CLI also uses it to spot a conflicted TODO.md.
 ///
 /// Without this check, the parser would treat the conflict-marker block as
 /// regular content and emit garbled TODOs. Conservative match: only
