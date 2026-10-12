@@ -337,7 +337,7 @@ fn maybe_stage_todo_file(
 
 fn build_cli() -> Command {
     Command::new("rusty-todo-md")
-        .version("0.1.5")
+        .version(env!("CARGO_PKG_VERSION"))
         .author("Simone Viozzi simoneviozzi97@gmail.com")
         .about("Automatically scans files for TODO comments and updates TODO.md. Use '--' to separate markers from files when markers is the last option.")
         .arg(

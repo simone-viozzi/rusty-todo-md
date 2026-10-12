@@ -22,7 +22,7 @@ Add this to your `.pre-commit-config.yaml`:
 ```yaml
 repos:
   - repo: https://github.com/simone-viozzi/rusty-todo-md-pre-commit
-    rev: v1.9.1  # Use the latest upstream tag (shim mirrors upstream)
+    rev: v1.11.0  # Use the latest upstream tag (shim mirrors upstream)
     hooks:
       - id: rusty-todo-md
         args: ["--auto-add", "--markers", "TODO", "FIXME", "HACK", "--"]
@@ -37,7 +37,7 @@ repos:
 ```yaml
 repos:
   - repo: https://github.com/simone-viozzi/rusty-todo-md-pre-commit
-    rev: v1.9.1
+    rev: v1.11.0
     hooks:
       - id: rusty-todo-md
         args:
@@ -306,17 +306,21 @@ Prebuilt wheels are published for:
 
 ## 👩‍💻 Development
 
-If you want to run Rusty TODO.md directly from the main repo via pre-commit (building from source):
+To try an unreleased build in another repository, build it (`cargo build --release`) and point a local hook at the binary:
 
 ```yaml
 repos:
-  - repo: https://github.com/simone-viozzi/rusty-todo-md
-    rev: v1.7.5
+  - repo: local
     hooks:
       - id: rusty-todo-md
+        name: rusty-todo-md (local build)
+        entry: /path/to/rusty-todo-md/target/release/rusty-todo-md
+        language: system
+        types: [text]
+        require_serial: true
 ```
 
-> ⚠️ This will compile the Rust source and requires a working Rust toolchain.
+> ⚠️ The hook definition published for users lives in the [shim repository](https://github.com/simone-viozzi/rusty-todo-md-pre-commit); this repository has no `.pre-commit-hooks.yaml`, so it can't be used as a pre-commit `repo:` directly.
 
 ---
 

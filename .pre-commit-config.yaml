@@ -20,7 +20,7 @@ repos:
         pass_filenames: false
         types: [rust]
   - repo: https://github.com/simone-viozzi/rusty-todo-md-pre-commit.git
-    rev: v1.9.1
+    rev: v1.11.0
     hooks:
       - id: rusty-todo-md
         # Snapshot-test fixtures intentionally contain TODO/FIXME/HACK
