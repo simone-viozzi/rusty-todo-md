@@ -94,8 +94,8 @@ rusty-todo-md --help
    Handles multi-line and indented TODO comments, merging them into a single entry.
 
 4. **Sync Mechanism**
-   - Automatically merges new TODO entries with existing ones, using an internal representation.
-   - Removes entries when their corresponding TODOs are no longer present in the source code.
+   - Each run rescans the files being committed plus every file `TODO.md` already lists, and rewrites `TODO.md` from that scan.
+   - Removes entries when their corresponding TODOs (or files) are no longer present in the source code.
 
 5. **Language-Aware Parsing**
    Supports precise parsing for **Python**, **Rust**, **JavaScript**, and **Go** out-of-the-box, with plans for additional languages such as TypeScript, PHP, and Java.
@@ -206,7 +206,7 @@ Each `TODO.md` bullet embeds the line number twice — once in the label and onc
 
 ### Fix: one line in `.gitattributes`
 
-Commit this to your repository:
+Commit this to your repository (if you use `--todo-path`, put that path instead of `TODO.md`):
 
 ```
 TODO.md merge=union
@@ -214,9 +214,9 @@ TODO.md merge=union
 
 `union` is built into git, so there is nothing to install or configure per clone. Git then merges `TODO.md` by keeping the lines from both sides instead of stopping with a conflict, so rebases and merges never stop on `TODO.md`.
 
-The merged `TODO.md` is temporarily wrong (old and new line numbers side by side, out of order), and that's expected. Whenever the hook reads a `TODO.md` that isn't exactly what it would write itself (merge leftovers, conflict markers, hand edits), it rebuilds it from all tracked files. So the next normal commit fixes it, whatever files it touches. Commits replayed during the rebase keep the approximate `TODO.md`, because git doesn't run hooks during a rebase.
+The merged `TODO.md` is temporarily wrong (old and new line numbers side by side, out of order), and that's expected. Each hook run rebuilds `TODO.md` from the files being committed **plus every file `TODO.md` already lists**, so the next normal commit replaces whatever the merge left, whatever files it touches. Commits replayed during the rebase keep the approximate `TODO.md`, because git doesn't run hooks during a rebase.
 
-Without the `.gitattributes` line, resolve a `TODO.md` conflict any way you like; the next hook run rebuilds it the same way. To rebuild it right away:
+Without the `.gitattributes` line, resolve a `TODO.md` conflict any way you like (even leaving the markers); the next hook run rebuilds it the same way, and prints a hint about `merge=union`. To rebuild it right away:
 
 ```sh
 rusty-todo-md --regenerate

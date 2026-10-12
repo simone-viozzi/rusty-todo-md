@@ -638,12 +638,12 @@ fn second_run_file_deleted() {
 
 #[test]
 fn migrate_pre_194_layout() {
-    // A TODO.md in the pre-#194 layout (marker as H1, file as H2) fails
-    // validation, so the binary rebuilds it from every tracked file. Only
-    // `a.rs` is passed, yet `b.rs` (absent from the old TODO.md, e.g. lost to
-    // the pre-commit parallel-batch race) must appear in the rebuilt file.
+    // A TODO.md in the pre-#194 layout (marker as H1, file as H2) still
+    // names its files in its entry lines. Only `b.rs` is passed, yet `a.rs`
+    // (listed in the old TODO.md) is rescanned and both come out in the
+    // current layout.
     let out = Scenario::new("migrate_pre_194_layout")
-        .args(["--markers", "TODO", "--", "a.rs"])
+        .args(["--markers", "TODO", "--", "b.rs"])
         .no_file_args()
         .run();
     insta::assert_snapshot!(out.todo_md);

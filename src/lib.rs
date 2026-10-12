@@ -5,7 +5,6 @@ pub mod exclusion;
 pub mod git_utils;
 pub mod logger;
 pub mod todo_md;
-pub mod todo_md_internal;
 
 // Private implementation modules
 mod todo_extractor_internal;

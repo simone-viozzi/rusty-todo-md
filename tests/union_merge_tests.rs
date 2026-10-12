@@ -99,3 +99,51 @@ fn union_rebase_never_stops_and_next_run_rebuilds_todo_md() {
     assert_eq!(rebuilt, canonical);
     assert!(canonical.contains("added-by-feat"), "{canonical}");
 }
+
+/// Union can also produce output that is already sorted: if one side moves
+/// a TODO from line 10 to 11 and the other to 12, union keeps the line-11
+/// entry followed by the line-12 one. Nothing about the entries themselves
+/// looks wrong; the rebuild must still happen.
+#[test]
+fn union_leftovers_in_sorted_order_are_rebuilt() {
+    let dir = tempdir().unwrap();
+    let repo = dir.path();
+    git(repo, &["init", "-q", "-b", "main"]);
+    fs::write(repo.join(".gitattributes"), "TODO.md merge=union\n").unwrap();
+    let head: String = (1..=4).map(|i| format!("fn h{i}() {{}}\n")).collect();
+    let mid: String = (1..=4).map(|i| format!("fn m{i}() {{}}\n")).collect();
+    fs::write(repo.join("a.rs"), format!("{head}{mid}// TODO: alpha\n")).unwrap();
+    fs::write(repo.join("b.rs"), "fn b() {}\n").unwrap();
+    commit(repo, &["a.rs", "b.rs"], "base");
+
+    // Non-overlapping source edits that both move `alpha` down: one line at
+    // the top on `onto`, two lines in the middle on `feat`.
+    git(repo, &["checkout", "-q", "-b", "onto"]);
+    fs::write(
+        repo.join("a.rs"),
+        format!("// top\n{head}{mid}// TODO: alpha\n"),
+    )
+    .unwrap();
+    commit(repo, &["a.rs"], "onto: +1 line");
+
+    git(repo, &["checkout", "-q", "main"]);
+    git(repo, &["checkout", "-q", "-b", "feat"]);
+    fs::write(
+        repo.join("a.rs"),
+        format!("{head}// mid-1\n// mid-2\n{mid}// TODO: alpha\n"),
+    )
+    .unwrap();
+    commit(repo, &["a.rs"], "feat: +2 lines");
+
+    git(repo, &["rebase", "onto"]);
+    fs::write(repo.join("b.rs"), "fn b() {}\nfn c() {}\n").unwrap();
+    hook(repo, &["b.rs"]);
+    let rebuilt = fs::read_to_string(repo.join("TODO.md")).unwrap();
+
+    assert_eq!(
+        rebuilt.matches("alpha").count(),
+        1,
+        "stale union entries survived:\n{rebuilt}"
+    );
+    assert!(rebuilt.contains("[a.rs:12](a.rs#L12): alpha"), "{rebuilt}");
+}

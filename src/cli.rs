@@ -6,6 +6,7 @@ use crate::{extract_marked_items_from_file, MarkedItem, MarkerConfig};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use git2::Repository;
 use log::{error, info};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 // ---------------------------------------------------------------------------
@@ -181,9 +182,7 @@ fn ensure_todo_path_exists(todo_path: &Path) -> Result<(), String> {
     std::fs::write(todo_path, "").map_err(|e| format!("Error creating TODO.md: {e}"))
 }
 
-/// Re-scan the current index and rewrite TODO.md from scratch. Bypasses
-/// `sync_todo_file`'s read-merge-write step on purpose: writing from scratch
-/// is what wipes prior conflict markers.
+/// Re-scan the current index and rewrite TODO.md from scratch.
 fn regenerate_todo_md(
     args: &ParsedArgs,
     repo: &Repository,
@@ -200,51 +199,52 @@ fn regenerate_todo_md(
     Ok(())
 }
 
+/// Rebuild TODO.md from the files pre-commit passed plus every file TODO.md
+/// already lists. Nothing is merged from the old TODO.md, so whatever a
+/// merge, rebase or hand edit left in it (conflict markers, `merge=union`
+/// leftovers, stale line numbers) is replaced by a fresh scan of the files
+/// it names. Files that were deleted or are now excluded drop out.
 fn process_files(
     args: &ParsedArgs,
     repo: Repository,
     git_ops: &dyn GitOpsTrait,
 ) -> Result<(), String> {
-    let filtered_files = filter_excluded_files(args.files.clone(), &args.exclusion_rules);
-    let new_todos = extract_todos_from_files(&filtered_files, &args.marker_config);
     let todo_content_before = std::fs::read_to_string(&args.todo_path).ok();
-
-    validate_no_empty_todos(&new_todos)?;
-
-    if let Err(err) = todo_md::sync_todo_file(&args.todo_path, new_todos, filtered_files) {
+    if todo_content_before
+        .as_deref()
+        .is_some_and(|content| content.lines().any(|l| l.starts_with("<<<<<<<")))
+    {
         eprintln!(
-            "rusty-todo-md: rebuilding {} from all tracked files: {err}",
+            "hint: add \"{} merge=union\" to .gitattributes to avoid conflicts in it",
             args.todo_path.display()
         );
-        sync_fallback_full_rescan(args, &repo, git_ops);
     }
+
+    let passed = filter_excluded_files(args.files.clone(), &args.exclusion_rules);
+    let passed_todos = extract_todos_from_files(&passed, &args.marker_config);
+    // Only the files being committed must be free of empty TODOs; one that
+    // slipped in elsewhere (e.g. via --no-verify) shouldn't block this commit.
+    validate_no_empty_todos(&passed_todos)?;
+
+    let passed: BTreeSet<PathBuf> = passed.into_iter().collect();
+    let listed: Vec<PathBuf> = todo_md::listed_files(&args.todo_path)
+        .into_iter()
+        .filter(|file| file.exists() && !passed.contains(file))
+        .collect();
+    let mut todos = passed_todos;
+    todos.extend(extract_todos_from_files(
+        &filter_excluded_files(listed, &args.exclusion_rules),
+        &args.marker_config,
+    ));
+
+    todo_md::write_todo_file(&args.todo_path, todos)
+        .map_err(|e| format!("Error updating TODO.md: {e}"))?;
     info!("TODO.md successfully updated.");
 
     if args.auto_add {
         maybe_stage_todo_file(&args.todo_path, &repo, git_ops, &todo_content_before)?;
     }
     Ok(())
-}
-
-/// Last-resort recovery when `sync_todo_file` can't parse the existing
-/// TODO.md: rescan everything tracked and overwrite from scratch. Exit
-/// (rather than return Err) because at this point the TODO.md is already
-/// broken and propagating the error would leave the user with two failures
-/// to read.
-fn sync_fallback_full_rescan(args: &ParsedArgs, repo: &Repository, git_ops: &dyn GitOpsTrait) {
-    let all_files = match git_ops.get_tracked_files(repo) {
-        Ok(files) => files,
-        Err(e) => {
-            error!("Error retrieving tracked files: {e}");
-            std::process::exit(1);
-        }
-    };
-    let filtered = filter_excluded_files(all_files, &args.exclusion_rules);
-    let todos = extract_todos_from_files(&filtered, &args.marker_config);
-    if let Err(err) = todo_md::write_todo_file(&args.todo_path, todos) {
-        error!("Error updating TODO.md: {err}");
-        std::process::exit(1);
-    }
 }
 
 fn maybe_stage_todo_file(
