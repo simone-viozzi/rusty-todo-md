@@ -76,7 +76,6 @@ pub fn init_repo() -> Result<(TempDir, Repository), GitError> {
 pub struct FakeGitOps {
     pub _dummy_repo: Repository,
     pub temp_dir: tempfile::TempDir,
-    pub staged_files: Vec<std::path::PathBuf>,
     pub tracked_files: Vec<std::path::PathBuf>,
 }
 
@@ -85,13 +84,11 @@ impl FakeGitOps {
     pub fn new(
         _dummy_repo: Repository,
         temp_dir: tempfile::TempDir,
-        staged_files: Vec<std::path::PathBuf>,
         tracked_files: Vec<std::path::PathBuf>,
     ) -> Self {
         FakeGitOps {
             _dummy_repo,
             temp_dir,
-            staged_files,
             tracked_files,
         }
     }
@@ -100,9 +97,6 @@ impl FakeGitOps {
 impl rusty_todo_md::git_utils::GitOpsTrait for FakeGitOps {
     fn open_repository(&self, _repo_path: &std::path::Path) -> Result<Repository, GitError> {
         Repository::open(self.temp_dir.path())
-    }
-    fn get_staged_files(&self, _repo: &Repository) -> Result<Vec<std::path::PathBuf>, GitError> {
-        Ok(self.staged_files.clone())
     }
     fn get_tracked_files(&self, _repo: &Repository) -> Result<Vec<std::path::PathBuf>, GitError> {
         Ok(self.tracked_files.clone())

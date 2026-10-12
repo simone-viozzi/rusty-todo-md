@@ -633,34 +633,32 @@ fn second_run_file_deleted() {
 }
 
 // ---------------------------------------------------------------------------
-// Reason-class 9 (partial): conflict markers in pre-shipped files
-// (auto_install_* merge-driver fixtures are EXCLUDED by design)
+// Reason-class 9: conflict markers in pre-shipped files
 // ---------------------------------------------------------------------------
 
 #[test]
 fn migrate_pre_194_layout() {
-    // A TODO.md in the pre-#194 layout (marker as H1, file as H2) fails
-    // validation, so the binary rebuilds it from every tracked file. Only
-    // `a.rs` is passed, yet `b.rs` (absent from the old TODO.md, e.g. lost to
-    // the pre-commit parallel-batch race) must appear in the rebuilt file.
+    // A TODO.md in the pre-#194 layout (marker as H1, file as H2) still
+    // names its files in its entry lines. Only `b.rs` is passed, yet `a.rs`
+    // (listed in the old TODO.md) is rescanned and both come out in the
+    // current layout.
     let out = Scenario::new("migrate_pre_194_layout")
-        .args(["--markers", "TODO", "--", "a.rs"])
+        .args(["--markers", "TODO", "--", "b.rs"])
         .no_file_args()
         .run();
     insta::assert_snapshot!(out.todo_md);
 }
 
 #[test]
-fn todo_md_conflict_markers_emit_advisory() {
-    // Pre-shipped TODO.md contains literal `<<<<<<<` markers. The default
-    // scan must emit the "detected conflict markers in TODO.md" advisory
-    // on stderr. The binary recovers via the sync-fallback rescan and
-    // exits successfully, so we don't assert a failure code — only that
-    // the advisory text reaches stderr. Mirrors
-    // `merge_driver_tests::regenerate_advisory_printed_when_todo_md_has_conflict_markers`.
-    let out = Scenario::new("todo_md_conflict_markers_emit_advisory")
+fn todo_md_with_conflict_markers_is_rebuilt() {
+    // A committed TODO.md left with `<<<<<<<` markers by a merge or rebase
+    // is never merged into: the scan rebuilds it from the passed files plus
+    // the files it lists (none here, the markers hold no entries).
+    let out = Scenario::new("todo_md_with_conflict_markers_is_rebuilt")
         .args(["--"])
         .run();
+    insta::assert_snapshot!(out.todo_md);
+    // ...and suggests the anchored `merge=union` rule.
     insta::with_settings!({snapshot_suffix => "stderr"}, {
         let stderr = scrub_stderr(&out.stderr);
         insta::assert_snapshot!(stderr);
@@ -670,8 +668,7 @@ fn todo_md_conflict_markers_emit_advisory() {
 #[test]
 fn regenerate_wipes_todo_md_conflict_markers() {
     // `--regenerate` rebuilds TODO.md from scratch from tracked source
-    // files, wiping any prior conflict markers. Mirrors
-    // `merge_driver_tests::regenerate_wipes_conflict_markers`.
+    // files, wiping any prior conflict markers.
     let out = Scenario::new("regenerate_wipes_todo_md_conflict_markers")
         .args(["--regenerate", "--markers", "TODO", "FIXME"])
         .no_file_args()
@@ -682,8 +679,7 @@ fn regenerate_wipes_todo_md_conflict_markers() {
 #[test]
 fn source_file_with_conflict_markers_is_skipped() {
     // A source file containing `<<<<<<<` must be skipped (with a stderr
-    // notice) so its half-merged TODOs don't appear in TODO.md. Mirrors
-    // `merge_driver_tests::source_files_with_conflict_markers_are_skipped`.
+    // notice) so its half-merged TODOs don't appear in TODO.md.
     let out = Scenario::new("source_file_with_conflict_markers_is_skipped")
         .args(["--regenerate", "--markers", "TODO"])
         .no_file_args()

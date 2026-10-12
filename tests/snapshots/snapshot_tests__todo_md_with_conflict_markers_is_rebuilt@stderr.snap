@@ -1,0 +1,5 @@
+---
+source: tests/snapshot_tests.rs
+expression: stderr
+---
+hint: add "/TODO.md merge=union" to .gitattributes to avoid conflicts in it

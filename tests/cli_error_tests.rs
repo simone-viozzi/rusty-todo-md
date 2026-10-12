@@ -115,9 +115,9 @@ fn test_run_cli_with_unreadable_file() {
 // Uses assert_cmd::cargo::cargo_bin_cmd! to locate the test binary in a way
 // that works with custom Cargo build directories. See:
 // https://docs.rs/assert_cmd/latest/assert_cmd/cargo/
-fn test_sync_todo_file_fallback_mechanism() {
+fn test_corrupted_todo_md_is_replaced() {
     init_logger();
-    info!("Starting test: test_sync_todo_file_fallback_mechanism");
+    info!("Starting test: test_corrupted_todo_md_is_replaced");
 
     // Use the common helper to initialize a real repository.
     let (temp_dir, repo) = init_repo().expect("Failed to initialize test repo");
@@ -133,8 +133,8 @@ fn test_sync_todo_file_fallback_mechanism() {
     .expect("failed to write test file");
     debug!("Created test file at: {:?}", test_file);
 
-    // Create a corrupted TODO.md file with invalid format
-    // This will now trigger the sync_todo_file error and activate the fallback mechanism
+    // A corrupted TODO.md names no files; the run replaces it with a fresh
+    // scan of the passed files.
     let todo_path = repo_dir.join("TODO.md");
     let corrupted_content = r#"This is completely invalid content that doesn't match any regex pattern
 And this line will also fail validation
@@ -144,7 +144,7 @@ Just plain text that should trigger validation failure
     fs::write(&todo_path, corrupted_content).expect("failed to write corrupted TODO.md");
     debug!("Created corrupted TODO.md at: {:?}", todo_path);
 
-    // Stage and commit the test file so it appears in tracked files for the fallback
+    // Stage and commit the test file, as it would be in a real repository.
     // Use git2 library directly like other tests to avoid CI/CD environment issues
     let mut index = repo.index().expect("Failed to get index");
     index
@@ -168,26 +168,25 @@ Just plain text that should trigger validation failure
     .expect("Failed to commit");
     debug!("Committed test file with git2");
 
-    // Run the CLI binary - this should trigger the fallback mechanism
+    // Run the CLI binary the way pre-commit does (repo-relative path).
     let mut cmd =
         Command::cargo_bin("rusty-todo-md").expect("failed to locate rusty-todo-md binary");
 
-    debug!("Running CLI binary to test fallback mechanism");
+    debug!("Running CLI binary over a corrupted TODO.md");
     cmd.current_dir(repo_dir)
         .env("RUST_LOG", "debug")
         .arg("--todo-path")
         .arg("TODO.md")
-        .arg(test_file.to_str().expect("test file path valid"));
+        .arg("test.rs");
 
-    // The fallback mechanism should succeed and recreate the TODO.md file properly
-    cmd.assert().success(); // No stderr expected since the fallback succeeds
+    cmd.assert().success();
 
     // Verify that the TODO.md file was recreated with proper content
-    assert!(todo_path.exists(), "TODO.md should exist after fallback");
+    assert!(todo_path.exists(), "TODO.md should exist");
     let final_content = fs::read_to_string(&todo_path).expect("failed to read final TODO.md");
     debug!("Final TODO.md content: {}", final_content);
 
-    // Verify the fallback worked by checking for expected TODO items
+    // Verify the TODO.md was rebuilt from the passed file
     assert!(
         final_content.contains("implement feature A"),
         "Should contain TODO from test file"
@@ -214,5 +213,5 @@ Just plain text that should trigger validation failure
         "Should have file section header"
     );
 
-    info!("Test completed: test_sync_todo_file_fallback_mechanism");
+    info!("Test completed: test_corrupted_todo_md_is_replaced");
 }

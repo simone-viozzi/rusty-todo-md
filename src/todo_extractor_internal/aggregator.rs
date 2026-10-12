@@ -329,14 +329,10 @@ fn content_may_contain_marker(content: &str, markers: &[String]) -> bool {
 /// Detect Git conflict markers in raw file bytes.
 ///
 /// Pre-commit doesn't run during `git rebase` / `git rebase --continue`, so
-/// this check is **not** for the normal pre-commit invocation. It exists for
-/// two specific callers that can encounter half-merged source files:
-///
-/// 1. **The merge driver** (`--merge-driver` flag). Git invokes it for
-///    TODO.md during a rebase/merge while other source files in the working
-///    tree may still contain `<<<<<<<` markers from their own conflicts.
-/// 2. **`--regenerate`** run manually after a rebase that left conflict
-///    markers in some source file.
+/// this check is **not** for the normal pre-commit invocation. It is for
+/// rescans (`--regenerate`, or a hook run that rescans the files TODO.md
+/// lists) while some source file still holds unresolved conflict markers
+/// from a merge or rebase. The CLI also uses it to spot a conflicted TODO.md.
 ///
 /// Without this check, the parser would treat the conflict-marker block as
 /// regular content and emit garbled TODOs. Conservative match: only
