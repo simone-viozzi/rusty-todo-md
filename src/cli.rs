@@ -217,7 +217,12 @@ fn process_files(
         print_merge_union_hint(&args.todo_path, &repo);
     }
 
-    let passed = filter_excluded_files(args.files.clone(), &args.exclusion_rules);
+    // Compare and record every path in its repository-relative form: the
+    // index lists paths that way, and absolute entries in TODO.md would
+    // neither match it nor make working links.
+    let normalize = |path: PathBuf| repo_relative(&path, &repo).unwrap_or(path);
+    let passed: Vec<PathBuf> = args.files.iter().cloned().map(normalize).collect();
+    let passed = filter_excluded_files(passed, &args.exclusion_rules);
     let passed_todos = extract_todos_from_files(&passed, &args.marker_config);
     // Only the files being committed must be free of empty TODOs; one that
     // slipped in elsewhere (e.g. via --no-verify) shouldn't block this commit.
@@ -234,6 +239,7 @@ fn process_files(
     let passed: BTreeSet<PathBuf> = passed.into_iter().collect();
     let listed: Vec<PathBuf> = todo_md::listed_files(&args.todo_path)
         .into_iter()
+        .map(normalize)
         .filter(|file| tracked.contains(file) && file.exists() && !passed.contains(file))
         .collect();
     let mut todos = passed_todos;
@@ -260,9 +266,10 @@ fn print_merge_union_hint(todo_path: &Path, repo: &Repository) {
     let pattern = repo_relative(todo_path, repo).map(|p| p.display().to_string());
     match pattern {
         Some(p)
-            if !p
-                .chars()
-                .any(|c| c.is_whitespace() || matches!(c, '*' | '?' | '[' | '\\' | '"' | '#')) =>
+            if !p.starts_with('!')
+                && !p
+                    .chars()
+                    .any(|c| c.is_whitespace() || matches!(c, '*' | '?' | '[' | '\\' | '"' | '#')) =>
         {
             eprintln!("hint: add \"{p} merge=union\" to .gitattributes to avoid conflicts in it");
         }

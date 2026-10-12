@@ -150,6 +150,28 @@ fn union_leftovers_in_sorted_order_are_rebuilt() {
     assert!(rebuilt.contains("[a.rs:12](a.rs#L12): alpha"), "{rebuilt}");
 }
 
+/// The CLI accepts absolute paths (manual runs). They are recorded
+/// repository-relative, so a later run for another file still finds the
+/// first file in the index and keeps its entries.
+#[test]
+fn absolute_paths_are_recorded_relative_and_kept() {
+    let dir = tempdir().unwrap();
+    let repo = dir.path();
+    git(repo, &["init", "-q", "-b", "main"]);
+    fs::write(repo.join("a.rs"), "// TODO: alpha\n").unwrap();
+    fs::write(repo.join("b.rs"), "// TODO: beta\n").unwrap();
+    git(repo, &["add", "a.rs", "b.rs"]);
+    git(repo, &["commit", "-q", "-m", "src"]);
+
+    let absolute = repo.join("a.rs").canonicalize().unwrap();
+    hook(repo, &[absolute.to_str().unwrap()]);
+    hook(repo, &["b.rs"]);
+
+    let todo = fs::read_to_string(repo.join("TODO.md")).unwrap();
+    assert!(todo.contains("* [a.rs:1](a.rs#L1): alpha"), "{todo}");
+    assert!(todo.contains("* [b.rs:1](b.rs#L1): beta"), "{todo}");
+}
+
 /// A crafted TODO.md must not make the hook read files outside what git
 /// tracks: not a path outside the repository, and not an untracked file
 /// inside it. Otherwise their TODO lines would be copied into TODO.md.

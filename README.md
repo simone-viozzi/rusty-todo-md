@@ -206,7 +206,7 @@ Each `TODO.md` bullet embeds the line number twice — once in the label and onc
 
 ### Fix: one line in `.gitattributes`
 
-Commit this to your repository. If you use `--todo-path`, write that path instead of `TODO.md`, relative to the repository root (`.gitattributes` patterns are repository-relative); a path containing spaces or `*`, `?`, `[`, `#`, `"`, `\` needs [gitattributes quoting/escaping](https://git-scm.com/docs/gitattributes):
+Commit this to your repository. If you use `--todo-path`, write that path instead of `TODO.md`, relative to the repository root (`.gitattributes` patterns are repository-relative); a path containing spaces or `*`, `?`, `[`, `#`, `"`, `\`, or starting with `!`, needs [gitattributes quoting/escaping](https://git-scm.com/docs/gitattributes):
 
 ```
 TODO.md merge=union
