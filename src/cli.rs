@@ -214,10 +214,7 @@ fn process_files(
         .as_deref()
         .is_some_and(|content| content.lines().any(|l| l.starts_with("<<<<<<<")))
     {
-        eprintln!(
-            "hint: add \"{} merge=union\" to .gitattributes to avoid conflicts in it",
-            args.todo_path.display()
-        );
+        print_merge_union_hint(&args.todo_path, &repo);
     }
 
     let passed = filter_excluded_files(args.files.clone(), &args.exclusion_rules);
@@ -226,10 +223,18 @@ fn process_files(
     // slipped in elsewhere (e.g. via --no-verify) shouldn't block this commit.
     validate_no_empty_todos(&passed_todos)?;
 
+    // TODO.md is committed input, so whoever wrote it chooses what we read.
+    // Only rescan files git tracks: anything else (`../outside.rs`, an
+    // untracked `.env`) could leak its TODO lines into TODO.md.
+    let tracked: BTreeSet<PathBuf> = git_ops
+        .get_tracked_files(&repo)
+        .map_err(|e| format!("failed to enumerate tracked files: {e}"))?
+        .into_iter()
+        .collect();
     let passed: BTreeSet<PathBuf> = passed.into_iter().collect();
     let listed: Vec<PathBuf> = todo_md::listed_files(&args.todo_path)
         .into_iter()
-        .filter(|file| file.exists() && !passed.contains(file))
+        .filter(|file| tracked.contains(file) && file.exists() && !passed.contains(file))
         .collect();
     let mut todos = passed_todos;
     todos.extend(extract_todos_from_files(
@@ -247,6 +252,38 @@ fn process_files(
     Ok(())
 }
 
+/// Suggest the `.gitattributes` rule that avoids TODO.md conflicts. The
+/// pattern must be repository-relative; when the path would need
+/// gitattributes quoting or escaping, point at the README instead of
+/// printing a rule that wouldn't match.
+fn print_merge_union_hint(todo_path: &Path, repo: &Repository) {
+    let pattern = repo_relative(todo_path, repo).map(|p| p.display().to_string());
+    match pattern {
+        Some(p)
+            if !p
+                .chars()
+                .any(|c| c.is_whitespace() || matches!(c, '*' | '?' | '[' | '\\' | '"' | '#')) =>
+        {
+            eprintln!("hint: add \"{p} merge=union\" to .gitattributes to avoid conflicts in it");
+        }
+        _ => eprintln!(
+            "hint: add a \"merge=union\" rule for {} to .gitattributes to avoid conflicts in it (see the README)",
+            todo_path.display()
+        ),
+    }
+}
+
+/// `path` relative to the repository root, if it is inside it.
+fn repo_relative(path: &Path, repo: &Repository) -> Option<PathBuf> {
+    let workdir = repo.workdir()?;
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        workdir.join(path)
+    };
+    absolute.strip_prefix(workdir).ok().map(Path::to_path_buf)
+}
+
 fn maybe_stage_todo_file(
     todo_path: &Path,
     repo: &Repository,
@@ -260,19 +297,9 @@ fn maybe_stage_todo_file(
     }
     info!("TODO file was modified, staging it for commit");
 
-    let repo_workdir = repo
-        .workdir()
-        .ok_or("Repository has no working directory")?;
-    let absolute = if todo_path.is_absolute() {
-        todo_path.to_path_buf()
-    } else {
-        repo_workdir.join(todo_path)
-    };
-    let relative = absolute
-        .strip_prefix(repo_workdir)
-        .map_err(|_| "TODO path is not within repository")?;
+    let relative = repo_relative(todo_path, repo).ok_or("TODO path is not within repository")?;
 
-    if let Err(e) = git_ops.add_file_to_index(repo, relative) {
+    if let Err(e) = git_ops.add_file_to_index(repo, &relative) {
         // Warn but don't fail: staging failure shouldn't kill the commit.
         error!("Warning: Failed to add TODO file to git index: {e}");
     } else {

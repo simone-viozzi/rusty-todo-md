@@ -94,7 +94,7 @@ rusty-todo-md --help
    Handles multi-line and indented TODO comments, merging them into a single entry.
 
 4. **Sync Mechanism**
-   - Each run rescans the files being committed plus every file `TODO.md` already lists, and rewrites `TODO.md` from that scan.
+   - Each run rescans the files being committed plus every tracked file `TODO.md` already lists, and rewrites `TODO.md` from that scan.
    - Removes entries when their corresponding TODOs (or files) are no longer present in the source code.
 
 5. **Language-Aware Parsing**
@@ -206,7 +206,7 @@ Each `TODO.md` bullet embeds the line number twice — once in the label and onc
 
 ### Fix: one line in `.gitattributes`
 
-Commit this to your repository (if you use `--todo-path`, put that path instead of `TODO.md`):
+Commit this to your repository. If you use `--todo-path`, write that path instead of `TODO.md`, relative to the repository root (`.gitattributes` patterns are repository-relative); a path containing spaces or `*`, `?`, `[`, `#`, `"`, `\` needs [gitattributes quoting/escaping](https://git-scm.com/docs/gitattributes):
 
 ```
 TODO.md merge=union
@@ -216,7 +216,7 @@ TODO.md merge=union
 
 The merged `TODO.md` is temporarily wrong (old and new line numbers side by side, out of order), and that's expected. Each hook run rebuilds `TODO.md` from the files being committed **plus every file `TODO.md` already lists**, so the next normal commit replaces whatever the merge left, whatever files it touches. Commits replayed during the rebase keep the approximate `TODO.md`, because git doesn't run hooks during a rebase.
 
-Without the `.gitattributes` line, resolve a `TODO.md` conflict any way you like (even leaving the markers); the next hook run rebuilds it the same way, and prints a hint about `merge=union`. To rebuild it right away:
+Without the `.gitattributes` line, resolve a `TODO.md` conflict any way you like (even leaving the markers); the next hook run rebuilds it the same way, and prints a hint with the exact `merge=union` line for your path (or points here when the path needs escaping). To rebuild it right away:
 
 ```sh
 rusty-todo-md --regenerate

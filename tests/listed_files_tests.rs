@@ -1,9 +1,11 @@
-//! `TODO.md merge=union` + rebuild-on-non-canonical, end to end.
+//! Each run rescans the files TODO.md lists, end to end.
 //!
 //! Line numbers in TODO.md shift on every branch, so a rebase would stop on
 //! TODO.md at nearly every replayed commit. With `merge=union` (built into
-//! git) it never stops; the merged TODO.md is wrong but visibly so
-//! (duplicate, out-of-order entries), and the next hook run rebuilds it.
+//! git) it never stops; the merged TODO.md is wrong (old and new entries
+//! side by side), and the next hook run rebuilds it by rescanning every
+//! file it lists. Only tracked files are rescanned: TODO.md is committed
+//! input and must not make the hook read anything else.
 
 use assert_cmd::Command as AssertCommand;
 use std::fs;
@@ -146,4 +148,39 @@ fn union_leftovers_in_sorted_order_are_rebuilt() {
         "stale union entries survived:\n{rebuilt}"
     );
     assert!(rebuilt.contains("[a.rs:12](a.rs#L12): alpha"), "{rebuilt}");
+}
+
+/// A crafted TODO.md must not make the hook read files outside what git
+/// tracks: not a path outside the repository, and not an untracked file
+/// inside it. Otherwise their TODO lines would be copied into TODO.md.
+#[test]
+fn listed_files_outside_the_tracked_set_are_not_read() {
+    let parent = tempdir().unwrap();
+    fs::write(
+        parent.path().join("outside.rs"),
+        "// TODO: outside secret\n",
+    )
+    .unwrap();
+    let repo = parent.path().join("repo");
+    fs::create_dir(&repo).unwrap();
+    git(&repo, &["init", "-q", "-b", "main"]);
+    fs::write(repo.join("a.rs"), "// TODO: tracked\n").unwrap();
+    fs::write(
+        repo.join("TODO.md"),
+        "# TODOs\n\n## TODO\n### a.rs\n* [a.rs:1](a.rs#L1): tracked\n\n### ../outside.rs\n* [../outside.rs:1](../outside.rs#L1): x\n\n### secret.rs\n* [secret.rs:1](secret.rs#L1): x\n",
+    )
+    .unwrap();
+    git(&repo, &["add", "a.rs", "TODO.md"]);
+    git(&repo, &["commit", "-q", "-m", "crafted TODO.md"]);
+    fs::write(repo.join("secret.rs"), "// TODO: untracked secret\n").unwrap();
+
+    fs::write(repo.join("a.rs"), "// TODO: tracked\nfn a() {}\n").unwrap();
+    hook(&repo, &["a.rs"]);
+
+    let todo = fs::read_to_string(repo.join("TODO.md")).unwrap();
+    assert!(todo.contains("tracked"), "{todo}");
+    assert!(
+        !todo.contains("outside secret") && !todo.contains("untracked secret"),
+        "{todo}"
+    );
 }
